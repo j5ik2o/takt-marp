@@ -72,7 +72,7 @@ Execute these 4 phases in order:
 
    a. Select language:
    ```
-   selected language code → detect from user's input language; if uncertain, select `ja` as the repository default
+   selected language code → detect from the selected project description source: use brief.md content when present, otherwise use user's input language; if uncertain, select `ja` as the repository default
    ```
    Stop for unsupported languages. Use this same selected language code for `spec.json` and the requirements skeleton.
 

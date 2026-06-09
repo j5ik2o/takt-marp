@@ -17,7 +17,7 @@ Generate a unique feature name from the project description ($ARGUMENTS) and ini
 4. **Create Directory**: `.kiro/specs/[feature-name]/` (skip if already exists from discovery)
 5. **Initialize Files Using Templates**:
    - Read `.kiro/settings/templates/specs/init.json`
-   - Detect the language code from the user's input language. If uncertain, select `ja` as the repository default.
+   - Detect the language code from the selected project description source: use brief.md content when present, otherwise use the user's input language. If uncertain, select `ja` as the repository default.
    - Select the matching requirements skeleton: `.kiro/settings/templates/specs/requirements-init.md` for `ja`, or `.kiro/settings/templates/specs/requirements-init.en.md` for `en`. Stop for unsupported languages.
    - Replace placeholders:
      - `{{FEATURE_NAME}}` → generated feature name

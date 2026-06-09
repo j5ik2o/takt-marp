@@ -26,7 +26,7 @@ Requirements should clarify the feature boundary in user- or operator-observable
 - Every acceptance criterion must follow the EARS rules defined in `ears-format.md`.
 - Every requirement must be testable, observable, and specific enough that later design and validation can verify it.
 - Remove implementation details that belong in `design.md` rather than `requirements.md`.
-- Requirement headings must use numeric IDs only and follow one of the heading forms in `.kiro/settings/templates/specs/localized-spec-terminology.md`. Do not mix numeric and alphabetic labels.
+- Requirement headings must use numeric IDs only. Prefer the heading form for `spec.json.language` from `.kiro/settings/templates/specs/localized-spec-terminology.md`; also accept existing hybrid headings that use the alternate Japanese/English heading term with a numeric ID. Do not mix numeric and alphabetic labels.
 
 ## Structure and Quality Review
 

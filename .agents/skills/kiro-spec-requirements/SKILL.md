@@ -102,7 +102,7 @@ Requirements describe user-observable behavior, not implementation. Use this to 
 ### Other Constraints
 - Each requirement must be testable and unambiguous. If the project description leaves room for multiple interpretations on scope, behavior, or boundary conditions, ask the user to clarify before generating that requirement. Ask as many questions as needed; do not generate requirements that contain your own assumptions.
 - Choose appropriate subject for EARS statements (system/service name for software)
-- Requirement headings in requirements.md MUST include a leading numeric ID only, using one of the heading forms in `.kiro/settings/templates/specs/localized-spec-terminology.md`; do not use alphabetic IDs like "要件 A" or "Requirement A".
+- Requirement headings in requirements.md MUST include a leading numeric ID only. New or rewritten headings should use the form for `spec.json.language` from `.kiro/settings/templates/specs/localized-spec-terminology.md`; existing hybrid headings using the alternate Japanese/English term remain valid if the numeric ID is present. Do not use alphabetic IDs like "要件 A" or "Requirement A".
 </instructions>
 
 ## Output Description
