@@ -5,14 +5,14 @@
 
 <!-- スコープが誤読されうる場合、または隣接するシステム／スペックに影響する場合は任意で記載 -->
 ## 境界コンテキスト（任意）
-- **In scope（対象範囲）**: {{IN_SCOPE_BEHAVIORS}}
-- **Out of scope（対象外）**: {{OUT_OF_SCOPE_BEHAVIORS}}
-- **Adjacent expectations（隣接システム／スペックへの期待）**: {{ADJACENT_SYSTEM_OR_SPEC_EXPECTATIONS}}
+- **対象範囲**: {{IN_SCOPE_BEHAVIORS}}
+- **対象外**: {{OUT_OF_SCOPE_BEHAVIORS}}
+- **隣接システム／スペックへの期待**: {{ADJACENT_SYSTEM_OR_SPEC_EXPECTATIONS}}
 
 ## 要件
 
 ### 要件 1: {{REQUIREMENT_AREA_1}}
-<!-- 要件見出しには先頭に数値IDのみを含めること（例: "Requirement 1: ...", "1. Overview", "2 Feature: ..."）。"Requirement A" のようなアルファベットIDは不可。 -->
+<!-- 要件見出しには先頭に数値IDのみを含めること（例: "要件 1: ...", "1. 概要", "2 機能: ..."）。"要件 A" のようなアルファベットIDは不可。 -->
 **目的:** {{ROLE}}として、{{BENEFIT}}のために、{{CAPABILITY}}が欲しい
 <!-- 上記は「[役割]として、[利益]のために、[能力]が欲しい」という形式です。 -->
 

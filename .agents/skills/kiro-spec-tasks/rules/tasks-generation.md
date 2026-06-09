@@ -149,6 +149,7 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - Every sub-task must be executable as written, usually within 1-3 hours.
 - Every sub-task must produce a verifiable deliverable (behavior, artifact, endpoint, UI state, config, migration, test, or integration result).
 - Every executable sub-task must include at least one detail bullet that states the observable completion condition.
+- Every executable sub-task must include `_Requirements:_`, `_Boundary:_`, and `_Depends:_` annotations. Use `_Depends:_ none` when the task has no explicit prerequisite.
 - Split tasks that combine multiple independently verifiable outcomes.
 - Split tasks that combine multiple responsibility boundaries unless they are explicit integration tasks.
 - If many tasks require broad `_Boundary:_` scopes or repeated cross-boundary coordination, stop and return to design or roadmap decomposition instead of forcing the spec through task generation.
