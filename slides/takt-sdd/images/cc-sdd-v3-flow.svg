@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 540" font-family="'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif">
+  <defs>
+    <marker id="arrow3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2f6df0"/>
+    </marker>
+  </defs>
+
+  <text x="550" y="52" text-anchor="middle" font-size="24" font-weight="700" fill="#1d2330">cc-sdd v3 / Kiro-style SDD の基本フロー</text>
+
+  <rect x="50" y="104" width="160" height="62" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="130" y="128" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="130" dy="0">kiro</tspan><tspan x="130" dy="22">discovery</tspan></text>
+
+  <rect x="246" y="104" width="160" height="62" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="326" y="128" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="326" dy="0">kiro-spec</tspan><tspan x="326" dy="22">init</tspan></text>
+
+  <rect x="442" y="104" width="160" height="62" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="522" y="128" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="522" dy="0">kiro-spec</tspan><tspan x="522" dy="22">requirements</tspan></text>
+
+  <rect x="638" y="104" width="160" height="62" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="718" y="128" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="718" dy="0">kiro-spec</tspan><tspan x="718" dy="22">design</tspan></text>
+
+  <rect x="834" y="104" width="190" height="62" rx="8" fill="#eaf6f0" stroke="#1f9d6b" stroke-width="2"/>
+  <text x="929" y="128" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="929" dy="0">kiro-validate</tspan><tspan x="929" dy="22">design</tspan></text>
+
+  <line x1="212" y1="135" x2="244" y2="135" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+  <line x1="408" y1="135" x2="440" y2="135" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+  <line x1="604" y1="135" x2="636" y2="135" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+  <line x1="800" y1="135" x2="832" y2="135" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+
+  <path d="M929 168 C929 225, 160 225, 160 282" fill="none" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+
+  <rect x="50" y="282" width="200" height="62" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="150" y="306" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="150" dy="0">kiro-spec</tspan><tspan x="150" dy="22">tasks</tspan></text>
+
+  <rect x="336" y="282" width="200" height="62" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="436" y="320" text-anchor="middle" font-size="19" fill="#1d2330">kiro-impl</text>
+
+  <rect x="650" y="282" width="240" height="62" rx="8" fill="#eaf6f0" stroke="#1f9d6b" stroke-width="2"/>
+  <text x="770" y="306" text-anchor="middle" font-size="17" fill="#1d2330"><tspan x="770" dy="0">kiro-validate</tspan><tspan x="770" dy="22">impl</tspan></text>
+
+  <line x1="252" y1="313" x2="334" y2="313" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+  <line x1="538" y1="313" x2="648" y2="313" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow3)"/>
+
+  <rect x="118" y="410" width="864" height="58" rx="10" fill="#fbf1e6" stroke="#d9822b" stroke-width="1.8"/>
+  <text x="550" y="445" text-anchor="middle" font-size="18" fill="#1d2330">TAKT はこの流れに state machine・contracts・gates を重ね、進行条件を固定する</text>
+</svg>

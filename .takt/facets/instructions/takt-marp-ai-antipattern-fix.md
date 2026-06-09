@@ -4,10 +4,10 @@ AI antipattern review の finding を、current command 境界内で安全に直
 
 **やること:**
 1. `.takt/workflow-current-target.json` を読み、`target: slides/<deck>` と `command: plan | compose | polish | deliver` を特定してください。
-2. `review/<command>-ai-antipattern-review.md` を読み、同じ `target`、`command`、`workflow_run_id` の current review report であることを確認してください。
+2. `review/<command>-ai-antipattern-review.md` を読み、同じ `target`、`command`、`workflow_run_id` の current review report であることを確認してください。deck-local report が存在しない場合は、現在の `Report Directory` にある `ai-antipattern-review.md`、または同じ subworkflow reports directory の review report を読んでください。
 3. AI Findings の全 finding を扱い、各 finding について current command 境界内で安全に修正できるか判断してください。
 4. 修正できる finding だけを command-local source artifact に反映してください。
-   - `plan`: `plan.md`、`brief.normalized.md` など plan source artifact の範囲
+   - `plan`: `plan.md`、`brief.normalized.md` など plan source artifact の範囲。deck-local が未同期の場合は、現在の `Report Directory` から親 command reports directory を特定し、そこにある `plan.md` / `brief.normalized.md` を正本として修正してください。`Report Directory` が `.../reports/subworkflows/...` の場合、`subworkflows` より前の `.../reports` が親 command reports directory です。
    - `compose`: `SLIDES.md` と compose に必要な deck-local source artifact の範囲
    - `polish`: `design-system.md`、`SLIDES.md`、`images/*.svg` など visual / layout / render / design-token 修正の範囲
    - `deliver`: delivery artifact の存在、path、readability、unrequested artifact、必要な clean / rebuild の範囲
@@ -28,6 +28,7 @@ AI antipattern review の finding を、current command 境界内で安全に直
 - 修正不要と判断する場合は `NO_FIX_NEEDED` とし、すべての finding に finding-level evidence を記録してください。
 - current command 境界外の作業、上流 artifact の再設計、人間判断が必要な場合は `NEED_REPLAN` としてください。
 - report、target、command、workflow_run_id、source artifact、必要 context のいずれかを確認できない場合は `BLOCKED` としてください。
+- plan command では、deck-local `brief.normalized.md` / `plan.md` がまだ存在しないことだけを `NEED_REPLAN` または `BLOCKED` 理由にしないでください。親 command reports directory の source artifact が読め、finding を current command 境界内で修正できる場合はその report artifact を更新してください。
 
 **report file format:**
 - `review/<command>-ai-antipattern-fix.md` は `.takt/facets/output-contracts/takt-marp-ai-antipattern-fix.md` に従ってください。

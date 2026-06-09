@@ -3,7 +3,7 @@
 command の最終 supervision report を作成してください。
 
 **やること:**
-1. 対象 command の work/finding/fix report と source artifacts を確認してください。finding report は plan/compose では `review/<command>-review.md`、polish では `review/polish-inspect.md`、deliver では `review/deliver-verify.md` です。fix/review の反復停止は TAKT workflow の `loop_monitors` が担うため、deck-local な loop monitor report は要求しないでください。
+1. 対象 command の work/finding/fix report と source artifacts を確認してください。finding report は plan/compose では `review/<command>-review.md`、polish では `review/polish-inspect.md`、deliver では `review/deliver-verify.md` です。fix/review の反復停止は TAKT workflow の `loop_monitors` が担うため、deck-local な loop monitor report は要求しないでください。deck-local report/source artifact が存在しない場合は、この step の `Report Directory` にある同名 report/source artifact を読んでください。
 2. report schema、source artifact の存在、未解消 finding、approval requirement を検証してください。
 3. foundation schema に従う front matter を持つ `review/<command>-supervision.md` を書いてください。
 4. `plan` は `state: planned`、`compose` は `state: composed`、`polish` は `state: polished`、`deliver` は `state: delivered` としてください。
@@ -46,6 +46,7 @@ decision_items_count: 0
 **判定基準:**
 - 成果物境界と report schema が満たされ、未解消の blocker がなければ `result: passed` としてください。
 - 必須 artifact、schema、未解消 finding に問題があれば `result: rejected` としてください。
+- plan command では、TAKT run 中の source artifact 正本は `Report Directory/brief.normalized.md` と `Report Directory/plan.md` です。deck-local への同期は command 完了後に runner が行うため、deck-local 未同期だけを rejected 理由にしないでください。
 
 **必須出力**
 ## Supervision

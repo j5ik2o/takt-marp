@@ -117,6 +117,18 @@ async function main() {
     assert(synced.includes("workflow_run_id: run-current"), `runner synced wrong report: ${synced}`);
   });
 
+  await check("runner syncs plan source artifacts from TAKT reports to deck", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    await makeTaktExecutable(root, fakeTaktScript(["run-current"], "passed"));
+    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    assert(result.status === 0, `runner failed to sync plan source artifacts: ${result.stderr}`);
+    const normalized = await readFile(path.join(targetInfo.deckPath, "brief.normalized.md"), "utf8");
+    const plan = await readFile(path.join(targetInfo.deckPath, "plan.md"), "utf8");
+    assert(normalized.includes("Mock normalized brief for run-current"), `normalized brief was not synced from reports: ${normalized}`);
+    assert(plan.includes("deliverables: [html, pdf]"), `plan deliverables were not synced from reports: ${plan}`);
+  });
+
   await check("runner syncs AI gate reports to deck", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
@@ -355,6 +367,18 @@ function fakeTaktScript(runNames, result) {
   for (const runName of runNames) {
     lines.push(
       `mkdir -p ".takt/runs/${runName}/reports"`,
+      `cat > ".takt/runs/${runName}/reports/brief.normalized.md" <<EOF`,
+      "# Normalized Brief",
+      "",
+      `Mock normalized brief for ${runName}.`,
+      "EOF",
+      `cat > ".takt/runs/${runName}/reports/plan.md" <<EOF`,
+      "# Slide Plan",
+      "",
+      "deliverables: [html, pdf]",
+      "",
+      `Mock plan for ${runName}.`,
+      "EOF",
       `cat > ".takt/runs/${runName}/reports/plan-supervision.md" <<EOF`,
       "---",
       "command: plan",
@@ -414,6 +438,18 @@ function fakeTaktScriptWithAiGateReport(runName, options = {}) {
     "  shift",
     "done",
     `mkdir -p ".takt/runs/${runName}/reports"`,
+    `cat > ".takt/runs/${runName}/reports/brief.normalized.md" <<EOF`,
+    "# Normalized Brief",
+    "",
+    `Mock normalized brief for ${runName}.`,
+    "EOF",
+    `cat > ".takt/runs/${runName}/reports/plan.md" <<EOF`,
+    "# Slide Plan",
+    "",
+    "deliverables: [html, pdf]",
+    "",
+    `Mock plan for ${runName}.`,
+    "EOF",
     `cat > ".takt/runs/${runName}/reports/plan-supervision.md" <<EOF`,
     "---",
     `command: ${aiCommand}`,

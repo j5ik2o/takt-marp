@@ -130,6 +130,8 @@ async function syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore) {
     target: targetInfo.target,
     workflowRunId: selectedRun.workflow_run_id,
   });
+  const sourceArtifactCopies = await commandSourceArtifactCopies(reportsDir, command, targetInfo);
+  await replaceDeckSourceArtifacts(sourceArtifactCopies);
   await replaceDeckReports(targetInfo.reviewPath, reportNameSet, reportCopies);
 }
 
@@ -162,6 +164,70 @@ async function commandReportCopies(reportsDir, command, reportNameSet, selectedR
     ...topLevelReportCopies,
     ...(await aiGateReportCopies(reportsDir, command, selectedRun)),
   ]);
+}
+
+async function commandSourceArtifactCopies(reportsDir, command, targetInfo) {
+  const sourceArtifactNames = commandSourceArtifactNames(command);
+  const copies = [];
+  for (const artifactName of sourceArtifactNames) {
+    const sourcePath = path.join(reportsDir, artifactName);
+    if (!existsSync(sourcePath)) {
+      throw new SlideWorkflowError(
+        `TAKT completed but required source artifact was not found in reports: ${path.relative(process.cwd(), sourcePath)}`,
+        "TAKT_SOURCE_ARTIFACT_SYNC_MISSING",
+      );
+    }
+    copies.push(Object.freeze({
+      sourcePath,
+      finalPath: path.join(targetInfo.deckPath, artifactName),
+    }));
+  }
+  return Object.freeze(copies);
+}
+
+function commandSourceArtifactNames(command) {
+  if (command === "plan") {
+    return ["brief.normalized.md", "plan.md"];
+  }
+  return [];
+}
+
+async function replaceDeckSourceArtifacts(sourceArtifactCopies) {
+  for (const { sourcePath, finalPath } of sourceArtifactCopies) {
+    await replaceFileAtomically(sourcePath, finalPath);
+  }
+}
+
+async function replaceFileAtomically(sourcePath, finalPath) {
+  await mkdir(path.dirname(finalPath), { recursive: true });
+  const tempSuffix = `${process.pid}-${Date.now()}`;
+  const tempPath = path.join(path.dirname(finalPath), `.${path.basename(finalPath)}.${tempSuffix}.tmp`);
+  const backupPath = path.join(path.dirname(finalPath), `.${path.basename(finalPath)}.${tempSuffix}.bak`);
+  let backupCreated = false;
+  try {
+    await copyFile(sourcePath, tempPath);
+    if (existsSync(finalPath)) {
+      await rename(finalPath, backupPath);
+      backupCreated = true;
+    }
+    await rename(tempPath, finalPath);
+    if (backupCreated && existsSync(backupPath)) {
+      await unlink(backupPath);
+    }
+  } catch (error) {
+    if (existsSync(tempPath)) {
+      await unlink(tempPath);
+    }
+    if (backupCreated) {
+      if (existsSync(finalPath)) {
+        await unlink(finalPath);
+      }
+      if (existsSync(backupPath)) {
+        await rename(backupPath, finalPath);
+      }
+    }
+    throw error;
+  }
 }
 
 async function aiGateReportCopies(reportsDir, command, selectedRun) {
