@@ -68,6 +68,7 @@ For each detected feature:
 - Read `.kiro/specs/<feature>/requirements.md` for requirements
 - Read `.kiro/specs/<feature>/design.md` for design structure
 - Read `.kiro/specs/<feature>/tasks.md` for task list and Implementation Notes
+- Read `.kiro/settings/templates/specs/localized-spec-terminology.md` and resolve language-specific section terms from `spec.json.language` before design boundary checks
 - Core steering context: `product.md`, `tech.md`, `structure.md`
 - Additional steering files only when directly relevant to the validated boundaries, runtime prerequisites, integrations, domain rules, security/performance constraints, or team conventions that affect the GO/NO-GO call
 
