@@ -118,7 +118,7 @@ Provide output in the language specified in spec.json with:
 ### Error Scenarios
 - **Missing Project Description**: If requirements.md lacks project description, ask user for feature details
 - **Template Missing**: If template files don't exist, use inline fallback structure with warning
-- **Language Undefined**: Default to English (`en`) if spec.json doesn't specify language
+- **Language Undefined**: Stop and clarify the target language if `spec.json` doesn't specify language
 - **Incomplete Requirements**: After generation, explicitly ask user if requirements cover all expected functionality
 - **Steering Directory Empty**: Warn user that project context is missing and may affect requirement quality
 - **Non-numeric Requirement Headings**: If existing headings do not include a leading numeric ID (for example, they use "要件 A" or "Requirement A"), normalize them to numeric IDs and keep that mapping consistent (never mix numeric and alphabetic labels).
