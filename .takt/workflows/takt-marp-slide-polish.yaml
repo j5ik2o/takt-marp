@@ -1,0 +1,158 @@
+name: takt-marp-slide-polish
+description: render evidenceを生成し、visual/layout/render findingのinspection/fix/supervisionを閉じるpolish command。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 30
+initial_step: render_evidence
+loop_monitors:
+  - cycle:
+      - inspect_render
+      - fix_polish
+      - render_evidence
+    threshold: 3
+    judge:
+      persona: takt-marp-slide-supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全（進捗あり）
+          next: inspect_render
+        - condition: 非生産的（同じ指摘の反復・修正未反映）
+          next: ABORT
+
+personas:
+  takt-marp-slide-qa: ../facets/personas/takt-marp-slide-qa.md
+  takt-marp-slide-reviewer: ../facets/personas/takt-marp-slide-reviewer.md
+  takt-marp-slide-reviser: ../facets/personas/takt-marp-slide-reviser.md
+  takt-marp-slide-supervisor: ../facets/personas/takt-marp-slide-supervisor.md
+policies:
+  takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
+  takt-marp-slide-quality: ../facets/policies/takt-marp-slide-quality.md
+  takt-marp-svg-first-visual: ../facets/policies/takt-marp-svg-first-visual.md
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+instructions:
+  takt-marp-render-evidence: ../facets/instructions/takt-marp-render-evidence.md
+  takt-marp-polish-inspect: ../facets/instructions/takt-marp-polish-inspect.md
+  takt-marp-polish-fix: ../facets/instructions/takt-marp-polish-fix.md
+  takt-marp-supervise-command: ../facets/instructions/takt-marp-supervise-command.md
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+report_formats:
+  takt-marp-command-work: ../facets/output-contracts/takt-marp-command-work.md
+  takt-marp-command-review: ../facets/output-contracts/takt-marp-command-review.md
+  takt-marp-command-fix: ../facets/output-contracts/takt-marp-command-fix.md
+  takt-marp-supervision: ../facets/output-contracts/takt-marp-supervision.md
+
+steps:
+  - name: render_evidence
+    edit: true
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Bash
+          - Write
+    persona: takt-marp-slide-qa
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    instruction: takt-marp-render-evidence
+    output_contracts:
+      report:
+        - name: polish-work.md
+          format: takt-marp-command-work
+    rules:
+      - condition: resultがpassed
+        next: ai_quality_gate_polish
+      - condition: resultがfailedまたはneeds_input
+        next: ABORT
+
+  - name: ai_quality_gate_polish
+    kind: workflow_call
+    call: ./takt-marp-slide-ai-quality-gate.yaml
+    args:
+      fix_instruction: takt-marp-ai-antipattern-fix
+      domain_knowledge:
+        - takt-marp-repo-conventions
+    rules:
+      - condition: COMPLETE
+        next: inspect_render
+      - condition: need_replan
+        next: render_evidence
+      - condition: ABORT
+        next: ABORT
+
+  - name: inspect_render
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-reviewer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-polish-inspect
+    output_contracts:
+      report:
+        - name: polish-inspect.md
+          format: takt-marp-command-review
+    rules:
+      - condition: approved
+        next: supervise_polish
+      - condition: needs_fix
+        next: fix_polish
+      - condition: blocked
+        next: ABORT
+
+  - name: fix_polish
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-reviser
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-polish-fix
+    output_contracts:
+      report:
+        - name: polish-fix.md
+          format: takt-marp-command-fix
+    rules:
+      - condition: fixed
+        next: render_evidence
+      - condition: blocked
+        next: ABORT
+
+  - name: supervise_polish
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-supervisor
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-supervise-command
+    output_contracts:
+      report:
+        - name: polish-supervision.md
+          format: takt-marp-supervision
+    rules:
+      - condition: resultがpassed
+        next: COMPLETE
+      - condition: resultがrejected
+        next: ABORT

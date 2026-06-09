@@ -1,0 +1,125 @@
+name: takt-marp-slide-ai-quality-gate
+description: Marp slide command 向けの internal callable AI antipattern quality gate。
+subworkflow:
+  callable: true
+  visibility: internal
+  returns:
+    - need_replan
+  params:
+    fix_instruction:
+      type: facet_ref
+      facet_kind: instruction
+      default: takt-marp-ai-antipattern-fix
+    domain_knowledge:
+      type: facet_ref[]
+      facet_kind: knowledge
+      default:
+        - takt-marp-repo-conventions
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 12
+initial_step: ai-antipattern-review-1st
+
+instructions:
+  takt-marp-ai-antipattern-review: ../facets/instructions/takt-marp-ai-antipattern-review.md
+  takt-marp-ai-antipattern-fix: ../facets/instructions/takt-marp-ai-antipattern-fix.md
+
+policies:
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+
+report_formats:
+  takt-marp-ai-antipattern-review: ../facets/output-contracts/takt-marp-ai-antipattern-review.md
+  takt-marp-ai-antipattern-fix: ../facets/output-contracts/takt-marp-ai-antipattern-fix.md
+
+loop_monitors:
+  - cycle:
+      - ai-antipattern-review-1st
+      - ai-antipattern-fix
+    threshold: 3
+    judge:
+      persona: supervisor
+      instruction: loop-monitor-ai-antipattern-fix
+      rules:
+        - condition: Healthy (AI findings are shrinking or the latest fix report has concrete finding decisions)
+          next: ai-antipattern-review-1st
+        - condition: Unproductive (loop_monitors.threshold reached for ai-antipattern-review-1st and ai-antipattern-fix)
+          next: request-replan
+
+steps:
+  - name: ai-antipattern-review-1st
+    edit: false
+    required_permission_mode: readonly
+    persona: ai-antipattern-reviewer
+    policy:
+      - review
+      - ai-antipattern
+      - takt-marp-worker-boundary
+    knowledge:
+      $param: domain_knowledge
+    pass_previous_response: false
+    instruction: takt-marp-ai-antipattern-review
+    output_contracts:
+      report:
+        - name: ai-antipattern-review.md
+          format: takt-marp-ai-antipattern-review
+    rules:
+      - condition: result approved and blocking_finding_count is 0
+        next: COMPLETE
+      - condition: result needs_fix and blocking_finding_count is greater than 0
+        next: ai-antipattern-fix
+      - condition: result blocked or target, command, reviewed_scope, workflow_run_id, or finding evidence is missing
+        next: request-replan
+      - when: "true"
+        next: request-replan
+        appendix: Treat ambiguous, internally inconsistent, or evidence-incomplete AI review outcomes as requiring replanning.
+
+  - name: ai-antipattern-fix
+    edit: true
+    required_permission_mode: edit
+    persona: coder
+    policy:
+      - coding
+      - testing
+      - ai-antipattern
+      - takt-marp-worker-boundary
+    session: refresh
+    knowledge:
+      $param: domain_knowledge
+    pass_previous_response: false
+    instruction:
+      $param: fix_instruction
+    output_contracts:
+      report:
+        - name: ai-antipattern-fix.md
+          format: takt-marp-ai-antipattern-fix
+    rules:
+      - condition: status FIXED and all AI findings were handled within the current command boundary
+        next: ai-antipattern-review-1st
+      - condition: status NO_FIX_NEEDED and finding-level evidence supports every finding decision
+        next: COMPLETE
+      - condition: status NEED_REPLAN
+        return: need_replan
+      - condition: status BLOCKED
+        next: request-replan
+      - when: "true"
+        next: request-replan
+        appendix: Treat ambiguous, internally inconsistent, or evidence-free fix outcomes as requiring replanning.
+
+  - name: request-replan
+    edit: false
+    required_permission_mode: readonly
+    persona: supervisor
+    instruction: |
+      Marp slide AI antipattern quality gate が通常 review/inspection/verification へ安全に進めない状態です。
+      target、command、reviewed scope、workflow run、finding evidence、または fix convergence が不明確なため、caller workflow が current command の owning work step へ戻れるように need_replan を返してください。
+      この gate は human approval file を生成せず、command successful state も変更しません。
+    rules:
+      - condition: Replan is required after an ambiguous, blocked, internally inconsistent, or non-convergent AI antipattern gate outcome
+        return: need_replan

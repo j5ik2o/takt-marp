@@ -1,0 +1,29 @@
+{
+  "name": "takt-marp",
+  "version": "0.0.1",
+  "description": "takt-marp",
+  "scripts": {
+    "slide:plan": "node scripts/takt-marp-run-slide-workflow.mjs plan",
+    "slide:compose": "node scripts/takt-marp-run-slide-workflow.mjs compose",
+    "slide:polish": "node scripts/takt-marp-run-slide-workflow.mjs polish",
+    "slide:deliver": "node scripts/takt-marp-run-slide-workflow.mjs deliver",
+    "slide:check-state": "node scripts/takt-marp-check-slide-workflow-state.mjs",
+    "slide:approve": "node scripts/takt-marp-approve-slide-workflow-state.mjs",
+    "slide:render-evidence": "node scripts/takt-marp-render-slide-workflow-evidence.mjs",
+    "slide:validate-foundation": "node scripts/takt-marp-validate-slide-workflow-foundation.mjs",
+    "slide:smoke": "node scripts/takt-marp-validate-slide-workflow-smoke.mjs",
+    "test": "npm run slide:validate-foundation",
+    "build": "npm run build:html && npm run build:pdf",
+    "build:html": "node scripts/takt-marp-build-slide-artifact.mjs html",
+    "build:pdf": "node scripts/takt-marp-build-slide-artifact.mjs pdf",
+    "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx"
+  },
+  "devDependencies": {
+    "@kazumatu981/markdown-it-kroki": "^1.3.6",
+    "@marp-team/marp-cli": "^4",
+    "takt": "^0.43.0"
+  },
+  "overrides": {
+    "yargs": "^18.0.0"
+  }
+}
