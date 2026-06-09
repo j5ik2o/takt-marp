@@ -39,7 +39,7 @@ Otherwise, load all necessary context:
 
 - Read `rules/tasks-generation.md` from this skill's directory for principles
 - Read `rules/tasks-parallel-analysis.md` from this skill's directory for parallel judgement criteria
-- Read `.kiro/settings/templates/specs/tasks.md` for format (supports `(P)` markers)
+- Select the matching tasks template from `spec.json.language`: `.kiro/settings/templates/specs/tasks.md` for `ja`, or `.kiro/settings/templates/specs/tasks.en.md` for `en`. Stop for unsupported languages. Both templates support `(P)` markers.
 
 #### Parallel Research
 
