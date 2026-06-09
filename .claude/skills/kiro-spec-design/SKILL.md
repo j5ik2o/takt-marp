@@ -104,7 +104,8 @@ After all findings return, synthesize in main context before proceeding.
 ### Step 4: Generate Design Draft
 
 1. **Generate Design Draft**:
-   - **Follow specs/design.md template structure and generation instructions strictly**
+   - Select the matching design template from `spec.json.language`: `.kiro/settings/templates/specs/design.md` for `ja`, or `.kiro/settings/templates/specs/design.en.md` for `en`. Stop for unsupported languages.
+   - **Follow the selected design template structure and generation instructions strictly**
    - **Boundary-first requirement**: Before expanding supporting sections, make the boundary explicit. The draft must clearly define what this spec owns, what it does not own, which dependencies are allowed, and what changes would require downstream revalidation.
    - **Integrate all discovery findings and synthesis outcomes**: Use researched information (APIs, patterns, technologies) and synthesis decisions (generalizations, build-vs-adopt, simplifications) throughout component definitions, architecture decisions, and integration points
    - **File structure plan** (required): Populate the file structure section named by `.kiro/settings/templates/specs/localized-spec-terminology.md` with concrete file paths and responsibilities. Analyze the codebase to determine which files need to be created vs. modified. Each file must have one clear responsibility. This section directly drives task `_Boundary:_` annotations and implementation Task Briefs — vague file structures produce vague implementations.
