@@ -2,7 +2,28 @@
 
 ## Core Principles
 
-### 1. Natural Language Descriptions
+### 1. Language Compliance
+
+Generated `tasks.md` must use the language specified by `.kiro/specs/<feature>/spec.json`.
+
+**Must translate into the spec language**:
+- Document title and section headings
+- Major task titles
+- Sub-task titles
+- Detail bullets
+- Observable completion bullets
+- User-facing summaries and final responses
+
+**Keep unchanged when appropriate**:
+- Machine-readable labels: `_Requirements:_`, `_Boundary:_`, `_Depends:_`
+- Checkbox syntax, task numbers, `(P)`, and requirement IDs
+- Code identifiers, package names, API names, command names, and established domain terms
+
+**Template caveat**:
+- English text in templates and examples is structural guidance only.
+- Do not copy English phrases such as `Implementation Plan`, `Foundation`, `Build`, `Validate`, `Task Format Template`, or example task wording into generated `tasks.md` unless `spec.json.language` is English.
+
+### 2. Natural Language Descriptions
 Focus on capabilities and outcomes, not code structure.
 
 **Describe**:
@@ -21,7 +42,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **Rationale**: Implementation details (files, methods, types) are defined in design.md. Tasks describe the functional work to be done.
 
-### 2. Task Ordering Principle
+### 3. Task Ordering Principle
 
 **Order implies dependency**: Task N implicitly depends on all tasks before it. This is the primary dependency mechanism.
 
@@ -33,7 +54,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **Rationale**: Foundation work unblocks everything else. Placing setup tasks early prevents downstream blocking. Core tasks can often run in parallel because foundation is already complete.
 
-### 3. Task Integration & Progression
+### 4. Task Integration & Progression
 
 **Every task must**:
 - Build on previous outputs (no orphaned code)
@@ -45,7 +66,7 @@ Focus on capabilities and outcomes, not code structure.
 
 **End with integration tasks** to wire everything together.
 
-### 4. Dependency Declaration
+### 5. Dependency Declaration
 
 **Default**: Sequential ordering still handles most dependencies (task N depends on tasks before it), but every executable task must state the dependency field explicitly.
 Use `_Depends:_ none` when the task has no specific dependency beyond normal ordering.
@@ -59,7 +80,7 @@ Use `_Depends:_ none` when the task has no specific dependency beyond normal ord
 
 **Do not over-annotate with IDs**: If a task simply depends on the task directly before it, use `_Depends:_ none`.
 
-### 5. Boundary Scope
+### 6. Boundary Scope
 
 **Each executable task must declare its component boundary** using design.md component/module names:
 - `_Boundary:_ AuthService` or `_Boundary:_ API Layer, UserRepository`
@@ -73,7 +94,7 @@ Use `_Depends:_ none` when the task has no specific dependency beyond normal ord
 - If work must cross boundaries, make it an explicit integration task rather than a normal implementation task
 - Do not hide cross-boundary coordination inside a task that appears local
 
-### 6. Flexible Task Sizing
+### 7. Flexible Task Sizing
 
 **Guidelines**:
 - **Major tasks**: As many sub-tasks as logically needed (group by cohesion)
@@ -82,7 +103,7 @@ Use `_Depends:_ none` when the task has no specific dependency beyond normal ord
 
 **Don't force arbitrary numbers** - let logical grouping determine structure.
 
-### 7. Requirements Mapping
+### 8. Requirements Mapping
 
 **End each task detail section with**:
 - `_Requirements:_ X.X, Y.Y` listing **only numeric requirement IDs** (comma-separated). Never append descriptive text, parentheses, translations, or free-form labels.
@@ -91,7 +112,7 @@ Use `_Depends:_ none` when the task has no specific dependency beyond normal ord
 - For cross-cutting requirements, list every relevant requirement ID. All requirements MUST have numeric IDs in requirements.md. If an ID is missing, stop and correct requirements.md before generating tasks.
 - Reference components/interfaces from design.md when helpful (e.g., `_Contracts: AuthService API`)
 
-### 7.5 Observable Completion
+### 8.5 Observable Completion
 
 **Each executable task must include at least one detail bullet that describes the observable completed state**:
 - Phrase it as a deliverable, runtime behavior, persisted state, UI state, endpoint behavior, test result, or integration outcome
@@ -99,7 +120,7 @@ Use `_Depends:_ none` when the task has no specific dependency beyond normal ord
 - Prefer making one detail bullet clearly answer: "What will be true when this task is done?"
 - Keep this within the existing task body; do not add extra bookkeeping fields
 
-### 8. Code-Only Focus
+### 9. Code-Only Focus
 
 **Include ONLY**:
 - Coding tasks (implementation)
@@ -135,6 +156,13 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - Merge or collapse tasks that are too small, bookkeeping-only, or not meaningful execution units.
 - Make implicit prerequisites explicit as preceding tasks.
 - Re-check `_Depends:_`, `_Boundary:_`, and `(P)` markers after edits so concurrency claims still match the design boundaries and dependency graph.
+
+### Language Review
+
+- Verify generated natural-language content uses `spec.json.language`.
+- If the target language is not English, search for copied English template phrases and translate them before writing.
+- Do not translate machine-readable labels (`_Requirements:_`, `_Boundary:_`, `_Depends:_`), requirement IDs, task numbers, package names, code identifiers, or API names.
+- If a term is intentionally English because it is a code/API/domain identifier, leave it unchanged.
 
 ### Review Loop
 
@@ -226,6 +254,6 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - If gaps found: Return to requirements or design phase
 - No requirement should be left without corresponding tasks
 
-Use `N.M`-style numeric requirement IDs where `N` is the top-level requirement number from requirements.md, regardless of which requirement heading term from `.claude/skills/kiro-spec-design/rules/localized-spec-terminology.md` the artifact uses.
+Use `N.M`-style numeric requirement IDs where `N` is the top-level requirement number from requirements.md, regardless of which requirement heading term from `.kiro/settings/templates/specs/localized-spec-terminology.md` the artifact uses.
 
 Document any intentionally deferred requirements with rationale.

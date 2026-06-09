@@ -37,8 +37,8 @@ Before writing `design.md`, review the draft design and repair local issues unti
 
 Before applying judgment, verify these mechanically:
 - **Requirements traceability**: Extract all numeric requirement IDs from `requirements.md`. Scan the design draft for each ID. Report any IDs not found in the design.
-- **Boundary section populated**: The design boundary section and boundary subsections named by `localized-spec-terminology.md` must not be empty or placeholder-only.
-- **File structure section populated**: The file structure section named by `localized-spec-terminology.md` must contain concrete file paths (not just "TBD" or empty). Scan for placeholder text in that section.
+- **Boundary section populated**: The design boundary section and boundary subsections named by `.kiro/settings/templates/specs/localized-spec-terminology.md` must not be empty or placeholder-only.
+- **File structure section populated**: The file structure section named by `.kiro/settings/templates/specs/localized-spec-terminology.md` must contain concrete file paths (not just "TBD" or empty). Scan for placeholder text in that section.
 - **Boundary ↔ file structure alignment**: The file structure section must reflect the stated responsibility boundary. If files imply broader ownership than the boundary section claims, report a mismatch.
 - **No orphan components**: Every component mentioned in the design must appear in the file structure section with a file path. Scan for component names that have no corresponding file entry.
 

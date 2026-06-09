@@ -8,7 +8,7 @@ Use boundary terminology consistently across phases without turning requirements
 
 - **Discovery** identifies `Boundary Candidates`
 - **Requirements** make inclusion, exclusion, and adjacent expectations explicit when scope could be misread
-- **Design** turns those into the design boundary section named by `.claude/skills/kiro-spec-design/rules/localized-spec-terminology.md`
+- **Design** turns those into the design boundary section named by `.kiro/settings/templates/specs/localized-spec-terminology.md`
 - **Tasks** use `_Boundary:_` to constrain executable work
 
 Requirements should clarify the feature boundary in user- or operator-observable terms, not in architecture ownership or implementation detail.
@@ -26,7 +26,7 @@ Requirements should clarify the feature boundary in user- or operator-observable
 - Every acceptance criterion must follow the EARS rules defined in `ears-format.md`.
 - Every requirement must be testable, observable, and specific enough that later design and validation can verify it.
 - Remove implementation details that belong in `design.md` rather than `requirements.md`.
-- Requirement headings must use numeric IDs only and follow one of the heading forms in `.claude/skills/kiro-spec-design/rules/localized-spec-terminology.md`. Do not mix numeric and alphabetic labels.
+- Requirement headings must use numeric IDs only and follow one of the heading forms in `.kiro/settings/templates/specs/localized-spec-terminology.md`. Do not mix numeric and alphabetic labels.
 
 ## Structure and Quality Review
 
@@ -40,7 +40,7 @@ Requirements should clarify the feature boundary in user- or operator-observable
 
 Before applying judgment, verify these mechanically:
 - **Numeric IDs present**: Every requirement heading has a numeric ID (1, 1.1, 2, etc.). Scan the draft for headings without IDs.
-- **Acceptance criteria exist**: Every requirement has at least one EARS-format acceptance criterion. Scan for requirements with no "When/If/While/Where" acceptance statements.
+- **Acceptance criteria exist**: Every requirement has at least one EARS-format acceptance criterion. Read `spec.json.language` first and choose the matching scan. For `language: "en"`, scan for "When/If/While/Where/The system shall" statements. For `language: "ja"`, scan for localized EARS fixed phrases such as "が起きたとき", "の場合", "の間", "を含む場合", or "は常に", and verify the criterion also uses mandatory wording such as "しなければならない" or state-continuation wording such as "し続けなければならない". If the language is missing or unsupported, stop and clarify the target language before applying this gate.
 - **No implementation language**: Scan for technology-specific terms (database names, framework names, API patterns) that belong in design, not requirements. Flag any found.
 
 ## Review Loop

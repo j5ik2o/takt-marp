@@ -31,7 +31,7 @@ metadata:
 2. **Read Guidelines**:
    - Read `rules/ears-format.md` from this skill's directory for EARS syntax rules
    - Read `rules/requirements-review-gate.md` from this skill's directory for pre-write review criteria
-   - Read `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md` for localized spec terms
+   - Read `.kiro/settings/templates/specs/localized-spec-terminology.md` for localized spec terms
    - Read `.kiro/settings/templates/specs/requirements.md` for document structure
 
 #### Parallel Research (sub-agent dispatch)
@@ -60,7 +60,7 @@ After all research completes, synthesize findings in main context before generat
    - Preserve terminology continuity across phases:
      - discovery = `Boundary Candidates`
      - requirements = explicit inclusion/exclusion and adjacent expectations when needed
-     - design = design boundary section from `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`
+     - design = design boundary section from `.kiro/settings/templates/specs/localized-spec-terminology.md`
      - tasks = `_Boundary:_`
    - If scope could be misread, add lightweight boundary context without introducing implementation or architecture ownership detail
    - Keep this as a draft until the review gate passes; do not write `requirements.md` yet
@@ -102,7 +102,7 @@ Requirements describe user-observable behavior, not implementation. Use this to 
 ### Other Constraints
 - Each requirement must be testable and unambiguous. If the project description leaves room for multiple interpretations on scope, behavior, or boundary conditions, ask the user to clarify before generating that requirement. Ask as many questions as needed; do not generate requirements that contain your own assumptions.
 - Choose appropriate subject for EARS statements (system/service name for software)
-- Requirement headings in requirements.md MUST include a leading numeric ID only, using one of the heading forms in `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`; do not use alphabetic IDs like "要件 A" or "Requirement A".
+- Requirement headings in requirements.md MUST include a leading numeric ID only, using one of the heading forms in `.kiro/settings/templates/specs/localized-spec-terminology.md`; do not use alphabetic IDs like "要件 A" or "Requirement A".
 </instructions>
 
 ## Output Description

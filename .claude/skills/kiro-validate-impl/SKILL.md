@@ -12,7 +12,7 @@ Individual tasks have already been reviewed by the per-task reviewer during impl
 
 Boundary terminology continuity:
 - discovery identifies `Boundary Candidates`
-- design fixes the design boundary section named by `.claude/skills/kiro-spec-design/rules/localized-spec-terminology.md`
+- design fixes the design boundary section named by `.kiro/settings/templates/specs/localized-spec-terminology.md`
 - tasks constrain execution with `_Boundary:_`
 - feature validation checks for cross-task `Boundary Violations`
 
@@ -123,12 +123,12 @@ These checks apply at the feature level. Use command output as the primary signa
 - Verify the overall component graph matches design.md
 - Check that integration patterns (event flow, API boundaries, dependency injection) work as designed
 - Verify dependency direction follows design.md's architecture (no upward imports)
-- Verify the file structure section named by `.claude/skills/kiro-spec-design/rules/localized-spec-terminology.md` matches the actual file layout
+- Verify the file structure section named by `.kiro/settings/templates/specs/localized-spec-terminology.md` matches the actual file layout
 - Identify any architectural drift from the original design
 - Use the original section numbering from `design.md`
 
 **G.5 Boundary Audit**
-- Compare completed work against the boundary terms named by `.claude/skills/kiro-spec-design/rules/localized-spec-terminology.md`
+- Compare completed work against the boundary terms named by `.kiro/settings/templates/specs/localized-spec-terminology.md`
 - Identify cross-task spillover where one area quietly absorbed another boundary's responsibility
 - Identify downstream-specific workarounds embedded upstream "to make integration easier"
 - Identify new hidden dependencies or shared ownership that were not declared in the design
