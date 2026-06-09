@@ -22,7 +22,7 @@ Generate a unique feature name from the project description ($ARGUMENTS) and ini
      - `{{FEATURE_NAME}}` → generated feature name
      - `{{TIMESTAMP}}` → current ISO 8601 timestamp
      - `{{PROJECT_DESCRIPTION}}` → from brief.md if available, otherwise $ARGUMENTS
-     - `ja` → language code (detect from user's input language, default to `en`)
+     - `ja` → language code (detect from user's input language; if uncertain, keep the `init.json` template default)
    - Write `spec.json` and `requirements.md` to spec directory
 
 ## Important Constraints
@@ -48,4 +48,3 @@ Provide output in the language specified in `spec.json` with the following struc
 - **Template Missing**: If template files don't exist in `.kiro/settings/templates/specs/`, report error with specific missing file path and suggest checking repository setup
 - **Directory Conflict**: If feature name already exists, append numeric suffix (e.g., `feature-name-2`) and notify user of automatic conflict resolution
 - **Write Failure**: Report error with specific path and suggest checking permissions or disk space
-

@@ -23,7 +23,7 @@ Generate a unique feature name from the project description ($ARGUMENTS) and ini
      - `{{FEATURE_NAME}}` → generated feature name
      - `{{TIMESTAMP}}` → current ISO 8601 timestamp
      - `{{PROJECT_DESCRIPTION}}` → from brief.md if available, otherwise $ARGUMENTS
-     - `ja` → language code (detect from user's input language, default to `en`)
+     - `ja` → language code (detect from user's input language; if uncertain, keep the `init.json` template default)
    - Write `spec.json` and `requirements.md` to spec directory
 
 ## Important Constraints
