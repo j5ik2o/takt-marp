@@ -28,10 +28,10 @@ Otherwise, load all necessary context:
 - `.kiro/specs/{feature}/research.md` (if exists, contains gap analysis from `/kiro-validate-gap`)
 - Core steering context: `product.md`, `tech.md`, `structure.md`
 - Additional steering files only when directly relevant to requirement coverage, architecture boundaries, integrations, runtime prerequisites, security/performance constraints, or team conventions that affect implementation readiness
-- `.kiro/settings/templates/specs/design.md` for document structure
+- Select the matching design template from `spec.json.language`: `.kiro/settings/templates/specs/design.md` for `ja`, or `.kiro/settings/templates/specs/design.en.md` for `en`
 - Read `.kiro/settings/templates/specs/localized-spec-terminology.md` for localized spec terms
 - Read `rules/design-principles.md` from this skill's directory for design principles
-- `.kiro/settings/templates/specs/research.md` for discovery log structure
+- Select the matching research template from `spec.json.language`: `.kiro/settings/templates/specs/research.md` for `ja`, or `.kiro/settings/templates/specs/research.en.md` for `en`. Stop for unsupported languages.
 
 **Validate requirements approval**:
 - If auto-approve flag is true: Auto-approve requirements in spec.json
@@ -87,7 +87,7 @@ After all findings return, synthesize in main context before proceeding.
    - Boundary candidates, out-of-boundary decisions, and likely revalidation triggers
 
 4. **Persist Findings to Research Log**:
-   - Create or update `.kiro/specs/{feature}/research.md` using the shared template
+   - Create or update `.kiro/specs/{feature}/research.md` using the selected research template
    - Summarize discovery scope and key findings
    - Record investigations with sources and implications
    - Document architecture pattern evaluation, design decisions, and risks
