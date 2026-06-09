@@ -106,7 +106,7 @@ Use `_Depends:_ none` when the task has no specific dependency beyond normal ord
 ### 8. Requirements Mapping
 
 **End each task detail section with**:
-- `_Requirements: X.X, Y.Y_` listing **only numeric requirement IDs** (comma-separated). Never append descriptive text, parentheses, translations, or free-form labels.
+- `_Requirements:_ X.X, Y.Y` listing **only numeric requirement IDs** (comma-separated). Never append descriptive text, parentheses, translations, or free-form labels.
 - `_Boundary:_ ComponentName` using the narrowest design.md component/module boundary that owns the work.
 - `_Depends:_ none` when no specific dependency ID is needed, or `_Depends:_ X.Y, Z.W` when a specific dependency is required.
 - For cross-cutting requirements, list every relevant requirement ID. All requirements MUST have numeric IDs in requirements.md. If an ID is missing, stop and correct requirements.md before generating tasks.
@@ -217,7 +217,7 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
   - Detail item 1
   - Detail item 2
   - Observable completion condition
-  - _Requirements: X.X_
+  - _Requirements:_ X.X
   - _Boundary:_ SharedSetup
   - _Depends:_ none
 
@@ -225,14 +225,14 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - [ ] 2.1 (P) Sub-task description
   - Detail items...
   - Observable completion condition
-  - _Requirements: Y.Y_
+  - _Requirements:_ Y.Y
   - _Boundary:_ AuthService
   - _Depends:_ none
 
 - [ ] 2.2 (P) Sub-task description
   - Detail items...
   - Observable completion condition
-  - _Requirements: Z.Z_
+  - _Requirements:_ Z.Z
   - _Boundary:_ UserRepository
   - _Depends:_ none
 
@@ -240,7 +240,7 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - [ ] 3.1 Sub-task description
   - Detail items...
   - Observable completion condition
-  - _Requirements: W.W_
+  - _Requirements:_ W.W
   - _Boundary:_ Integration
   - _Depends:_ 2.1, 2.2
 ```
