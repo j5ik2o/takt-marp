@@ -27,7 +27,7 @@
 
 ## 境界コミットメント
 
-### この spec が所有するもの
+### このスペックが所有するもの
 
 - `.takt/workflows/takt-marp-slide-ai-quality-gate.yaml` の internal callable workflow
 - 4つの caller workflow における AI gate call step と outcome routing
@@ -101,7 +101,7 @@ graph TB
 - AI gate reports は flat YAML front matter と Markdown body table で書く。front matter に詳細配列や nested object を入れない。
 - `quality_gates` command object は使わない。callable subworkflow routing と static validation で実現する。
 
-### Technology Stack
+### 技術スタック
 
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
@@ -110,7 +110,7 @@ graph TB
 | Data / Storage | Markdown + YAML front matter | deck-local AI gate reports | 既存 parser subset の範囲で定義 |
 | Validation | `slide:smoke` | route/order/report association regression | 既存 smoke script を拡張 |
 
-## ファイル構成計画
+## ファイル構造計画
 
 ### 作成するファイル
 
@@ -139,9 +139,9 @@ graph TB
 - `.kiro/specs/slide-workflow-smoke-validation/**`
 - `slides/**` の real deck source artifacts
 
-## System Flows
+## システムフロー
 
-### Caller Workflow Flow
+### 呼び出し元 workflow フロー
 
 ```mermaid
 sequenceDiagram
@@ -160,7 +160,7 @@ sequenceDiagram
     Fix-->>Work: fixed
 ```
 
-### Gate Subworkflow Flow
+### Gate subworkflow フロー
 
 ```mermaid
 graph TB
@@ -176,13 +176,13 @@ graph TB
     Blocked --> NeedReplan
 ```
 
-Flow decisions:
+フロー判断:
 
 - First-pass no-issue review completes without requiring a fix report.
 - Fix `NO_FIX_NEEDED` completes only when every finding decision has finding-level evidence.
 - Ambiguous, blocked, internally inconsistent, or non-convergent gate outcomes return `need_replan` instead of continuing to normal review.
 
-## Requirements Traceability
+## 要件トレーサビリティ
 
 | Requirement | Summary | Components | Interfaces | Flows |
 |-------------|---------|------------|------------|-------|
@@ -218,7 +218,7 @@ Flow decisions:
 | 6.4 | gate removal を検出する | GateRouteAssertions | smoke static check | Validation |
 | 6.5 | unrelated command boundary routing を検出する | GateRouteAssertions | smoke static check | Validation |
 
-## Components and Interfaces
+## コンポーネントとインターフェース
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies | Contracts |
 |-----------|--------------|--------|--------------|------------------|-----------|
@@ -233,7 +233,7 @@ Flow decisions:
 | GateReportAssertions | Validation | deck-local AI gate report の freshness と optional fix rule を検証する | 4.3, 4.4, 6.3 | smoke script P0 | Batch, State |
 | GateSchemaAssertions | Validation | incompatible `quality_gates` schema を再導入しない | 5.6 | smoke script P1 | Batch |
 
-### Workflow Components
+### Workflow コンポーネント
 
 #### GateWorkflowDefinition
 
@@ -314,7 +314,7 @@ Flow decisions:
 - Validation: static assertions must check route order, not only step presence.
 - Risks: adding gate steps to normal loop monitor cycles could conflate AI gate loop with normal review loop; keep AI gate loop inside callable workflow.
 
-### Facet Components
+### Facet コンポーネント
 
 #### GateReviewInstruction
 
@@ -376,7 +376,7 @@ Flow decisions:
 - Output: optional AI fix report
 - Idempotency & recovery: `FIXED` loops to review; `NEED_REPLAN` returns to caller
 
-### Report Contract Components
+### Report contract コンポーネント
 
 #### GateReviewContract
 
@@ -453,7 +453,7 @@ Required front matter:
 | `changed_file_count` | number | changed files count, `0` when none |
 | `remaining_context_count` | number | missing context rows |
 
-### CLI and Validation Components
+### CLI と validation コンポーネント
 
 #### GateEvidenceSync
 
@@ -546,16 +546,16 @@ Required front matter:
 
 **Contracts**: Service [ ] / API [ ] / Event [ ] / Batch [x] / State [ ]
 
-## Data Models
+## データモデル
 
-### Domain Model
+### ドメインモデル
 
 - `AIGateReviewReport`: command work output に対する AI-specific issue review evidence。
 - `AIGateFixReport`: AI-specific findings に対する command-local fix decision evidence。
 - `GateRoute`: caller workflow の `COMPLETE`、`need_replan`、`ABORT` route mapping。
 - `GateEvidence`: current TAKT run と deck-local report を結びつける observable artifact。
 
-### Logical Data Model
+### 論理データモデル
 
 AI gate reports are Markdown files with flat YAML front matter. Natural keys are:
 
@@ -575,20 +575,20 @@ Consistency rules:
 - Fix report is optional only when review report indicates no blocking AI findings.
 - AI reports never replace `<command>-supervision.md` as successful state evidence.
 
-### Data Contracts & Integration
+### データ契約と統合
 
 Gate review and fix body tables are authoritative for finding-level decisions. Front matter contains only machine-readable identity and count fields. This keeps validation compatible with the existing parser and avoids new YAML dependencies.
 
-## Error Handling
+## エラー処理
 
-### Error Strategy
+### エラー戦略
 
 - Missing target marker, missing work report, unidentifiable command output, or malformed AI report prevents normal review continuation.
 - Ambiguous, blocked, internally inconsistent, or non-convergent AI gate results route to `need_replan` or `ABORT`.
 - Runner sync failure for required review evidence is a command run sync error, not a successful command state.
 - Smoke validation failures report the command, expected route/report, observed route/report, and path.
 
-### Error Categories and Responses
+### エラー分類と応答
 
 - Workflow routing errors: smoke validation fails before the change is considered complete.
 - Gate review ambiguity: gate returns `need_replan`.
@@ -596,7 +596,7 @@ Gate review and fix body tables are authoritative for finding-level decisions. F
 - Gate report freshness mismatch: report is ignored as current evidence and validation fails.
 - Schema compatibility regression: smoke validation fails on workflow YAML.
 
-## Testing Strategy
+## テスト戦略
 
 - Static workflow route tests: verify `plan`, `compose`, `polish`, and `deliver` work success routes enter AI gate before normal review/inspect/verify. Covers 1.1, 1.2, 1.3, 1.4, 6.1, 6.4.
 - Static outcome route tests: verify `COMPLETE` routes to normal review, `need_replan` routes to owning work step, and `ABORT` aborts for all four commands. Covers 3.4, 6.2, 6.5.
@@ -607,13 +607,13 @@ Gate review and fix body tables are authoritative for finding-level decisions. F
 - Boundary tests: verify AI fix instruction and validation do not generate approval files, do not change command state enums, and keep `polish`/`deliver` boundaries intact. Covers 5.1, 5.2, 5.4, 5.5.
 - Smoke evidence test: run canonical smoke path or synthetic equivalent and record observed AI gate report paths in smoke summary. Covers 6.3.
 
-## Security Considerations
+## セキュリティ考慮事項
 
 - Gate workflow standard configuration keeps network access disabled; external web access is not a success condition.
 - AI fix runs with edit permission, so the instruction must constrain editable paths by current command boundary.
 - Gate evidence sync copies only reports from the selected successful current run and validates front matter identity before treating them as current evidence.
 
-## Migration Strategy
+## 移行戦略
 
 - This is an in-repo workflow change with no data migration.
 - Existing deck-local reports may lack AI gate evidence until each command is rerun.
