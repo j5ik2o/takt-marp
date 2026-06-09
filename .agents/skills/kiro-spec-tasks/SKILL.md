@@ -27,6 +27,7 @@ metadata:
 - `.kiro/specs/$1/tasks.md` (if exists, for merge mode)
 - Core steering context: `product.md`, `tech.md`, `structure.md`
 - Additional steering files only when directly relevant to requirements coverage, design boundaries, runtime prerequisites, or team conventions that affect task executability
+- `.kiro/settings/templates/specs/localized-spec-terminology.md` for localized spec terms
 
 **Validate approvals**:
 - If `-y` flag provided: Auto-approve requirements and design in spec.json. Tasks approval is also handled automatically in Step 4.
@@ -44,7 +45,7 @@ metadata:
 
 The following research areas are independent and can be executed in parallel:
 1. **Context loading**: Spec documents (requirements.md, design.md), steering files
-2. **Rules loading**: tasks-generation.md, tasks-parallel-analysis.md, tasks template
+2. **Rules loading**: tasks-generation.md, tasks-parallel-analysis.md, localized spec terminology, tasks template
 
 If multi-agent is enabled, spawn sub-agents for each area above. Otherwise execute sequentially.
 
@@ -179,8 +180,8 @@ Provide brief summary in the language specified in spec.json:
 - **Suggested Action**: "Refine requirements.md or design.md, then re-run `$kiro-spec-tasks $1`"
 
 **Template/Rules Missing**:
+- **Stop Execution**: The selected language-specific template and required rules files must exist
 - **User Message**: "Template or rules files missing in `.kiro/settings/`"
-- **Fallback**: Use inline basic structure with warning
 - **Suggested Action**: "Check repository setup or restore template files"
 - **Missing Numeric Requirement IDs**:
   - **Stop Execution**: All requirements in requirements.md MUST have numeric IDs. If any requirement lacks a numeric ID, stop and request that requirements.md be fixed before generating tasks.

@@ -117,7 +117,7 @@ Provide output in the language specified in spec.json with:
 
 ### Error Scenarios
 - **Missing Project Description**: If requirements.md lacks project description, ask user for feature details
-- **Template Missing**: If template files don't exist, use inline fallback structure with warning
+- **Template Missing**: Stop if the selected language-specific requirements template or localized terminology file is missing
 - **Language Undefined**: Stop and clarify the target language if `spec.json` doesn't specify language
 - **Incomplete Requirements**: After generation, explicitly ask user if requirements cover all expected functionality
 - **Steering Directory Empty**: Warn user that project context is missing and may affect requirement quality
