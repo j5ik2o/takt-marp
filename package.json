@@ -16,12 +16,16 @@
     "build": "npm run build:html && npm run build:pdf",
     "build:html": "node scripts/takt-marp-build-slide-artifact.mjs html",
     "build:pdf": "node scripts/takt-marp-build-slide-artifact.mjs pdf",
-    "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx"
+    "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx",
+    "marp-build": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files --pdf -o dist/takt-sdd/takt-ai-control.pdf"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-jp": "^5.2.5"
   },
   "devDependencies": {
     "@kazumatu981/markdown-it-kroki": "^1.3.6",
-    "@marp-team/marp-cli": "^4",
-    "takt": "^0.43.0"
+    "@marp-team/marp-cli": "^4.4.0",
+    "takt": "^0.44.0"
   },
   "overrides": {
     "yargs": "^18.0.0"
