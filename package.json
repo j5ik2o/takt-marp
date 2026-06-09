@@ -14,10 +14,10 @@
     "slide:smoke": "node scripts/takt-marp-validate-slide-workflow-smoke.mjs",
     "test": "npm run slide:validate-foundation",
     "build": "npm run build:html && npm run build:pdf",
-    "build:html": "node scripts/takt-marp-build-slide-artifact.mjs html",
-    "build:pdf": "node scripts/takt-marp-build-slide-artifact.mjs pdf",
-    "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx",
-    "marp-build": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files --pdf -o dist/takt-sdd/takt-ai-control.pdf"
+    "build:html": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files -o dist/takt-sdd/SLIDES.html",
+    "build:pptx": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files --pptx -o dist/takt-sdd/SLIDES.pptx",
+    "build:pdf": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files --pdf -o dist/takt-sdd/SLIDES.pdf",
+    "preview": "marp -s . --html"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.2.5"

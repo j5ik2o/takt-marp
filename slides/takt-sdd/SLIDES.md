@@ -10,15 +10,15 @@ html: true
 @font-face {
   font-family: "Noto Sans JP";
   font-weight: 400;
-  src: url("node_modules/@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff2") format("woff2");
+  src: url("../../node_modules/@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-400-normal.woff2") format("woff2");
 }
 @font-face {
   font-family: "Noto Sans JP";
   font-weight: 700;
-  src: url("node_modules/@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-700-normal.woff2") format("woff2");
+  src: url("../../node_modules/@fontsource/noto-sans-jp/files/noto-sans-jp-japanese-700-normal.woff2") format("woff2");
 }
 :root {
-  --font-sans: "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+  --font-sans: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
   --font-mono: "SFMono-Regular", "Menlo", "Consolas", monospace;
   --ls-base: 0.01em;
   --lh-tight: 1.25;
@@ -309,7 +309,7 @@ cc-sdd v3そのものの1枚要約。出典はcc-sdd README v3.0: discoveryの�
 
 <!-- _class: visual-full -->
 
-# cc-sdd v3 / Kiro-style SDDは仕様生成から実装・検証へ進む
+# cc-sdd / Kiro-style SDDは仕様生成から実装・検証へ進む
 
 <svg class="fig" viewBox="0 0 1100 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="cc-sdd v3 / Kiro-style SDD の基本フロー">
   <defs>
@@ -320,8 +320,8 @@ cc-sdd v3そのものの1枚要約。出典はcc-sdd README v3.0: discoveryの�
   <style>
     .box { fill: #ffffff; stroke: #2f6df0; stroke-width: 2; rx: 10; }
     .gate { fill: #fdf3e7; stroke: #d9822b; stroke-width: 2; }
-    .name { font: 700 21px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #1d2330; text-anchor: middle; }
-    .sub  { font: 400 16px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #5b6472; text-anchor: middle; }
+    .name { font: 700 21px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #1d2330; text-anchor: middle; }
+    .sub  { font: 400 16px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #5b6472; text-anchor: middle; }
     .art  { font: 400 16px "SFMono-Regular","Menlo",monospace; fill: #2f6df0; text-anchor: middle; }
     .flow { stroke: #5b6472; stroke-width: 2; fill: none; marker-end: url(#ar1); }
   </style>
@@ -333,7 +333,7 @@ cc-sdd v3そのものの1枚要約。出典はcc-sdd README v3.0: discoveryの�
   <text class="name" x="415" y="88">kiro-spec-init</text>
   <text class="sub"  x="415" y="112">spec の初期化</text>
   <rect class="box" x="570" y="60" width="230" height="64" rx="10"/>
-  <text x="685" y="88" style="font:700 18px &quot;Hiragino Sans&quot;,&quot;Noto Sans JP&quot;,sans-serif" fill="#1d2330" text-anchor="middle">kiro-spec-requirements</text>
+  <text x="685" y="88" style="font:700 18px &quot;Noto Sans JP&quot;,&quot;Hiragino Sans&quot;,sans-serif" fill="#1d2330" text-anchor="middle">kiro-spec-requirements</text>
   <text class="sub"  x="685" y="112">EARS 形式の要件</text>
   <rect class="box" x="840" y="60" width="230" height="64" rx="10"/>
   <text class="name" x="955" y="88">kiro-spec-design</text>
@@ -439,8 +439,8 @@ cc-sddの一般紹介には寄せない。前提の確認だけ: 要件(EARS) �
     </marker>
   </defs>
   <style>
-    .a-name { font: 700 20px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #1d2330; text-anchor: middle; }
-    .a-sub  { font: 400 15px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #5b6472; text-anchor: middle; }
+    .a-name { font: 700 20px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #1d2330; text-anchor: middle; }
+    .a-sub  { font: 400 15px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #5b6472; text-anchor: middle; }
     .a-mono { font: 400 15px "SFMono-Regular","Menlo",monospace; fill: #2f6df0; text-anchor: middle; }
     .a-flow { stroke: #5b6472; stroke-width: 2; fill: none; marker-end: url(#ar2); }
   </style>
@@ -467,7 +467,7 @@ cc-sddの一般紹介には寄せない。前提の確認だけ: 要件(EARS) �
   <!-- facets -->
   <rect x="275" y="225" width="550" height="100" rx="8" fill="#ffffff" stroke="#d5dae3" stroke-width="1.5"/>
   <text class="a-name" x="550" y="255">facets — プロンプトを 5 つの関心事に分離</text>
-  <g font-family='"Hiragino Sans","Noto Sans JP",sans-serif' font-size="16" text-anchor="middle">
+  <g font-family='"Noto Sans JP","Hiragino Sans",sans-serif' font-size="16" text-anchor="middle">
     <rect x="290" y="272" width="100" height="34" rx="17" fill="#eaf1fe" stroke="#2f6df0"/>
     <text x="340" y="294" fill="#1d2330">Persona</text>
     <rect x="398" y="272" width="92" height="34" rx="17" fill="#eaf1fe" stroke="#2f6df0"/>
@@ -607,9 +607,9 @@ validation系workflowはread-onlyに保たれる: artifactを勝手に修正せ�
     </marker>
   </defs>
   <style>
-    .g-name { font: 700 21px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #1d2330; text-anchor: middle; }
-    .g-sub  { font: 400 16px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #5b6472; text-anchor: middle; }
-    .g-lbl  { font: 400 17px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #1d2330; }
+    .g-name { font: 700 21px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #1d2330; text-anchor: middle; }
+    .g-sub  { font: 400 16px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #5b6472; text-anchor: middle; }
+    .g-lbl  { font: 400 17px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #1d2330; }
     .g-flow { stroke: #5b6472; stroke-width: 2; fill: none; marker-end: url(#ar4); }
   </style>
   <!-- review -->
@@ -665,9 +665,9 @@ AI固有のアンチパターン（存在しないAPIやpathの参照、タス�
     </marker>
   </defs>
   <style>
-    .i-name { font: 700 20px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #1d2330; text-anchor: middle; }
-    .i-sub  { font: 400 15px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #5b6472; text-anchor: middle; }
-    .i-lbl  { font: 400 16px "Hiragino Sans","Noto Sans JP",sans-serif; fill: #1d2330; }
+    .i-name { font: 700 20px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #1d2330; text-anchor: middle; }
+    .i-sub  { font: 400 15px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #5b6472; text-anchor: middle; }
+    .i-lbl  { font: 400 16px "Noto Sans JP","Hiragino Sans",sans-serif; fill: #1d2330; }
     .i-flow { stroke: #5b6472; stroke-width: 2; fill: none; marker-end: url(#ar3); }
   </style>
   <!-- row 1 -->
@@ -683,7 +683,7 @@ AI固有のアンチパターン（存在しないAPIやpathの参照、タス�
   <text class="i-sub"  x="635" y="130">subworkflow として合成</text>
   <rect x="800" y="40" width="270" height="170" rx="10" fill="#ffffff" stroke="#2f6df0" stroke-width="2"/>
   <text class="i-name" x="935" y="70">parallel review — 4 観点</text>
-  <g font-family='"Hiragino Sans","Noto Sans JP",sans-serif' font-size="16" text-anchor="middle">
+  <g font-family='"Noto Sans JP","Hiragino Sans",sans-serif' font-size="16" text-anchor="middle">
     <rect x="818" y="88" width="110" height="40" rx="8" fill="#eaf1fe" stroke="#2f6df0"/>
     <text x="873" y="113" fill="#1d2330">coding</text>
     <rect x="942" y="88" width="110" height="40" rx="8" fill="#eaf1fe" stroke="#2f6df0"/>
