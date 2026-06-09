@@ -8,7 +8,7 @@ Use boundary terminology consistently across phases without turning requirements
 
 - **Discovery** identifies `Boundary Candidates`
 - **Requirements** make inclusion, exclusion, and adjacent expectations explicit when scope could be misread
-- **Design** turns those into `Boundary Commitments`
+- **Design** turns those into the design boundary section named by `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`
 - **Tasks** use `_Boundary:_` to constrain executable work
 
 Requirements should clarify the feature boundary in user- or operator-observable terms, not in architecture ownership or implementation detail.
@@ -26,7 +26,7 @@ Requirements should clarify the feature boundary in user- or operator-observable
 - Every acceptance criterion must follow the EARS rules defined in `ears-format.md`.
 - Every requirement must be testable, observable, and specific enough that later design and validation can verify it.
 - Remove implementation details that belong in `design.md` rather than `requirements.md`.
-- Requirement headings must use numeric IDs only; do not mix numeric and alphabetic labels.
+- Requirement headings must use numeric IDs only and follow one of the heading forms in `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`. Do not mix numeric and alphabetic labels.
 
 ## Structure and Quality Review
 

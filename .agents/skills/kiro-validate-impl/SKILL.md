@@ -11,7 +11,7 @@ Individual tasks have already been reviewed by the per-task reviewer during impl
 
 Boundary terminology continuity:
 - discovery identifies `Boundary Candidates`
-- design fixes `Boundary Commitments`
+- design fixes the design boundary section named by `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`
 - tasks constrain execution with `_Boundary:_`
 - feature validation checks for cross-task `Boundary Violations`
 
@@ -120,12 +120,12 @@ For each detected feature:
 - Verify the overall component graph matches design.md
 - Check that integration patterns (event flow, API boundaries, dependency injection) work as designed
 - Verify dependency direction follows design.md's architecture (no upward imports)
-- Verify File Structure Plan matches the actual file layout
+- Verify the file structure section named by `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md` matches the actual file layout
 - Identify any architectural drift from the original design
 - Use the original section numbering from `design.md`
 
 **G.5 Boundary Audit**
-- Compare completed work against the design's `Boundary Commitments`, `Out of Boundary`, `Allowed Dependencies`, and `Revalidation Triggers`
+- Compare completed work against the boundary terms named by `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`
 - Identify cross-task spillover where one area quietly absorbed another boundary's responsibility
 - Identify downstream-specific workarounds embedded upstream "to make integration easier"
 - Identify new hidden dependencies or shared ownership that were not declared in the design
@@ -166,7 +166,7 @@ Provide summary in the language specified in spec.json:
 - DESIGN:
   - Architecture drift: <findings>
   - Dependency direction: <violations if any>
-  - File Structure Plan vs actual: <match/mismatch>
+  - File structure plan vs actual: <match/mismatch>
 - OWNERSHIP: LOCAL | UPSTREAM | UNCLEAR
 - UPSTREAM_SPEC: <feature-name | N/A>
 - BLOCKED_TASKS: <list and impact assessment>

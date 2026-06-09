@@ -10,7 +10,7 @@ This skill performs task-local adversarial review. It verifies that the implemen
 
 Boundary terminology continuity:
 - discovery identifies `Boundary Candidates`
-- design fixes `Boundary Commitments`
+- design fixes the design boundary section named by `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md`
 - tasks constrain execution with `_Boundary:_`
 - review rejects concrete `Boundary Violations`
 </background_information>

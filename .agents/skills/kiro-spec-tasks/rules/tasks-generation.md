@@ -254,6 +254,6 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - If gaps found: Return to requirements or design phase
 - No requirement should be left without corresponding tasks
 
-Use `N.M`-style numeric requirement IDs where `N` is the top-level requirement number from requirements.md (for example, Requirement 1 → 1.1, 1.2; Requirement 2 → 2.1, 2.2), and `M` is a local index within that requirement group.
+Use `N.M`-style numeric requirement IDs where `N` is the top-level requirement number from requirements.md, regardless of which requirement heading term from `.agents/skills/kiro-spec-design/rules/localized-spec-terminology.md` the artifact uses.
 
 Document any intentionally deferred requirements with rationale.
