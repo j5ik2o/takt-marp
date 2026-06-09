@@ -26,7 +26,7 @@
 
 ## 境界コミットメント
 
-### この spec が所有するもの
+### このスペックが所有するもの
 
 - smoke fixture を canonical target で使う準備手順と fixture documentation の更新
 - smoke sequence validation script と npm entrypoint
@@ -95,7 +95,7 @@ graph TB
 - `pdftoppm` がない環境では PDF raster evidence を degraded として扱い、HTML PNG evidence failure とは区別する。
 - integration issue の修正は、既存 contract に対する実装ズレの修正に限定する。契約自体の変更が必要な場合は upstream feedback として明示する。
 
-## ファイル構成計画
+## ファイル構造計画
 
 ### 作成するファイル
 

@@ -32,7 +32,7 @@ metadata:
    - Read `rules/ears-format.md` from this skill's directory for EARS syntax rules
    - Read `rules/requirements-review-gate.md` from this skill's directory for pre-write review criteria
    - Read `.kiro/settings/templates/specs/localized-spec-terminology.md` for localized spec terms
-   - Read `.kiro/settings/templates/specs/requirements.md` for document structure
+   - Select the matching requirements template from `spec.json.language`: `.kiro/settings/templates/specs/requirements.md` for `ja`, or `.kiro/settings/templates/specs/requirements.en.md` for `en`. Stop for unsupported languages.
 
 #### Parallel Research (sub-agent dispatch)
 

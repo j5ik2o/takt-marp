@@ -26,7 +26,7 @@
 
 ## 境界コミットメント
 
-### この spec が所有するもの
+### このスペックが所有するもの
 
 - command/state model の ADR と workflow docs/schema docs
 - `slides/<deck>` target validation と deck path resolution
@@ -111,7 +111,7 @@ graph TB
 | Documentation | Markdown | ADR、workflow docs、schema docs | 日本語で記述する |
 | Validation | Node.js script tests または npm-checkable scripts | foundation regression | smoke 完全実行は対象外 |
 
-## ファイル構成計画
+## ファイル構造計画
 
 ### 作成するファイル
 

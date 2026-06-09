@@ -23,7 +23,7 @@
 
 ## 境界コミットメント
 
-### この spec が所有するもの
+### このスペックが所有するもの
 
 - `.takt/workflows/takt-marp-slide-plan.yaml`
 - `.takt/workflows/takt-marp-slide-compose.yaml`
@@ -109,7 +109,7 @@ graph TB
 - canonical report は `{command}-{role}.md` ごとに1つだけ生成する。複数の work substep が同じ `plan-work.md` や `compose-work.md` を直接出力してはならない。複数 substep の成果は専用の work summary step で集約し、canonical work report はその step だけが出力する。
 - deterministic side effect を持つ step は、agent の自己申告だけで成功扱いしない。`render_evidence`、`build_delivery`、`verify_delivery` は command gate または同等の機械検証で、期待ファイルの存在、front matter/schema、clean/export 結果を確認してから次 step へ進める。
 
-## ファイル構成計画
+## ファイル構造計画
 
 ### 作成するファイル
 
