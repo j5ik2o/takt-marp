@@ -177,9 +177,9 @@ Provide brief summary in the language specified in spec.json:
 - **Suggested Action**: "Run `/kiro-spec-requirements {feature}` to generate requirements first"
 
 **Template Missing**:
-- **User Message**: "Template file missing at `.kiro/settings/templates/specs/design.md`"
+- **Stop Execution**: The selected language-specific design or research template must exist
+- **User Message**: "Template file missing for selected spec language"
 - **Suggested Action**: "Check repository setup or restore template file"
-- **Fallback**: Use inline basic structure with warning
 
 **Steering Context Missing**:
 - **Warning**: "Steering directory empty or missing - design may not align with project standards"
