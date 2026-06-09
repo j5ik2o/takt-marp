@@ -177,7 +177,7 @@ Provide brief summary in the language specified in spec.json:
 - **Suggested Action**: "Run `/kiro-spec-requirements {feature}` to generate requirements first"
 
 **Template Missing**:
-- **Stop Execution**: The selected language-specific design or research template must exist
+- **Stop Execution**: The selected language-specific design template, research template, and localized terminology file must exist
 - **User Message**: "Template file missing for selected spec language"
 - **Suggested Action**: "Check repository setup or restore template file"
 
