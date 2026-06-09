@@ -37,7 +37,7 @@ Before writing `design.md`, review the draft design and repair local issues unti
 
 Before applying judgment, verify these mechanically:
 - **Artifact language selected**: Read `spec.json.language` before section-name checks. Use the matching Japanese or English terms from `.kiro/settings/templates/specs/localized-spec-terminology.md`. If the language is missing or unsupported, stop and clarify the target language before applying this gate.
-- **Requirements traceability**: Extract all numeric requirement IDs from `requirements.md`. Scan the design draft for each ID. Report any IDs not found in the design.
+- **Requirements traceability**: Extract all numeric requirement IDs from `requirements.md` using the requirement heading forms named by `.kiro/settings/templates/specs/localized-spec-terminology.md` for `spec.json.language`; also accept existing numeric requirement list items. Scan the design draft for each ID. Report any IDs not found in the design.
 - **Boundary section populated**: The design boundary section and boundary subsections named by `.kiro/settings/templates/specs/localized-spec-terminology.md` must not be empty or placeholder-only.
 - **File structure section populated**: The file structure section named by `.kiro/settings/templates/specs/localized-spec-terminology.md` must contain concrete file paths (not just "TBD" or empty). Scan for placeholder text in that section.
 - **Boundary ↔ file structure alignment**: The file structure section must reflect the stated responsibility boundary. If files imply broader ownership than the boundary section claims, report a mismatch.

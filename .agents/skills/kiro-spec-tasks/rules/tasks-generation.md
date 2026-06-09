@@ -46,13 +46,15 @@ Focus on capabilities and outcomes, not code structure.
 
 **Order implies dependency**: Task N implicitly depends on all tasks before it. This is the primary dependency mechanism.
 
-**Tasks must follow this phase order**:
-1. **Foundation**: Environment setup, test infrastructure, shared utilities, database schema, configuration
-2. **Core**: Primary feature implementation (parallel-capable tasks grouped here)
-3. **Integration**: Wiring components together, cross-boundary connections
-4. **Validation**: E2E tests, edge cases, regression checks
+**Tasks must follow this conceptual phase order**:
+1. Setup/foundation category: Environment setup, test infrastructure, shared utilities, database schema, configuration
+2. Primary feature category: Primary feature implementation (parallel-capable tasks grouped here)
+3. Integration category: Wiring components together, cross-boundary connections
+4. Validation category: E2E tests, edge cases, regression checks
 
-**Rationale**: Foundation work unblocks everything else. Placing setup tasks early prevents downstream blocking. Core tasks can often run in parallel because foundation is already complete.
+Localize visible major-task titles to the spec language. For example, Japanese specs should use Japanese titles such as `基盤`, `コア`, `統合`, and `検証`; English specs may use `Foundation`, `Core`, `Integration`, and `Validation`.
+
+**Rationale**: Setup work unblocks everything else. Placing setup tasks early prevents downstream blocking. Primary feature tasks can often run in parallel because setup is already complete.
 
 ### 4. Task Integration & Progression
 
@@ -199,8 +201,8 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
   - No shared file or resource contention
   - No prerequisite review/approval from another task
   - `_Boundary:_` annotations confirm non-overlapping component scopes
-- Foundation-phase tasks (see Task Ordering Principle) are rarely `(P)` — they establish shared prerequisites.
-- Core-phase tasks are the primary candidates for `(P)` since foundation is already complete.
+- Setup-category tasks (see Task Ordering Principle) are rarely `(P)` — they establish shared prerequisites.
+- Primary feature tasks are the main candidates for `(P)` since setup is already complete.
 - Validate that identified parallel tasks operate within separate boundaries defined in the localized architecture boundary map subsection.
 - Confirm API/event contracts from design.md do not overlap in ways that cause conflicts.
 - `(P)` tasks with cross-boundary dependencies must declare `_Depends:_ X.X` explicitly.
@@ -213,36 +215,36 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 
 ### Checkbox Format
 ```markdown
-- [ ] 1. Foundation: environment and test infrastructure setup
-- [ ] 1.1 Sub-task description
-  - Detail item 1
-  - Detail item 2
-  - Observable completion condition
+- [ ] 1. {{LOCALIZED_SETUP_PHASE_TITLE}}
+- [ ] 1.1 {{LOCALIZED_SUB_TASK_DESCRIPTION}}
+  - {{LOCALIZED_DETAIL_ITEM_1}}
+  - {{LOCALIZED_DETAIL_ITEM_2}}
+  - {{LOCALIZED_OBSERVABLE_COMPLETION_CONDITION}}
   - _Requirements:_ X.X
   - _Boundary:_ SharedSetup
   - _Depends:_ none
 
-- [ ] 2. Core feature A
-- [ ] 2.1 (P) Sub-task description
-  - Detail items...
-  - Observable completion condition
+- [ ] 2. {{LOCALIZED_PRIMARY_FEATURE_PHASE_TITLE}}
+- [ ] 2.1 (P) {{LOCALIZED_SUB_TASK_DESCRIPTION}}
+  - {{LOCALIZED_DETAIL_ITEMS}}
+  - {{LOCALIZED_OBSERVABLE_COMPLETION_CONDITION}}
   - _Requirements:_ Y.Y
   - _Boundary:_ AuthService
   - _Depends:_ none
 
-- [ ] 2.2 (P) Sub-task description
-  - Detail items...
-  - Observable completion condition
+- [ ] 2.2 (P) {{LOCALIZED_SUB_TASK_DESCRIPTION}}
+  - {{LOCALIZED_DETAIL_ITEMS}}
+  - {{LOCALIZED_OBSERVABLE_COMPLETION_CONDITION}}
   - _Requirements:_ Z.Z
   - _Boundary:_ UserRepository
   - _Depends:_ none
 
-- [ ] 3. Integration and wiring
-- [ ] 3.1 Sub-task description
-  - Detail items...
-  - Observable completion condition
+- [ ] 3. {{LOCALIZED_INTEGRATION_PHASE_TITLE}}
+- [ ] 3.1 {{LOCALIZED_SUB_TASK_DESCRIPTION}}
+  - {{LOCALIZED_DETAIL_ITEMS}}
+  - {{LOCALIZED_OBSERVABLE_COMPLETION_CONDITION}}
   - _Requirements:_ W.W
-  - _Boundary:_ Integration
+  - _Boundary:_ {{INTEGRATION_BOUNDARY}}
   - _Depends:_ 2.1, 2.2
 ```
 
