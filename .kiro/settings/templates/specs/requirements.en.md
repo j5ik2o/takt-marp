@@ -13,7 +13,7 @@
 
 ### Requirement 1: {{REQUIREMENT_AREA_1}}
 <!-- Requirement headings must follow the terminology table and use numeric IDs as `Requirement N:` (example: "Requirement 1: ..."). Alphabetic IDs such as "Requirement A" are not allowed. -->
-**User Story:** As a {{ROLE}}, I want {{CAPABILITY}}, so that {{BENEFIT}}.
+**Objective:** As a {{ROLE}}, I want {{CAPABILITY}}, so that {{BENEFIT}}.
 
 #### Acceptance Criteria
 <!-- EARS format. English specs use "When", "If", "While", "Where", ubiquitous "shall", and mandatory "shall" wording. -->
@@ -24,7 +24,7 @@
 5. The [system] shall always [response/action]
 
 ### Requirement 2: {{REQUIREMENT_AREA_2}}
-**User Story:** As a {{ROLE}}, I want {{CAPABILITY}}, so that {{BENEFIT}}.
+**Objective:** As a {{ROLE}}, I want {{CAPABILITY}}, so that {{BENEFIT}}.
 
 #### Acceptance Criteria
 1. When [event], the [system] shall [response/action]
