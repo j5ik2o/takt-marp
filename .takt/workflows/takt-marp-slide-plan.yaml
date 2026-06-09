@@ -43,6 +43,8 @@ instructions:
 knowledge:
   takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
 report_formats:
+  takt-marp-normalized-brief: ../facets/output-contracts/takt-marp-normalized-brief.md
+  takt-marp-slide-plan: ../facets/output-contracts/takt-marp-slide-plan.md
   takt-marp-command-work: ../facets/output-contracts/takt-marp-command-work.md
   takt-marp-command-review: ../facets/output-contracts/takt-marp-command-review.md
   takt-marp-command-fix: ../facets/output-contracts/takt-marp-command-fix.md
@@ -77,6 +79,10 @@ steps:
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     instruction: takt-marp-normalize-brief
+    output_contracts:
+      report:
+        - name: brief.normalized.md
+          format: takt-marp-normalized-brief
     rules:
       - condition: 任意確認事項を残してbriefを正規化した
         next: plan_deck
@@ -95,6 +101,10 @@ steps:
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     instruction: takt-marp-plan
+    output_contracts:
+      report:
+        - name: plan.md
+          format: takt-marp-slide-plan
     rules:
       - condition: planを作成した
         next: summarize_plan_work

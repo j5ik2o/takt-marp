@@ -1,1 +1,108 @@
 # takt-marp
+
+[日本語](README.ja.md)
+
+Marp slide decks and a TAKT workflow for semi-automated deck generation.
+
+## TAKT Marp workflow
+
+The workflow starts from `slides/<deck>/brief.md` and moves through `plan`, `compose`, `polish`, and `deliver`.
+
+Detailed workflow contract: [docs/marp-slide-workflow.md](docs/marp-slide-workflow.md)
+
+### 1. Create a brief
+
+Create `slides/<deck>/brief.md`. Commands take the deck directory `slides/<deck>`, not the `brief.md` file path.
+
+Minimum sections:
+
+- `Goal`
+- `Core Message`
+- `Audience Context`
+- `Output Requirements`
+
+Example output requirement:
+
+```md
+## Output Requirements
+- Format: Marp
+- Language: Japanese
+- Target slide count: 5
+- Deliverables: html, pdf
+```
+
+### 2. Run the workflows
+
+```bash
+npm run slide:plan -- "slides/<deck>"
+npm run slide:approve -- "slides/<deck>" plan --by <name>
+npm run slide:compose -- "slides/<deck>"
+npm run slide:approve -- "slides/<deck>" compose --by <name>
+npm run slide:polish -- "slides/<deck>"
+npm run slide:deliver -- "slides/<deck>"
+```
+
+Use `slides/<deck>` as the target:
+
+```bash
+npm run slide:plan -- "slides/<deck>"
+```
+
+Human approval is recorded by `slide:approve` for `plan` and `compose` only. `review`, `revise`, `qa`, and `build-qa` are internal workflow responsibilities, not top-level commands.
+
+### 3. Generated files
+
+```text
+slides/<deck>/
+  brief.normalized.md
+  plan.md
+  design-system.md
+  SLIDES.md
+  images/*.svg
+  review/*.md
+```
+
+`design-system.md` defines deck-local typography, spacing, layout, visual, color, and QA tokens. `SLIDES.md` should use those tokens through Marp classes instead of per-slide style tweaks.
+
+### 4. Polish and delivery scope
+
+`polish` is responsible for visual inspection and repair loops:
+
+- SVG references and XML validity
+- slide frame fit, text fit, figure size, page number interference
+- layout choice and split ratios
+- typography consistency: letter spacing, line height, size hierarchy
+- spatial balance: top/left bias, large unintended blank areas, visual center of gravity
+- design-system usage: tokenized CSS, no per-slide style drift
+
+`deliver` is responsible for requested artifacts. PDF generation builds only the target deck's `SLIDES.md`:
+
+```bash
+npm run build:pdf -- <deck>
+```
+
+### 5. Validation
+
+Use the foundation validation for fast local checks:
+
+```bash
+npm test
+```
+
+Use the smoke validation when changing workflow routing, state gates, render evidence, delivery verification, or approval handling:
+
+```bash
+npm run slide:smoke -- --keep
+```
+
+The smoke validation creates a temporary `_workflow-smoke` deck from the fixture, exercises invalid target and approval failure paths, runs the `plan` -> `compose` -> `polish` -> `deliver` sequence, verifies render evidence metadata, checks delivery artifacts, and covers rerun/force behavior. `--keep` leaves the generated deck and reports under `slides/_workflow-smoke/` for inspection.
+
+### Smoke fixture
+
+A small input fixture is available at:
+
+```text
+fixtures/marp-slide-workflow/_workflow-smoke/
+```
+
+Copy it under `slides/` when you want to run the full workflow without creating a new brief.
