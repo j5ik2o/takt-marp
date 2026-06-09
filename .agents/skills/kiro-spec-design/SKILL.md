@@ -28,7 +28,7 @@ metadata:
 - `.kiro/specs/$1/research.md` (if exists, contains gap analysis from `$kiro-validate-gap`)
 - Core steering context: `product.md`, `tech.md`, `structure.md`
 - Additional steering files only when directly relevant to requirement coverage, architecture boundaries, integrations, runtime prerequisites, security/performance constraints, or team conventions that affect implementation readiness
-- Select the matching design template from `spec.json.language`: `.kiro/settings/templates/specs/design.md` for `ja`, or `.kiro/settings/templates/specs/design.en.md` for `en`
+- Select the matching design template from `spec.json.language`: `.kiro/settings/templates/specs/design.md` for `ja`, or `.kiro/settings/templates/specs/design.en.md` for `en`. Stop for missing or unsupported languages.
 - Read `.kiro/settings/templates/specs/localized-spec-terminology.md` for localized spec terms
 - Read `rules/design-principles.md` from this skill's directory for design principles
 - Select the matching research template from `spec.json.language`: `.kiro/settings/templates/specs/research.md` for `ja`, or `.kiro/settings/templates/specs/research.en.md` for `en`. Stop for unsupported languages.
@@ -164,7 +164,7 @@ Provide brief summary in the language specified in spec.json:
 
 **Format**: Concise Markdown (under 200 words) - this is the command output, NOT the design document itself
 
-**Note**: The actual design document follows `.kiro/settings/templates/specs/design.md` structure.
+**Note**: The actual design document follows the selected design template structure for `spec.json.language`.
 
 ## Safety & Fallback
 

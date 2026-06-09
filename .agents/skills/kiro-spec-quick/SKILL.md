@@ -70,19 +70,20 @@ Execute these 4 phases in order:
 
 5. **Initialize Files from Templates**:
 
-   a. Read templates:
-   ```
-   - .kiro/settings/templates/specs/init.json
-   - .kiro/settings/templates/specs/requirements-init.md
-   ```
+	   a. Read templates:
+	   ```
+	   - .kiro/settings/templates/specs/init.json
+	   - .kiro/settings/templates/specs/requirements-init.md for `ja`, or .kiro/settings/templates/specs/requirements-init.en.md for `en`
+	   ```
 
-   b. Replace placeholders:
-   ```
-   {{FEATURE_NAME}} → feature-name
-   {{TIMESTAMP}} → current ISO 8601 timestamp (use `date -u +"%Y-%m-%dT%H:%M:%SZ"`)
-   {{PROJECT_DESCRIPTION}} → description
-   ja → language code (detect from user's input language, default to `en`)
-   ```
+	   b. Replace placeholders:
+	   ```
+	   {{FEATURE_NAME}} → feature-name
+	   {{TIMESTAMP}} → current ISO 8601 timestamp (use `date -u +"%Y-%m-%dT%H:%M:%SZ"`)
+	   {{PROJECT_DESCRIPTION}} → description
+	   {{LANGUAGE}} → selected language code (detect from user's input language; if uncertain, select `ja` as the repository default)
+	   ```
+	   Ensure the selected language code and requirements skeleton language match before writing files. Stop for unsupported languages.
 
    c. Write files using Write tool:
    ```
