@@ -23,13 +23,14 @@ import {
 
 function usage() {
   return [
-    "Usage: node scripts/takt-marp-run-slide-workflow.mjs <command> <target> [--force]",
+    "Usage: node scripts/takt-marp-run-slide-workflow.mjs <command> <target> [--force] [--provider <name>]",
     "",
     "Commands: plan, compose, polish, deliver",
     "Target: slides/<deck>",
     "",
     "Examples:",
     "  npm run slide:plan -- \"slides/my-talk\"",
+    "  npm run slide:plan -- \"slides/my-talk\" --provider mock",
     "  npm run slide:compose -- \"slides/my-talk\" --force",
   ].join("\n");
 }
@@ -63,7 +64,7 @@ async function main() {
 
   await writeCurrentWorkflowTarget(command, targetInfo);
   const runSnapshotBefore = await snapshotTaktRuns(command);
-  const code = await runTakt(command, targetInfo.target);
+  const code = await runTakt(command, targetInfo.target, { provider: flags.provider });
   if (code !== 0) {
     process.exitCode = code;
     return;
@@ -90,8 +91,12 @@ async function writeCurrentWorkflowTarget(command, targetInfo) {
   );
 }
 
-async function runTakt(command, target) {
-  const child = spawn(taktExecutablePath(), ["--pipeline", "--skip-git", "-w", `takt-marp-slide-${command}`, "-t", target], {
+async function runTakt(command, target, options = {}) {
+  const args = ["--pipeline", "--skip-git", "-w", `takt-marp-slide-${command}`, "-t", target];
+  if (options.provider) {
+    args.push("--provider", options.provider);
+  }
+  const child = spawn(taktExecutablePath(), args, {
     shell: process.platform === "win32",
     stdio: "inherit",
   });

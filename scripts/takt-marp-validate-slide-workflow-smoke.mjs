@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 import {
   SlideWorkflowError,
   approvalPath,
+  archiveCommandArtifacts,
   cleanGeneratedOutputs,
+  downstreamCommands,
   formatError,
   parseFrontMatter,
   readApproval,
@@ -22,6 +24,7 @@ const ROOT = path.resolve(SCRIPT_DIR, "..");
 const FIXTURE_PATH = path.join(ROOT, "fixtures", "marp-slide-workflow", "_workflow-smoke");
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const DEFAULT_TARGET = "slides/_workflow-smoke";
+const DEFAULT_SMOKE_PROVIDER = "mock";
 const STATE_VALIDATION_TARGET = "slides/_workflow-smoke-state-validation";
 const RENDER_VALIDATION_TARGET = "slides/_workflow-smoke-render-validation";
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
@@ -29,6 +32,7 @@ const SOURCE_FIXTURE_EXCLUDES = new Set(["README.md"]);
 const WORKFLOW_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
 const NODE_CHECK_TIMEOUT_MS = 2 * 60 * 1000;
 const CAPTURE_MAX_BUFFER = 64 * 1024 * 1024;
+const MOCK_GENERATED_AT = "2026-06-06T00:00:00.000Z";
 
 async function main() {
   const options = parseSmokeArgs(process.argv.slice(2));
@@ -77,12 +81,12 @@ async function main() {
     commands.push(...renderEvidenceBoundaryChecks.commands);
     observedPaths.push(...renderEvidenceBoundaryChecks.observedPaths);
     currentCheckName = "sequence:workflow";
-    const planSequenceChecks = await runPlanSequenceChecks(targetInfo);
+    const planSequenceChecks = await runPlanSequenceChecks(targetInfo, { provider: options.provider });
     checks.push(...planSequenceChecks.checks);
     commands.push(...planSequenceChecks.commands);
     observedPaths.push(...planSequenceChecks.observedPaths);
     currentCheckName = "failure-path:force-invalidation";
-    const forceChecks = await runForceInvalidationChecks(targetInfo);
+    const forceChecks = await runForceInvalidationChecks(targetInfo, { provider: options.provider });
     checks.push(...forceChecks.checks);
     commands.push(...forceChecks.commands);
     observedPaths.push(...forceChecks.observedPaths);
@@ -92,7 +96,7 @@ async function main() {
     commands.push(...rerunChecks.commands);
     observedPaths.push(...rerunChecks.observedPaths);
     currentCheckName = "failure-path:rejected-rerun-archive";
-    const rejectedRerunChecks = await runRejectedRerunArchiveChecks(targetInfo);
+    const rejectedRerunChecks = await runRejectedRerunArchiveChecks(targetInfo, { provider: options.provider });
     checks.push(...rejectedRerunChecks.checks);
     commands.push(...rejectedRerunChecks.commands);
     observedPaths.push(...rejectedRerunChecks.observedPaths);
@@ -103,7 +107,7 @@ async function main() {
   }
 
   if (targetInfo) {
-    const summaryPath = path.join(targetInfo.reviewPath, "smoke-summary.md");
+    const summaryPath = path.join(targetInfo.reviewPath, smokeSummaryFileName(options));
     observedPaths.push(relativePath(summaryPath));
     const summaryChecks = [
       ...checks,
@@ -111,6 +115,8 @@ async function main() {
     ];
     await writeSummary(summaryPath, {
       target: targetInfo.target,
+      provider: options.provider,
+      smokeMode: smokeMode(options),
       result: failures.length === 0 ? "passed" : "failed",
       commands,
       checks: summaryChecks,
@@ -446,12 +452,12 @@ async function runRenderEvidenceBoundaryChecks() {
   });
 }
 
-async function runPlanSequenceChecks(targetInfo) {
+async function runPlanSequenceChecks(targetInfo, options) {
   const checks = [];
   const commands = [];
   const observedPaths = [];
 
-  const planCommand = runNpmScript("sequence:plan-command", "slide:plan", [targetInfo.target]);
+  const planCommand = await runWorkflowCommand("sequence:plan-command", "plan", targetInfo, options);
   commands.push(planCommand);
   const supervision = await readSupervision(targetInfo, "plan");
   assert(supervision.data.state === "planned", `sequence:plan-supervision-state expected planned, got ${supervision.data.state}`);
@@ -470,7 +476,7 @@ async function runPlanSequenceChecks(targetInfo) {
   observedPaths.push(relativePath(approval.filePath));
   checks.push(pass("approval-command:plan-approved", "slide:approve plan --by smoke-validation generated a matching plan approval file."));
 
-  const composeCommand = runNpmScript("sequence:compose-command", "slide:compose", [targetInfo.target]);
+  const composeCommand = await runWorkflowCommand("sequence:compose-command", "compose", targetInfo, options);
   commands.push(composeCommand);
   const composeArtifactPaths = await assertComposeSourceArtifacts(targetInfo);
   observedPaths.push(...composeArtifactPaths.map(relativePath));
@@ -493,7 +499,7 @@ async function runPlanSequenceChecks(targetInfo) {
   observedPaths.push(relativePath(composeApproval.filePath));
   checks.push(pass("approval-command:compose-approved", "slide:approve compose --by smoke-validation generated a matching compose approval file."));
 
-  const polishCommand = runNpmScript("sequence:polish-command", "slide:polish", [targetInfo.target]);
+  const polishCommand = await runWorkflowCommand("sequence:polish-command", "polish", targetInfo, options);
   commands.push(polishCommand);
   const renderEvidence = await assertRenderEvidenceArtifacts(targetInfo, 1);
   const verifyCommand = runNodeScript("sequence:polish-render-evidence-verify", "takt-marp-verify-render-evidence-metadata.mjs", [targetInfo.target, "--cycle", "1"]);
@@ -513,7 +519,7 @@ async function runPlanSequenceChecks(targetInfo) {
 
   const staleDeliveryArtifactPaths = await seedStaleDeliveryArtifacts(targetInfo);
   observedPaths.push(...staleDeliveryArtifactPaths.map(relativePath));
-  const deliverCommand = runNpmScript("sequence:deliver-command", "slide:deliver", [targetInfo.target]);
+  const deliverCommand = await runWorkflowCommand("sequence:deliver-command", "deliver", targetInfo, options);
   commands.push(deliverCommand);
   const deliverSupervision = await readSupervision(targetInfo, "deliver");
   assert(deliverSupervision.data.state === "delivered", `sequence:deliver-supervision-state expected delivered, got ${deliverSupervision.data.state}`);
@@ -757,7 +763,7 @@ async function runSuccessfulRerunRejectionChecks(targetInfo) {
   });
 }
 
-async function runForceInvalidationChecks(targetInfo) {
+async function runForceInvalidationChecks(targetInfo, options) {
   const checks = [];
   const commands = [];
   const historyBefore = await listHistoryFiles(targetInfo);
@@ -789,7 +795,7 @@ async function runForceInvalidationChecks(targetInfo) {
     assert(existsSync(filePath), `failure-path:force-archive missing pre-force artifact: ${relativePath(filePath)}`);
   }
 
-  const forceCommand = runNpmScript("failure-path:force-command", "slide:plan", [targetInfo.target, "--force"]);
+  const forceCommand = await runWorkflowCommand("failure-path:force-command", "plan", targetInfo, options, ["--force"]);
   commands.push(forceCommand);
 
   const historyAfter = await listHistoryFiles(targetInfo);
@@ -842,7 +848,7 @@ async function runForceInvalidationChecks(targetInfo) {
   });
 }
 
-async function runRejectedRerunArchiveChecks(targetInfo) {
+async function runRejectedRerunArchiveChecks(targetInfo, options) {
   const checks = [];
   const commands = [];
   const rejectedWorkflowRunId = "smoke-rejected-plan-rerun";
@@ -855,19 +861,25 @@ async function runRejectedRerunArchiveChecks(targetInfo) {
   });
 
   const rejectedSnapshot = await readFile(supervisionPath(targetInfo, "plan"), "utf8");
-  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs plan ${JSON.stringify(targetInfo.target)}`;
-  const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", targetInfo.target], {
-    cwd: ROOT,
-    encoding: "utf8",
-    timeout: WORKFLOW_COMMAND_TIMEOUT_MS,
-    maxBuffer: CAPTURE_MAX_BUFFER,
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const providerArgs = providerFlagArgs(options);
+  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs plan ${[JSON.stringify(targetInfo.target), ...providerArgs.map((arg) => JSON.stringify(arg))].join(" ")}`;
   commands.push(commandLine);
 
-  assert(result.status === 0, `failure-path:rejected-rerun-allowed failed with exit code ${result.status ?? "unknown"}: ${output}`);
-  assert(output.includes("Workflow completed"), `failure-path:rejected-rerun-allowed did not run workflow to completion: ${output}`);
-  assert(!output.includes("RERUN_BLOCKED:"), `failure-path:rejected-rerun-allowed was blocked as successful rerun: ${output}`);
+  if (isMockProvider(options)) {
+    await archiveCommandArtifacts(targetInfo, ["plan"], "rejected-rerun");
+    await writeMockCommandResult(targetInfo, "plan");
+  } else {
+    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", targetInfo.target, ...providerArgs], {
+      cwd: ROOT,
+      encoding: "utf8",
+      timeout: WORKFLOW_COMMAND_TIMEOUT_MS,
+      maxBuffer: CAPTURE_MAX_BUFFER,
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    assert(result.status === 0, `failure-path:rejected-rerun-allowed failed with exit code ${result.status ?? "unknown"}: ${output}`);
+    assert(output.includes("Workflow completed"), `failure-path:rejected-rerun-allowed did not run workflow to completion: ${output}`);
+    assert(!output.includes("RERUN_BLOCKED:"), `failure-path:rejected-rerun-allowed was blocked as successful rerun: ${output}`);
+  }
 
   const historyAfter = await listHistoryFiles(targetInfo);
   const archivedFiles = historyAfter.filter((fileName) => !historyBefore.includes(fileName) && fileName.includes("rejected-rerun-plan-supervision.md"));
@@ -992,6 +1004,273 @@ function assertApprovalCommandFailure(name, target, command, args, expectedOutpu
   return commandLine;
 }
 
+async function runWorkflowCommand(name, command, targetInfo, options, extraArgs = []) {
+  const args = workflowCommandArgs(targetInfo.target, options, extraArgs);
+  const commandLine = `npm run slide:${command} -- ${args.map((arg) => JSON.stringify(arg)).join(" ")}`;
+  if (!isMockProvider(options)) {
+    return runNpmScript(name, `slide:${command}`, args);
+  }
+
+  if (extraArgs.includes("--force")) {
+    await archiveCommandArtifacts(targetInfo, downstreamCommands(command), "force", { includeApprovals: true });
+    await cleanGeneratedOutputs(targetInfo, { root: ROOT });
+  }
+  await writeMockCommandResult(targetInfo, command);
+  return commandLine;
+}
+
+function isMockProvider(options) {
+  return options?.provider === "mock";
+}
+
+async function writeMockCommandResult(targetInfo, command) {
+  await mkdir(targetInfo.reviewPath, { recursive: true });
+  const workflowRunId = `mock-smoke-${command}`;
+  const reportsPath = path.join(ROOT, ".takt", "runs", `mock-${targetInfo.deckName}-${command}`, "reports");
+  await rm(path.dirname(reportsPath), { recursive: true, force: true });
+  await mkdir(reportsPath, { recursive: true });
+
+  if (command === "plan") {
+    await writeMockPlanArtifacts(targetInfo);
+  } else if (command === "compose") {
+    await writeMockComposeArtifacts(targetInfo);
+  } else if (command === "polish") {
+    await writeMockRenderEvidence(targetInfo, 1);
+  } else if (command === "deliver") {
+    await writeMockDeliveryArtifacts(targetInfo);
+  }
+
+  for (const report of mockReports(targetInfo, command, workflowRunId)) {
+    await writeReportCopies(targetInfo.reviewPath, reportsPath, report.name, report.content);
+  }
+}
+
+async function writeReportCopies(reviewPath, reportsPath, reportName, content) {
+  await writeFile(path.join(reviewPath, reportName), content, "utf8");
+  await writeFile(path.join(reportsPath, reportName), content, "utf8");
+}
+
+async function writeMockPlanArtifacts(targetInfo) {
+  await writeFile(path.join(targetInfo.deckPath, "brief.normalized.md"), "# Normalized Brief\n\nMock smoke normalized brief.\n", "utf8");
+  await writeFile(
+    path.join(targetInfo.deckPath, "plan.md"),
+    [
+      "# Slide Plan",
+      "",
+      "deliverables: [html, pdf]",
+      "",
+      "## Slides",
+      "- Title",
+      "- Workflow overview",
+      "- Input discipline",
+      "- Review discipline",
+      "- Delivery QA",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+async function writeMockComposeArtifacts(targetInfo) {
+  await mkdir(path.join(targetInfo.deckPath, "images"), { recursive: true });
+  await writeFile(path.join(targetInfo.deckPath, "design-system.md"), "# Design System\n\nMock smoke design system.\n", "utf8");
+  await writeFile(
+    path.join(targetInfo.deckPath, "SLIDES.md"),
+    [
+      "---",
+      "marp: true",
+      "title: Workflow smoke test",
+      "---",
+      "",
+      "# Workflow smoke test",
+      "",
+      "---",
+      "",
+      "![workflow overview](images/workflow-overview.svg)",
+      "",
+      "---",
+      "",
+      "Input discipline",
+      "",
+      "---",
+      "",
+      "Review discipline",
+      "",
+      "---",
+      "",
+      "Delivery QA",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(targetInfo.deckPath, "images", "workflow-overview.svg"),
+    [
+      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">',
+      '<rect width="640" height="360" fill="#f7f7f7"/>',
+      '<text x="40" y="180" font-family="sans-serif" font-size="32" fill="#222">Mock workflow overview</text>',
+      "</svg>",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+async function writeMockRenderEvidence(targetInfo, cycle) {
+  const evidenceRoot = path.join(ROOT, ".takt", "render", targetInfo.deckName, `cycle-${cycle}`);
+  await rm(evidenceRoot, { recursive: true, force: true });
+  await mkdir(evidenceRoot, { recursive: true });
+  await writeFile(path.join(evidenceRoot, "slide-1.png"), "mock png evidence\n", "utf8");
+  await writeFile(path.join(evidenceRoot, "SLIDES.pdf"), "mock pdf evidence\n", "utf8");
+  await writeFile(
+    path.join(evidenceRoot, "metadata.json"),
+    `${JSON.stringify(
+      {
+        deck: targetInfo.deckName,
+        target: targetInfo.target,
+        cycle,
+        html_png: { status: "passed", files: ["slide-1.png"] },
+        pdf: { status: "passed", file: "SLIDES.pdf" },
+        pdf_raster: { status: "skipped", reason: "mock smoke uses deterministic synthetic render evidence", files: [] },
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeRenderEvidenceMarker(targetInfo, cycle);
+}
+
+async function writeMockDeliveryArtifacts(targetInfo) {
+  const distPath = path.join(ROOT, "dist", targetInfo.deckName);
+  await rm(distPath, { recursive: true, force: true });
+  await mkdir(distPath, { recursive: true });
+  await writeFile(path.join(distPath, "SLIDES.html"), "<!doctype html><title>Mock smoke</title>\n", "utf8");
+  await writeFile(path.join(distPath, "SLIDES.pdf"), "mock pdf artifact\n", "utf8");
+}
+
+function mockReports(targetInfo, command, workflowRunId) {
+  const reports = [];
+  const workReport = command === "deliver"
+    ? [
+        "- Result: passed",
+        `- Cleaned directory: ${relativePath(path.join(ROOT, "dist", targetInfo.deckName))}`,
+        "- Artifacts: SLIDES.html, SLIDES.pdf",
+      ].join("\n")
+    : "- Result: passed\n";
+  reports.push(mockReport(`${command}-work.md`, targetInfo, command, workflowRunId, reportStepFromName(command, `${command}-work.md`), "passed", workReport));
+
+  const normalReportName = {
+    plan: "plan-review.md",
+    compose: "compose-review.md",
+    polish: "polish-inspect.md",
+    deliver: "deliver-verify.md",
+  }[command];
+  const normalBody = command === "deliver"
+    ? "- Result: approved\n- Verified artifacts: SLIDES.html, SLIDES.pdf\n"
+    : "- Result: approved\n";
+  reports.push(mockReport(normalReportName, targetInfo, command, workflowRunId, reportStepFromName(command, normalReportName), "approved", normalBody));
+  reports.push(mockAiGateReviewReport(targetInfo, command, workflowRunId));
+  reports.push(mockSupervisionReport(targetInfo, command, workflowRunId));
+  return reports;
+}
+
+function mockReport(name, targetInfo, command, workflowRunId, step, result, body) {
+  return Object.freeze({
+    name,
+    content: [
+      "---",
+      `command: ${command}`,
+      `target: ${targetInfo.target}`,
+      `generated_at: ${MOCK_GENERATED_AT}`,
+      `workflow_run_id: ${workflowRunId}`,
+      `step: ${step}`,
+      "cycle: 1",
+      `result: ${result}`,
+      "---",
+      "",
+      `# Mock ${step}`,
+      "",
+      body,
+      "",
+    ].join("\n"),
+  });
+}
+
+function mockAiGateReviewReport(targetInfo, command, workflowRunId) {
+  return Object.freeze({
+    name: `${command}-ai-antipattern-review.md`,
+    content: [
+      "---",
+      `command: ${command}`,
+      `target: ${targetInfo.target}`,
+      `generated_at: ${MOCK_GENERATED_AT}`,
+      `workflow_run_id: ${workflowRunId}`,
+      "step: ai_antipattern_review",
+      "cycle: 1",
+      `reviewed_scope: ${command} mock smoke output`,
+      "result: approved",
+      "finding_count: 0",
+      "blocking_finding_count: 0",
+      "---",
+      "",
+      "# AI Antipattern Review Report",
+      "",
+      "Mock smoke found no AI-specific findings.",
+      "",
+      "## AI Findings",
+      "",
+      "| ID | Severity | Evidence |",
+      "| --- | --- | --- |",
+      "",
+    ].join("\n"),
+  });
+}
+
+function mockSupervisionReport(targetInfo, command, workflowRunId) {
+  return Object.freeze({
+    name: `${command}-supervision.md`,
+    content: [
+      "---",
+      `command: ${command}`,
+      `target: ${targetInfo.target}`,
+      `generated_at: ${MOCK_GENERATED_AT}`,
+      `workflow_run_id: ${workflowRunId}`,
+      "step: supervision",
+      "cycle: 1",
+      `state: ${mockCommandState(command)}`,
+      "result: passed",
+      "blocking_findings: 0",
+      "major_findings: 0",
+      "minor_findings: 0",
+      "info_findings: 0",
+      "---",
+      "",
+      "# Mock Supervision",
+      "",
+      "Result: passed",
+      "",
+    ].join("\n"),
+  });
+}
+
+function mockCommandState(command) {
+  return {
+    plan: "planned",
+    compose: "composed",
+    polish: "polished",
+    deliver: "delivered",
+  }[command];
+}
+
+function workflowCommandArgs(target, options, extraArgs = []) {
+  return [target, ...providerFlagArgs(options), ...extraArgs];
+}
+
+function providerFlagArgs(options) {
+  return options?.provider ? ["--provider", options.provider] : [];
+}
+
 function runNpmScript(name, script, args) {
   const commandLine = `npm run ${script} -- ${args.map((arg) => JSON.stringify(arg)).join(" ")}`;
   const result = spawnSync("npm", ["run", script, "--", ...args], {
@@ -1106,6 +1385,27 @@ async function writeSyntheticRenderEvidenceMetadata({ target, htmlPng, pdf, pdfR
         html_png: htmlPng,
         pdf,
         pdf_raster: pdfRaster,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+  await writeRenderEvidenceMarker(targetInfo, 1);
+}
+
+async function writeRenderEvidenceMarker(targetInfo, cycle) {
+  const metadataPath = path.join(ROOT, ".takt", "render", targetInfo.deckName, `cycle-${cycle}`, "metadata.json");
+  const markerPath = path.join(ROOT, ".takt", "render", "latest-render-evidence.json");
+  await mkdir(path.dirname(markerPath), { recursive: true });
+  await writeFile(
+    markerPath,
+    `${JSON.stringify(
+      {
+        target: targetInfo.target,
+        deck: targetInfo.deckName,
+        cycle,
+        metadata_path: relativePath(metadataPath),
       },
       null,
       2,
@@ -1433,7 +1733,7 @@ async function writeSyntheticApproval(targetInfo, command, { supervisionWorkflow
 }
 
 function parseSmokeArgs(argv) {
-  const options = { target: DEFAULT_TARGET, keep: false, help: false };
+  const options = { target: DEFAULT_TARGET, provider: DEFAULT_SMOKE_PROVIDER, keep: false, help: false };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
@@ -1453,6 +1753,15 @@ function parseSmokeArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--provider") {
+      const value = argv[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new SlideWorkflowError("Missing value for --provider", "INVALID_ARGS");
+      }
+      options.provider = value;
+      index += 1;
+      continue;
+    }
     throw new SlideWorkflowError(`Unsupported argument: ${arg}`, "INVALID_ARGS");
   }
 
@@ -1462,12 +1771,13 @@ function parseSmokeArgs(argv) {
 function printHelp() {
   console.log(
     [
-      "Usage: node scripts/takt-marp-validate-slide-workflow-smoke.mjs [--deck slides/_workflow-smoke] [--keep]",
+      "Usage: node scripts/takt-marp-validate-slide-workflow-smoke.mjs [--deck slides/_workflow-smoke] [--provider mock] [--keep]",
       "",
-      "Sets up the workflow smoke deck from fixtures and writes slides/<deck>/review/smoke-summary.md.",
+      "Sets up the workflow smoke deck from fixtures and writes provider-specific smoke summary evidence.",
       "",
       "Options:",
       "  --deck <target>  Smoke deck target directory. Task 1.2 accepts only slides/_workflow-smoke",
+      "  --provider <name> TAKT provider for workflow execution. Defaults to mock for deterministic CI; pass claude, codex, etc. for real provider smoke.",
       "  --keep           Keep the generated smoke target and summary for inspection",
       "  -h, --help       Show this help",
       "",
@@ -1533,6 +1843,8 @@ async function writeSummary(summaryPath, data) {
   const content = [
     "---",
     `target: ${data.target}`,
+    `provider: ${data.provider}`,
+    `smoke_mode: ${data.smokeMode}`,
     `generated_at: ${new Date().toISOString()}`,
     `result: ${data.result}`,
     `commands_run: [${data.commands.map((command) => JSON.stringify(command)).join(", ")}]`,
@@ -1572,6 +1884,20 @@ async function writeSummary(summaryPath, data) {
   if (!written.includes("# Smoke Summary")) {
     throw new SlideWorkflowError(`Smoke summary was not written correctly: ${relativePath(summaryPath)}`, "SUMMARY_INVALID");
   }
+}
+
+function smokeSummaryFileName(options) {
+  return isMockProvider(options)
+    ? "smoke-summary-mock.md"
+    : `smoke-summary-real-${safeFileSegment(options.provider)}.md`;
+}
+
+function smokeMode(options) {
+  return isMockProvider(options) ? "mock" : "real";
+}
+
+function safeFileSegment(value) {
+  return String(value).replace(/[^A-Za-z0-9._-]+/g, "-");
 }
 
 function pass(name, reason) {
