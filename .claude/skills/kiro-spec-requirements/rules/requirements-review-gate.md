@@ -40,7 +40,7 @@ Requirements should clarify the feature boundary in user- or operator-observable
 
 Before applying judgment, verify these mechanically:
 - **Numeric IDs present**: Every requirement heading has a numeric ID (1, 1.1, 2, etc.). Scan the draft for headings without IDs.
-- **Acceptance criteria exist**: Every requirement has at least one EARS-format acceptance criterion. Read `spec.json.language` first and choose the matching scan. For `language: "en"`, scan for "When/If/While/Where/The system shall" statements. For `language: "ja"`, scan for localized EARS fixed phrases such as "が起きたとき", "の場合", "の間", "を含む場合", or "は常に", and verify the criterion also uses mandatory wording such as "しなければならない" or state-continuation wording such as "し続けなければならない". If the language is missing or unsupported, stop and clarify the target language before applying this gate.
+- **Acceptance criteria exist**: Every requirement has at least one EARS-format acceptance criterion. Read `spec.json.language` first and choose the matching scan. For `language: "en"`, scan for conditional EARS trigger words such as "When", "If", "While", or "Where", and verify ubiquitous criteria by mandatory `shall` wording so named subjects such as service names are accepted. For `language: "ja"`, scan for localized EARS fixed phrases such as "が起きたとき", "の場合", "の間", "を含む場合", or "は常に", and verify the criterion also uses mandatory wording such as "しなければならない" or state-continuation wording such as "し続けなければならない". If the language is missing or unsupported, stop and clarify the target language before applying this gate.
 - **No implementation language**: Scan for technology-specific terms (database names, framework names, API patterns) that belong in design, not requirements. Flag any found.
 
 ## Review Loop
