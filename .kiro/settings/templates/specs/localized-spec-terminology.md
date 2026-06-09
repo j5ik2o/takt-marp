@@ -14,6 +14,7 @@ Use this contract whenever a Kiro skill reads, writes, reviews, or validates spe
 | Out-of-boundary subsection | `境界外` | `Out of Boundary` |
 | Allowed dependencies subsection | `許可する依存` | `Allowed Dependencies` |
 | Revalidation triggers subsection | `再検証トリガー` | `Revalidation Triggers` |
+| Architecture boundary map subsection | `アーキテクチャパターンと境界マップ` | `Architecture Pattern and Boundary Map` |
 | File structure section | `ファイル構造計画` | `File Structure Plan` |
 | Requirements traceability section | `要件トレーサビリティ` | `Requirements Traceability` |
 | Requirement heading | `### 要件 N:` | `### Requirement N:` |

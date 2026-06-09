@@ -60,7 +60,7 @@ Focus on capabilities and outcomes, not code structure.
 - Build on previous outputs (no orphaned code)
 - Connect to the overall system (no hanging features)
 - Progress incrementally (no big jumps in complexity)
-- Respect architecture boundaries defined in design.md (Architecture Pattern & Boundary Map)
+- Respect architecture boundaries defined in design.md using the localized architecture boundary map subsection from `localized-spec-terminology.md`
 - Honor interface contracts documented in design.md
 - Use major task summaries sparingly—omit detail bullets if the work is fully captured by child tasks.
 
@@ -201,7 +201,7 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
   - `_Boundary:_` annotations confirm non-overlapping component scopes
 - Foundation-phase tasks (see Task Ordering Principle) are rarely `(P)` — they establish shared prerequisites.
 - Core-phase tasks are the primary candidates for `(P)` since foundation is already complete.
-- Validate that identified parallel tasks operate within separate boundaries defined in the Architecture Pattern & Boundary Map.
+- Validate that identified parallel tasks operate within separate boundaries defined in the localized architecture boundary map subsection.
 - Confirm API/event contracts from design.md do not overlap in ways that cause conflicts.
 - `(P)` tasks with cross-boundary dependencies must declare `_Depends:_ X.X` explicitly.
 - Append `(P)` immediately after the task number for each parallel-capable task:
