@@ -68,25 +68,26 @@ Focus on capabilities and outcomes, not code structure.
 
 ### 5. Dependency Declaration
 
-**Default**: Sequential ordering handles most dependencies (task N depends on tasks before it).
+**Default**: Sequential ordering still handles most dependencies (task N depends on tasks before it), but every executable task must state the dependency field explicitly.
+Use `_Depends:_ none` when the task has no specific dependency beyond normal ordering.
 
 **Explicit declaration required when**:
 - A task depends on a specific task in a different major-task group (cross-boundary)
 - The dependency is non-obvious from ordering alone
 - A task can skip ahead of its position (declared via `(P)`) but still needs specific prior work
 
-**Format**: `_Depends: 1.2, 2.3_` — placed alongside `_Requirements:_` in task detail sections.
+**Format**: `_Depends:_ 1.2, 2.3` — placed alongside `_Requirements:_` in task detail sections.
 
-**Do not over-annotate**: If a task simply depends on the task directly before it, ordering alone is sufficient.
+**Do not over-annotate with IDs**: If a task simply depends on the task directly before it, use `_Depends:_ none`.
 
 ### 6. Boundary Scope
 
-**Each task should declare its component boundary** using design.md component/module names:
-- `_Boundary: AuthService_` or `_Boundary: API Layer, UserRepository_`
+**Each executable task must declare its component boundary** using design.md component/module names:
+- `_Boundary:_ AuthService` or `_Boundary:_ API Layer, UserRepository`
 - Helps validate parallel safety: tasks with non-overlapping boundaries are parallel candidates
 - Helps agents understand scope: what to touch and what not to touch
 
-**When to use**: Required for tasks marked `(P)` to validate parallel safety. Omit for sequential tasks where scope is obvious from the description.
+**When to use**: Required for every executable task. Keep it narrow for normal tasks and use an explicit integration boundary for cross-boundary integration tasks.
 
 **Boundary rule**:
 - Each executable task should stay within a single responsibility boundary
@@ -106,6 +107,8 @@ Focus on capabilities and outcomes, not code structure.
 
 **End each task detail section with**:
 - `_Requirements: X.X, Y.Y_` listing **only numeric requirement IDs** (comma-separated). Never append descriptive text, parentheses, translations, or free-form labels.
+- `_Boundary:_ ComponentName` using the narrowest design.md component/module boundary that owns the work.
+- `_Depends:_ none` when no specific dependency ID is needed, or `_Depends:_ X.Y, Z.W` when a specific dependency is required.
 - For cross-cutting requirements, list every relevant requirement ID. All requirements MUST have numeric IDs in requirements.md. If an ID is missing, stop and correct requirements.md before generating tasks.
 - Reference components/interfaces from design.md when helpful (e.g., `_Contracts: AuthService API`)
 
@@ -199,7 +202,7 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
 - Core-phase tasks are the primary candidates for `(P)` since foundation is already complete.
 - Validate that identified parallel tasks operate within separate boundaries defined in the Architecture Pattern & Boundary Map.
 - Confirm API/event contracts from design.md do not overlap in ways that cause conflicts.
-- `(P)` tasks with cross-boundary dependencies must declare `_Depends: X.X_` explicitly.
+- `(P)` tasks with cross-boundary dependencies must declare `_Depends:_ X.X` explicitly.
 - Append `(P)` immediately after the task number for each parallel-capable task:
   - Example: `- [ ] 2.1 (P) Build background worker`
   - Apply to both major tasks and sub-tasks when appropriate.
@@ -215,26 +218,31 @@ Before writing `tasks.md`, review the draft task plan and repair local issues un
   - Detail item 2
   - Observable completion condition
   - _Requirements: X.X_
+  - _Boundary:_ SharedSetup
+  - _Depends:_ none
 
 - [ ] 2. Core feature A
 - [ ] 2.1 (P) Sub-task description
   - Detail items...
   - Observable completion condition
   - _Requirements: Y.Y_
-  - _Boundary: AuthService_
+  - _Boundary:_ AuthService
+  - _Depends:_ none
 
 - [ ] 2.2 (P) Sub-task description
   - Detail items...
   - Observable completion condition
   - _Requirements: Z.Z_
-  - _Boundary: UserRepository_
+  - _Boundary:_ UserRepository
+  - _Depends:_ none
 
 - [ ] 3. Integration and wiring
 - [ ] 3.1 Sub-task description
   - Detail items...
   - Observable completion condition
-  - _Depends: 2.1, 2.2_
   - _Requirements: W.W_
+  - _Boundary:_ Integration
+  - _Depends:_ 2.1, 2.2
 ```
 
 ## Requirements Coverage
