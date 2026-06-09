@@ -80,7 +80,7 @@
 ## Section Authoring Guidance
 
 ### Global Ordering
-- Localized default flow follows `.kiro/settings/templates/specs/design.md`. English specs remain valid according to `.kiro/settings/templates/specs/localized-spec-terminology.md`; keep section headings intact for the artifact language.
+- Follow the selected language-specific design template from `spec.json.language` (`design.md` for `ja`, `design.en.md` for `en`) and keep section headings intact for the artifact language.
 - Teams may swap Traceability earlier or place Data Models nearer Architecture when it improves clarity, but keep section headings intact.
 - Within each section, follow **Summary → Scope → Decisions → Impacts/Risks** so reviewers can scan consistently.
 

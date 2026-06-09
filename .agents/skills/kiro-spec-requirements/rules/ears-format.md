@@ -10,6 +10,7 @@ All acceptance criteria should be written in the target language configured for 
 
 For Japanese specifications (`language: "ja"`), use Japanese EARS fixed phrases.
 Do not force English trigger words such as `When`, `If`, `While`, `Where`, or `shall` into Japanese requirements.
+Existing hybrid Japanese specs with English EARS triggers remain valid for review, but new or rewritten Japanese criteria should use the Japanese phrases.
 
 ## Primary EARS Patterns
 
