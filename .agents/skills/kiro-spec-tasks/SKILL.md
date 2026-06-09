@@ -128,8 +128,8 @@ Before writing `tasks.md`, run one lightweight independent sanity review of the 
 
 ## Critical Constraints
 - **Task Integration**: Every task must connect to the system (no orphaned work)
-- **Boundary annotations**: Required for `(P)` tasks, recommended for all (`_Boundary: ComponentName_`)
-- **Explicit dependencies**: Cross-boundary non-obvious dependencies declared with `_Depends: X.X_`
+- **Boundary annotations**: Required for every executable task (`_Boundary:_ ComponentName`)
+- **Explicit dependencies**: Every executable task declares `_Depends:_ none` or a specific cross-boundary dependency such as `_Depends:_ X.X`
 - **Executable deliverable granularity**: Each task must produce a verifiable deliverable (file, endpoint, UI component, config). Infrastructure tasks (project scaffolding, manifest, host integration, build config) must be explicit — never assume they exist
 - **Observable done state**: Each executable sub-task must include at least one detail bullet that makes the completed state visible without adding new bookkeeping fields
 - **No implicit prerequisites**: If a task requires a runtime, SDK, framework setup, or config file, that setup must be a separate preceding task
