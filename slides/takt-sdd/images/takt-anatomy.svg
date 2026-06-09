@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 540" font-family="'Hiragino Sans','Noto Sans JP','Yu Gothic',sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2f6df0"/>
+    </marker>
+  </defs>
+
+  <!-- title -->
+  <text x="550" y="52" text-anchor="middle" font-size="24" font-weight="700" fill="#1d2330">TAKTはAI出力ではなく、実行制御面を決定論化する</text>
+
+  <!-- ===== Input column ===== -->
+  <text x="150" y="110" text-anchor="middle" font-size="18" fill="#5b6472">入力（意図）</text>
+  <rect x="40" y="180" width="220" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="150" y="218" text-anchor="middle" font-size="20" fill="#1d2330">Kiro skill intent</text>
+  <rect x="40" y="296" width="220" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="150" y="334" text-anchor="middle" font-size="20" fill="#1d2330">cc-sdd v3</text>
+
+  <!-- input -> TAKT -->
+  <line x1="262" y1="270" x2="298" y2="270" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ===== TAKT control plane ===== -->
+  <rect x="300" y="100" width="480" height="360" rx="12" fill="#ffffff" stroke="#2f6df0" stroke-width="2.5"/>
+  <text x="540" y="132" text-anchor="middle" font-size="20" font-weight="700" fill="#2f6df0">TAKT workflow control</text>
+
+  <!-- row 1 -->
+  <rect x="322" y="156" width="200" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="422" y="194" text-anchor="middle" font-size="20" fill="#1d2330">workflow YAML</text>
+  <rect x="558" y="156" width="200" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="658" y="194" text-anchor="middle" font-size="20" fill="#1d2330">steps + rules</text>
+  <!-- row 2 -->
+  <rect x="322" y="248" width="200" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="422" y="286" text-anchor="middle" font-size="20" fill="#1d2330">facets</text>
+  <rect x="558" y="248" width="200" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="658" y="286" text-anchor="middle" font-size="20" fill="#1d2330">output contracts</text>
+  <!-- row 3 -->
+  <rect x="322" y="340" width="200" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="422" y="378" text-anchor="middle" font-size="20" fill="#1d2330">loop_monitors</text>
+  <rect x="558" y="340" width="200" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="658" y="378" text-anchor="middle" font-size="20" fill="#1d2330">workflow_call</text>
+
+  <!-- TAKT -> outputs -->
+  <line x1="782" y1="270" x2="818" y2="270" stroke="#2f6df0" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- ===== Output column ===== -->
+  <text x="950" y="110" text-anchor="middle" font-size="18" fill="#5b6472">到達点（証跡）</text>
+  <rect x="820" y="180" width="240" height="64" rx="8" fill="#f5f7fb" stroke="#d5dae3" stroke-width="1.5"/>
+  <text x="940" y="208" text-anchor="middle" font-size="20" fill="#1d2330"><tspan x="940" dy="0">.kiro/specs</tspan><tspan x="940" dy="24">artifacts</tspan></text>
+  <rect x="820" y="296" width="240" height="64" rx="8" fill="#eaf6f0" stroke="#1f9d6b" stroke-width="1.5"/>
+  <text x="940" y="324" text-anchor="middle" font-size="20" fill="#1d2330"><tspan x="940" dy="0">validation / review</tspan><tspan x="940" dy="24">evidence</tspan></text>
+
+  <!-- footnote -->
+  <text x="550" y="500" text-anchor="middle" font-size="17" fill="#5b6472">どのstepを・どの条件で・どの証跡で次へ進めるかを固定する</text>
+</svg>
