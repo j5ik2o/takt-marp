@@ -1,7 +1,7 @@
 # 実装計画
 
 - [ ] 1. 基盤: 実行基盤と package 境界を確立する
-- [ ] 1.1 project root と分離された runtime context 解決を提供する
+- [x] 1.1 project root と分離された runtime context 解決を提供する
   - takt-marp package 自身の位置から package root と実行ファイル置き場を決定論的に導出し、cwd の影響を受けずに takt / marp の実行ファイル path と package 内 script path を解決できるようにする
   - 既存 foundation validation が使う明示 root の override を引き続き受け付ける
   - Windows の実行ファイル拡張子差(.cmd)を既存実装と同じ規則で扱う
