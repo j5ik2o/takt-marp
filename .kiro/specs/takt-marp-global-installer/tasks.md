@@ -40,7 +40,7 @@
   - _Boundary:_ ProjectTemplateSet
   - _Depends:_ 1.1
 
-- [ ] 2.2 template の同期と drift 検証を実装し配布正本を生成する
+- [x] 2.2 template の同期と drift 検証を実装し配布正本を生成する
   - 開発用 .takt から配布正本への同期(書き込みモード)と、drift 検出(既定モード、種別ごとの path 一覧表示と失敗)を実装する
   - 初回同期を実行して配布正本(workflows / facets)を repo に生成し、git 管理下へ置く
   - 完了条件: 同期直後の drift 検証が成功し、template 側 1 file を改変すると該当 path を表示して失敗する

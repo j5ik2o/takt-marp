@@ -1,0 +1,164 @@
+name: takt-marp-slide-deliver
+description: plan.mdのdeliverablesに従ってofficial artifactsをbuild/verifyし、delivery-only fix/supervisionを閉じるdeliver command。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 30
+initial_step: build_delivery
+loop_monitors:
+  - cycle:
+      - verify_delivery
+      - fix_delivery
+      - build_delivery
+    threshold: 3
+    judge:
+      persona: takt-marp-slide-supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全（進捗あり）
+          next: verify_delivery
+        - condition: 非生産的（同じ指摘の反復・修正未反映）
+          next: ABORT
+
+personas:
+  takt-marp-slide-qa: ../facets/personas/takt-marp-slide-qa.md
+  takt-marp-slide-reviser: ../facets/personas/takt-marp-slide-reviser.md
+  takt-marp-slide-supervisor: ../facets/personas/takt-marp-slide-supervisor.md
+policies:
+  takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
+  takt-marp-slide-quality: ../facets/policies/takt-marp-slide-quality.md
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+instructions:
+  takt-marp-deliver-build: ../facets/instructions/takt-marp-deliver-build.md
+  takt-marp-deliver-verify: ../facets/instructions/takt-marp-deliver-verify.md
+  takt-marp-deliver-fix: ../facets/instructions/takt-marp-deliver-fix.md
+  takt-marp-supervise-command: ../facets/instructions/takt-marp-supervise-command.md
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+report_formats:
+  takt-marp-command-work: ../facets/output-contracts/takt-marp-command-work.md
+  takt-marp-command-review: ../facets/output-contracts/takt-marp-command-review.md
+  takt-marp-command-fix: ../facets/output-contracts/takt-marp-command-fix.md
+  takt-marp-supervision: ../facets/output-contracts/takt-marp-supervision.md
+
+steps:
+  - name: build_delivery
+    edit: true
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Bash
+          - Write
+    persona: takt-marp-slide-qa
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    instruction: takt-marp-deliver-build
+    output_contracts:
+      report:
+        - name: deliver-work.md
+          format: takt-marp-command-work
+    rules:
+      - condition: resultがpassed
+        next: ai_quality_gate_deliver
+      - condition: resultがfailedまたはneeds_input
+        next: ABORT
+
+  - name: ai_quality_gate_deliver
+    kind: workflow_call
+    call: ./takt-marp-slide-ai-quality-gate.yaml
+    args:
+      fix_instruction: takt-marp-ai-antipattern-fix
+      domain_knowledge:
+        - takt-marp-repo-conventions
+    rules:
+      - condition: COMPLETE
+        next: verify_delivery
+      - condition: need_replan
+        next: build_delivery
+      - condition: ABORT
+        next: ABORT
+
+  - name: verify_delivery
+    edit: true
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Bash
+          - Write
+    persona: takt-marp-slide-qa
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-deliver-verify
+    output_contracts:
+      report:
+        - name: deliver-verify.md
+          format: takt-marp-command-review
+    rules:
+      - condition: approved
+        next: supervise_delivery
+      - condition: needs_fix
+        next: fix_delivery
+      - condition: blocked
+        next: ABORT
+
+  - name: fix_delivery
+    edit: true
+    required_permission_mode: edit
+    provider_options:
+      claude:
+        allowed_tools:
+          - Read
+          - Bash
+          - Write
+    persona: takt-marp-slide-reviser
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-deliver-fix
+    output_contracts:
+      report:
+        - name: deliver-fix.md
+          format: takt-marp-command-fix
+    rules:
+      - condition: fixed
+        next: build_delivery
+      - condition: blocked
+        next: ABORT
+
+  - name: supervise_delivery
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-supervisor
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-supervise-command
+    output_contracts:
+      report:
+        - name: deliver-supervision.md
+          format: takt-marp-supervision
+    rules:
+      - condition: resultがpassed
+        next: COMPLETE
+      - condition: resultがrejected
+        next: ABORT
