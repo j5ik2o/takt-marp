@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
+import { mkdtemp } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { initializeProject } from "./takt-marp-project-init.mjs";
@@ -9,6 +11,7 @@ import { formatError, SlideWorkflowError } from "./takt-marp-slide-workflow.mjs"
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
 const VALID_COMMANDS = ["init", ...WORKFLOW_COMMANDS, "smoke"];
 const RUNNER_SCRIPT = "scripts/takt-marp-run-slide-workflow.mjs";
+const SMOKE_SCRIPT = "scripts/takt-marp-validate-slide-workflow-smoke.mjs";
 const REQUIRED_PROJECT_DIRS = [".takt/workflows", ".takt/facets"];
 
 function usage() {
@@ -60,10 +63,10 @@ function assertProjectInitialized() {
   }
 }
 
-function runPackageScript(relativeScriptPath, args) {
+function runPackageScript(relativeScriptPath, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [packageScriptPath(relativeScriptPath), ...args], {
-      cwd: process.cwd(),
+      cwd: options.cwd ?? process.cwd(),
       stdio: "inherit",
     });
     child.on("error", reject);
@@ -134,14 +137,38 @@ async function runInit(args) {
   return 0;
 }
 
-function runSmoke() {
-  // Sanctioned seam: the smoke subcommand is implemented in the immediately
-  // following change (task 2.6). Until then it is a known command that fails
-  // with a clear error instead of silently doing nothing.
-  throw new SlideWorkflowError(
-    "The 'smoke' command is not available in this build yet; it arrives in the next change.",
-    "SMOKE_NOT_AVAILABLE",
+async function runSmoke(args) {
+  // Smoke runs in a freshly created temporary project so the user's current
+  // project is never touched. The temp project is retained after the run as
+  // the home of the provider-specific smoke summaries.
+  let tempProject;
+  try {
+    tempProject = await mkdtemp(path.join(os.tmpdir(), "takt-marp-smoke-"));
+  } catch (error) {
+    throw new SlideWorkflowError(
+      `Failed to create a temporary smoke project under ${os.tmpdir()}: ${error.message}`,
+      "SMOKE_PREPARE_FAILED",
+    );
+  }
+  await initializeProject({ targetDir: tempProject, force: false });
+  console.log(`Temporary smoke project: ${tempProject}`);
+
+  // Pass argv through unchanged: provider selection (--provider) and the
+  // mock default, mock/real summary generation, and surfacing real-provider
+  // misconfiguration as failures are all owned by the smoke script. The CLI
+  // never creates or modifies TAKT provider settings.
+  const exitCode = await runPackageScript(SMOKE_SCRIPT, args, { cwd: tempProject });
+
+  console.log(
+    [
+      "",
+      `Smoke validation finished with exit code ${exitCode}.`,
+      `Temporary smoke project (retained for inspection): ${tempProject}`,
+      "Provider-specific smoke summaries are written under the smoke deck's review directory",
+      `inside that project (default: ${path.join(tempProject, "slides", "_workflow-smoke", "review")}).`,
+    ].join("\n"),
   );
+  return exitCode;
 }
 
 export async function runCli(argv) {
@@ -162,7 +189,7 @@ export async function runCli(argv) {
       return await runInit(rest);
     }
     if (command === "smoke") {
-      return runSmoke();
+      return await runSmoke(rest);
     }
     return await runWorkflowCommand(command, rest);
   } catch (error) {

@@ -78,7 +78,7 @@
   - _Boundary:_ CliEntry, CommandDispatcher
   - _Depends:_ 1.2, 2.3
 
-- [ ] 2.6 smoke subcommand を実装する
+- [x] 2.6 smoke subcommand を実装する
   - 一時プロジェクトを作成して initializer で template を導入し、cwd を一時プロジェクトにして既存 smoke script を起動、provider 指定を素通しする(未指定時は smoke script の mock 既定が適用される)
   - 終了後に結果と一時プロジェクト path(provider 別 summary の所在)を表示し、一時プロジェクトは保持する
   - TAKT が provider 設定ファイル不在で実行できるか(mock 指定時 / 未指定時)を検証し、不可の場合のみ一時プロジェクト内に限り ephemeral な最小設定を生成する(利用者 project へは生成しない)
@@ -127,5 +127,6 @@
 
 ## Implementation Notes
 
+- 2.6: TAKT 0.44 は `.takt/config.yaml` 不在(かつ `TAKT_CONFIG_DIR` 空)でも `--provider mock` の full smoke を完走する。ephemeral config 分岐は不要だった。3.2 の validator は「config 不在の workflow command 失敗モード」観測時にこの前提(TAKT 自体は config 不要、失敗は target/brief 系エラー)を踏まえること。
 - 1.3: `files` の `scripts/` は directory 単位のため、git 未追跡のローカル file(例: `scripts/run-claude-*.sh`、`.git/info/exclude` 管理)も `npm pack` に同梱され得る。3.1 の PackageBoundaryValidator は git 追跡状態または file pattern(`takt-marp-*.mjs` / `lib/`)で予期しない scripts 同梱を検出すること。
 - 1.2: foundation validation の 8 チェックは runner を subprocess 起動し fake takt を fixture cwd の `node_modules/.bin` に置く方式のため、`options.root` override では互換にならない。fixture は fake packageRoot(runner / lib / runtime-context をコピー、fake takt は fake packageRoot 側)で global レイアウトをモデル化する。symlink は ESM の realpath 解決で packageRoot が repo に戻るためコピー必須。assertion・期待エラーコードは upstream 所有の契約本体なので変更禁止。
