@@ -68,7 +68,7 @@
   - _Boundary:_ 既存 lib / build / smoke の変更
   - _Depends:_ 1.1, 1.2
 
-- [ ] 2.5 global CLI の入口と command dispatch を実装する
+- [x] 2.5 global CLI の入口と command dispatch を実装する
   - bin entry: Node version guard(24 未満は必要 version を表示して失敗)後に dispatcher を起動する
   - help(引数なし / --help)で 6 command を表示して正常終了し、それ以外の command(slide:* 形式を含む)は有効 command 一覧付きで失敗する
   - workflow command は cwd 直下の workflows / facets の存在を確認し(親 directory は探索しない)、欠落時は初期化の案内付きで失敗、存在時は cwd を維持したまま package 内 runner script を直接起動して引数を素通しし、exit code を伝播する(npm run は経由しない)
