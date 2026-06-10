@@ -58,7 +58,7 @@
   - _Boundary:_ ProjectInitializer
   - _Depends:_ 2.1, 2.2
 
-- [ ] 2.4 (P) 既存 smoke script を global 経路対応にする
+- [x] 2.4 (P) 既存 smoke script を global 経路対応にする
   - smoke の project root を script 位置基準から cwd 基準へ変更する(fixture と runner の package 内解決は不変)
   - npm run 経由の 3 spawn(approve 系と workflow command 系)を package 内 script の直接起動へ置換する(検証意味論は不変)
   - workflow doctor の takt 解決を runtime context 経由へ変更する

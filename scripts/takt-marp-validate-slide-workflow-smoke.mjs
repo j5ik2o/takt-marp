@@ -18,10 +18,12 @@ import {
   resolveDeckTarget,
   supervisionPath,
 } from "./lib/takt-marp-slide-workflow.mjs";
+import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPT_DIR, "..");
-const FIXTURE_PATH = path.join(ROOT, "fixtures", "marp-slide-workflow", "_workflow-smoke");
+const PACKAGE_ROOT = path.resolve(SCRIPT_DIR, "..");
+const ROOT = process.cwd();
+const FIXTURE_PATH = path.join(PACKAGE_ROOT, "fixtures", "marp-slide-workflow", "_workflow-smoke");
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const DEFAULT_TARGET = "slides/_workflow-smoke";
 const DEFAULT_SMOKE_PROVIDER = "mock";
@@ -392,9 +394,9 @@ async function runConvergenceRouteChecks() {
   assertNoUnsupportedWorkflowCommandGateObjects();
   observedPaths.push(
     ...WORKFLOW_COMMANDS.map((command) => relativePath(path.join(ROOT, ".takt", "workflows", `takt-marp-slide-${command}.yaml`))),
-    relativePath(path.join(ROOT, "scripts", "takt-marp-verify-render-evidence-metadata.mjs")),
-    relativePath(path.join(ROOT, "scripts", "takt-marp-verify-delivery-artifacts.mjs")),
-    relativePath(path.join(ROOT, "scripts", "takt-marp-render-slide-workflow-evidence.mjs")),
+    relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-verify-render-evidence-metadata.mjs")),
+    relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-verify-delivery-artifacts.mjs")),
+    relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-render-slide-workflow-evidence.mjs")),
   );
   checks.push(pass("failure-path:convergence-workflow-loop-monitors", "TAKT loop_monitors guard review/fix cycles and route nonproductive loops to ABORT."));
   checks.push(pass("sequence:ai-gate-workflow-routes", "AI antipattern gates sit between command work and normal review/inspection/verification with command-local replan routes."));
@@ -407,7 +409,7 @@ async function runRenderEvidenceBoundaryChecks() {
   const checks = [];
   const commands = [];
   const observedPaths = [
-    relativePath(path.join(ROOT, "scripts", "takt-marp-verify-render-evidence-metadata.mjs")),
+    relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-verify-render-evidence-metadata.mjs")),
   ];
   const targetPath = path.join(ROOT, RENDER_VALIDATION_TARGET);
   const renderRoot = path.join(ROOT, ".takt", "render", path.basename(RENDER_VALIDATION_TARGET));
@@ -469,7 +471,7 @@ async function runPlanSequenceChecks(targetInfo, options) {
   assertApprovalFileAbsent(targetInfo, "plan", "approval-command:workflow-only-non-generation");
   checks.push(pass("approval-command:workflow-only-non-generation", "slide:plan did not generate plan-approval.md before explicit approval."));
 
-  const approveCommand = runNpmScript("approval-command:plan-approved", "slide:approve", [targetInfo.target, "plan", "--by", "smoke-validation"]);
+  const approveCommand = runWorkflowNodeScript("approval-command:plan-approved", "takt-marp-approve-slide-workflow-state.mjs", [targetInfo.target, "plan", "--by", "smoke-validation"]);
   commands.push(approveCommand);
   const approval = await readApproval(targetInfo, "plan", supervision.data);
   assert(approval.data.approved_by === "smoke-validation", `approval-command:plan-approved expected approved_by smoke-validation, got ${approval.data.approved_by}`);
@@ -492,7 +494,7 @@ async function runPlanSequenceChecks(targetInfo, options) {
   assertApprovalFileAbsent(targetInfo, "compose", "approval-command:compose-workflow-only-non-generation");
   checks.push(pass("approval-command:compose-workflow-only-non-generation", "slide:compose did not generate compose-approval.md before explicit approval."));
 
-  const approveComposeCommand = runNpmScript("approval-command:compose-approved", "slide:approve", [targetInfo.target, "compose", "--by", "smoke-validation"]);
+  const approveComposeCommand = runWorkflowNodeScript("approval-command:compose-approved", "takt-marp-approve-slide-workflow-state.mjs", [targetInfo.target, "compose", "--by", "smoke-validation"]);
   commands.push(approveComposeCommand);
   const composeApproval = await readApproval(targetInfo, "compose", composeSupervision.data);
   assert(composeApproval.data.approved_by === "smoke-validation", `approval-command:compose-approved expected approved_by smoke-validation, got ${composeApproval.data.approved_by}`);
@@ -1006,9 +1008,10 @@ function assertApprovalCommandFailure(name, target, command, args, expectedOutpu
 
 async function runWorkflowCommand(name, command, targetInfo, options, extraArgs = []) {
   const args = workflowCommandArgs(targetInfo.target, options, extraArgs);
-  const commandLine = `npm run slide:${command} -- ${args.map((arg) => JSON.stringify(arg)).join(" ")}`;
+  const runnerArgs = [command, ...args];
+  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs ${runnerArgs.map((arg) => JSON.stringify(arg)).join(" ")}`;
   if (!isMockProvider(options)) {
-    return runNpmScript(name, `slide:${command}`, args);
+    return runWorkflowNodeScript(name, "takt-marp-run-slide-workflow.mjs", runnerArgs);
   }
 
   if (extraArgs.includes("--force")) {
@@ -1271,9 +1274,9 @@ function providerFlagArgs(options) {
   return options?.provider ? ["--provider", options.provider] : [];
 }
 
-function runNpmScript(name, script, args) {
-  const commandLine = `npm run ${script} -- ${args.map((arg) => JSON.stringify(arg)).join(" ")}`;
-  const result = spawnSync("npm", ["run", script, "--", ...args], {
+function runWorkflowNodeScript(name, script, args) {
+  const commandLine = `node scripts/${script} ${args.map((arg) => JSON.stringify(arg)).join(" ")}`;
+  const result = spawnSync(process.execPath, [path.join(SCRIPT_DIR, script), ...args], {
     cwd: ROOT,
     stdio: "inherit",
     timeout: WORKFLOW_COMMAND_TIMEOUT_MS,
@@ -1634,7 +1637,7 @@ function assertWorkflowDoctorPasses() {
     ...WORKFLOW_COMMANDS.map((command) => path.join(".takt", "workflows", `takt-marp-slide-${command}.yaml`)),
     path.join(".takt", "workflows", "takt-marp-slide-ai-quality-gate.yaml"),
   ];
-  const result = spawnSync(path.join(ROOT, "node_modules", ".bin", process.platform === "win32" ? "takt.cmd" : "takt"), ["workflow", "doctor", ...workflowPaths], {
+  const result = spawnSync(runtimeExecutablePath("takt"), ["workflow", "doctor", ...workflowPaths], {
     cwd: ROOT,
     encoding: "utf8",
     timeout: NODE_CHECK_TIMEOUT_MS,
