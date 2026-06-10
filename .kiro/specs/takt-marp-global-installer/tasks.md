@@ -99,7 +99,7 @@
   - _Boundary:_ PackageBoundaryValidator
   - _Depends:_ 1.3, 2.2, 2.5
 
-- [ ] 3.2 global install の E2E 検証を実装する
+- [x] 3.2 global install の E2E 検証を実装する
   - tarball を一時 npm prefix へ global install し、PATH 経由で help 表示と slide:* 拒否を確認する
   - 一時 target project での init が workflows / facets のみを生成し(provider 設定・runtime state 不在、事前置きした対象外 file 不変)、再 init の衝突失敗(書き込みゼロ)と force 上書きが要件どおり動くことを検証する
   - 未初期化 directory での workflow command が初期化案内で失敗すること、init 済みかつ package.json / node_modules 不在の project で npm project 不在以外の理由でのみ失敗すること、provider 設定不在時の失敗モードが npm project 不在を理由にしないことを assertion として固定する
