@@ -48,7 +48,7 @@
   - _Boundary:_ TemplateSyncValidator
   - _Depends:_ 2.1
 
-- [ ] 2.3 project initializer を実装する
+- [x] 2.3 project initializer を実装する
   - 指定 directory(既定は現在地)へ template entry のみをコピーし、中間 directory を必要に応じて作成する
   - 全 entry の衝突を書き込み前に走査し、衝突があれば書き込みゼロのまま衝突 path 全件を表示して失敗する
   - `--force` / `--overwrite`(完全 alias)指定時のみ template 対象 path の上書きを許可し、対象外の既存ファイルはどの分岐でも変更しない
