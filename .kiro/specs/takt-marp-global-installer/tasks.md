@@ -10,14 +10,15 @@
   - _Boundary:_ RuntimeContextResolver
   - _Depends:_ none
 
-- [ ] 1.2 既存の実行ファイル解決を package 基準へ差し替える
+- [x] 1.2 既存の実行ファイル解決を package 基準へ差し替える
   - workflow runner が使う takt 解決の既定を cwd 基準から package 基準へ変更し、明示 root override の互換を維持する
   - slide artifact build の marp 解決も同じ解決機構へ揃える
   - 実行ファイル不在時のエラーメッセージを global install 文脈(takt-marp の再 install 案内)へ更新する
   - workflow の成功条件・状態遷移・report sync には手を入れない
+  - foundation validation の spawn 型 fixture(runner subprocess + fake takt)を packageRoot / projectRoot 分離レイアウトへ追随させる(assertion・期待エラーコードは不変。design「変更対象ファイル」参照)
   - 完了条件: `npm test`(foundation validation)が成功し、repo-local の `npm run slide:*` 入口が従来どおり動作する
   - _Requirements:_ 4.3, 5.1, 5.5
-  - _Boundary:_ 既存 lib / build / smoke の変更
+  - _Boundary:_ 既存 lib / build / smoke の変更, foundation validation fixture
   - _Depends:_ 1.1
 
 - [ ] 1.3 (P) package metadata の境界を宣言する
@@ -123,3 +124,7 @@
   - _Requirements:_ 5.1, 5.5, 6.1, 7.3, 7.5, 8.1, 8.4
   - _Boundary:_ 統合検証(全 validator 横断)
   - _Depends:_ 3.3
+
+## Implementation Notes
+
+- 1.2: foundation validation の 8 チェックは runner を subprocess 起動し fake takt を fixture cwd の `node_modules/.bin` に置く方式のため、`options.root` override では互換にならない。fixture は fake packageRoot(runner / lib / runtime-context をコピー、fake takt は fake packageRoot 側)で global レイアウトをモデル化する。symlink は ESM の realpath 解決で packageRoot が repo に戻るためコピー必須。assertion・期待エラーコードは upstream 所有の契約本体なので変更禁止。

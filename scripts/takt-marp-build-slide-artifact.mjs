@@ -8,6 +8,7 @@ import {
   parseArgs,
   SlideWorkflowError,
 } from "./lib/takt-marp-slide-workflow.mjs";
+import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 
 const ARTIFACT_OPTIONS = Object.freeze({
   html: ["--html"],
@@ -112,7 +113,7 @@ function deckNameFromParts(parts, original) {
 async function buildArtifact(artifact, target) {
   await mkdir(target.distPath, { recursive: true });
   const outputPath = path.join(target.distPath, `SLIDES.${artifact}`);
-  const marpPath = path.join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "marp.cmd" : "marp");
+  const marpPath = runtimeExecutablePath("marp");
   const args = [
     target.slidesPath,
     ...ARTIFACT_OPTIONS[artifact],

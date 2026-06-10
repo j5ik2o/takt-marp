@@ -163,6 +163,7 @@ templates/
 - `package.json` — `bin`(`takt-marp` → `bin/takt-marp.mjs`)、`files`(`bin/`、`scripts/`、`templates/`、`fixtures/marp-slide-workflow/`、`marp.config.mjs`)、`engines.node >= 24`、`takt` / `@marp-team/marp-cli` / `@kazumatu981/markdown-it-kroki` の dependencies 移行、npm scripts 追加(`installer:sync-templates` / `installer:check-templates` / `installer:check-package` / `installer:validate`)
 - `scripts/lib/takt-marp-slide-workflow.mjs` — `taktExecutablePath` / `assertTaktExecutableAvailable` の既定 root を `process.cwd()` から packageRoot(runtime context 経由)へ変更。`options.root` の明示 override は維持。エラーメッセージを global install 文脈(`npm install -g takt-marp` の再 install 案内)へ更新
 - `scripts/takt-marp-build-slide-artifact.mjs` — marp 解決を runtime context 経由(packageRoot 基準)へ変更
+- `scripts/takt-marp-validate-slide-workflow-foundation.mjs` — runner を subprocess 起動する検証 fixture を packageRoot / projectRoot 分離レイアウトへ追随させる: runner / lib / runtime-context を相対配置を保って一時 fake packageRoot へコピーし、fake takt は fake packageRoot 側の `node_modules/.bin/takt` に置き、コピーした runner を `cwd = fixture project root` で spawn する(missing-takt チェックは fake takt を置かない fake packageRoot を使う)。assertion・期待エラーコード(slide-workflow-foundation 所有の契約本体)は一切変更しない
 - `scripts/takt-marp-validate-slide-workflow-smoke.mjs` — 3 点の最小変更(roadmap が認める smoke の upstream 最小修正の範囲): (1) `ROOT` を `path.resolve(SCRIPT_DIR, "..")` から `process.cwd()` 基準へ変更(fixture / runner の SCRIPT_DIR 相対解決は不変)、(2) `runNpmScript` の 3 呼び出し(`slide:approve` ×2、`slide:<command>`)を既存 `runNodeScript` と同型の `process.execPath` 直接起動へ置換(`npm run` は package script の薄い wrapper のため検証意味論は不変。`package.json` 不在の一時 smoke プロジェクトで必須)、(3) workflow doctor の takt 解決(`ROOT/node_modules/.bin/takt`)を RuntimeContextResolver 経由へ変更。`npm run slide:smoke` は cwd = repo root のため挙動互換
 - `.github/workflows/ci.yml` — Node 22 → 24、`installer:check-templates` / `installer:check-package` / `installer:validate` step の追加
 
@@ -609,7 +610,7 @@ CLI はローカルツールであり、観測手段は stdout / stderr と exit
 検証は本 repo の規約(test framework ではなく決定論的 validation script + CI)に従う。各項目は要件の受け入れ条件から導出している。
 
 ### 回帰(既存契約の維持)
-- `npm test`(`slide:validate-foundation`)が executable 解決の既定変更後も成功すること — `options.root` override 互換の検証(5.1, 5.5)
+- `npm test`(`slide:validate-foundation`)が executable 解決の既定変更後も成功すること — in-process チェックは `options.root` override 互換で担保し、runner を subprocess 起動する spawn 型チェックは fake packageRoot レイアウト(変更対象ファイル参照)で global 解決モデルを忠実に検証する(5.1, 5.5)
 - `npm run slide:smoke`(repo-local、mock)が smoke ROOT の cwd 化後も成功すること — repo-local 経路の挙動互換(6.1)
 
 ### Integration(validator script、CI 必須)
