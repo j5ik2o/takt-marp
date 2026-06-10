@@ -117,7 +117,7 @@
   - _Boundary:_ CI 配線
   - _Depends:_ 3.1, 3.2
 
-- [ ] 4. 検証: 全経路の回帰を確認する
+- [x] 4. 検証: 全経路の回帰を確認する
   - クリーンな依存状態から、foundation validation(npm test)、repo-local mock smoke、template drift 検証、package 境界検証、global install E2E 検証を順に実行し、すべて成功させる
   - 失敗が出た場合は該当タスクへ戻して修正し、ここでは回避策を入れない
   - 完了条件: 上記 5 系統の command がすべて exit 0 で完走したログが揃う
