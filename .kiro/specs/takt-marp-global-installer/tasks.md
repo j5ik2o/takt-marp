@@ -32,7 +32,7 @@
   - _Depends:_ none
 
 - [ ] 2. コア: installer コンポーネント群を実装する
-- [ ] 2.1 (P) 配布 template の境界定義を実装する
+- [x] 2.1 (P) 配布 template の境界定義を実装する
   - workflows / facets の 2 domain に固定した allowlist、禁止 pattern(provider 設定・runtime state・認証情報など)、template entry の列挙を単一の定義として実装する
   - 2 つの tree(配布正本と開発用 .takt)の差分(欠落 / 内容不一致)を byte 単位で計算できるようにする
   - 完了条件: 列挙結果が workflows / facets 配下のみを返し、禁止 pattern を含む tree に対する検証が違反 path を報告して失敗する
