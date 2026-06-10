@@ -89,7 +89,7 @@
   - _Depends:_ 2.4, 2.5
 
 - [ ] 3. 統合: installer 検証と CI を配線する
-- [ ] 3.1 package 境界検証を実装する
+- [x] 3.1 package 境界検証を実装する
   - 配布正本 tree が workflows / facets のみで構成され禁止 pattern を含まないこと、npm pack の実 file 一覧が files allowlist と過不足なく整合すること、bin / engines / runtime dependencies の宣言が揃っていることを検証する
   - pack 内容の必須 assertion は bin 実体・runner / smoke / lib script・template 全 entry を対象とする(検証 script 自身は allowlist 内包で足り、必須 assertion の対象にしない)
   - 違反時は違反 path / 欠落項目の一覧を表示して失敗する
@@ -127,6 +127,7 @@
 
 ## Implementation Notes
 
+- 3.1: `installer:check-package` はこの開発端末ではローカル未追跡 `scripts/run-*.sh` を検出して意図どおり失敗する(dirty-workstation publish 防止)。クリーン checkout / CI では成功する。タスク 4 の回帰はクリーン clone 相当の環境で実行すること。
 - 2.6: TAKT 0.44 は `.takt/config.yaml` 不在(かつ `TAKT_CONFIG_DIR` 空)でも `--provider mock` の full smoke を完走する。ephemeral config 分岐は不要だった。3.2 の validator は「config 不在の workflow command 失敗モード」観測時にこの前提(TAKT 自体は config 不要、失敗は target/brief 系エラー)を踏まえること。
 - 1.3: `files` の `scripts/` は directory 単位のため、git 未追跡のローカル file(例: `scripts/run-claude-*.sh`、`.git/info/exclude` 管理)も `npm pack` に同梱され得る。3.1 の PackageBoundaryValidator は git 追跡状態または file pattern(`takt-marp-*.mjs` / `lib/`)で予期しない scripts 同梱を検出すること。
 - 1.2: foundation validation の 8 チェックは runner を subprocess 起動し fake takt を fixture cwd の `node_modules/.bin` に置く方式のため、`options.root` override では互換にならない。fixture は fake packageRoot(runner / lib / runtime-context をコピー、fake takt は fake packageRoot 側)で global レイアウトをモデル化する。symlink は ESM の realpath 解決で packageRoot が repo に戻るためコピー必須。assertion・期待エラーコードは upstream 所有の契約本体なので変更禁止。
