@@ -21,7 +21,7 @@
   - _Boundary:_ 既存 lib / build / smoke の変更, foundation validation fixture
   - _Depends:_ 1.1
 
-- [ ] 1.3 (P) package metadata の境界を宣言する
+- [x] 1.3 (P) package metadata の境界を宣言する
   - bin entrypoint、files allowlist(bin / scripts / templates / smoke fixture / marp 設定)、engines.node >= 24 を宣言する
   - takt、Marp CLI、kroki plugin を runtime dependencies へ移行し、yargs override を維持したまま lockfile を再生成する
   - installer 系 npm scripts(同期 / drift 検証 / package 境界検証 / global install 検証)の入口を追加する(実体 script は後続タスクで作成)
@@ -127,4 +127,5 @@
 
 ## Implementation Notes
 
+- 1.3: `files` の `scripts/` は directory 単位のため、git 未追跡のローカル file(例: `scripts/run-claude-*.sh`、`.git/info/exclude` 管理)も `npm pack` に同梱され得る。3.1 の PackageBoundaryValidator は git 追跡状態または file pattern(`takt-marp-*.mjs` / `lib/`)で予期しない scripts 同梱を検出すること。
 - 1.2: foundation validation の 8 チェックは runner を subprocess 起動し fake takt を fixture cwd の `node_modules/.bin` に置く方式のため、`options.root` override では互換にならない。fixture は fake packageRoot(runner / lib / runtime-context をコピー、fake takt は fake packageRoot 側)で global レイアウトをモデル化する。symlink は ESM の realpath 解決で packageRoot が repo に戻るためコピー必須。assertion・期待エラーコードは upstream 所有の契約本体なので変更禁止。
