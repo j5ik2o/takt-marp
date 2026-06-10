@@ -1,6 +1,6 @@
 # 実装計画
 
-- [ ] 1. 基盤: 実行基盤と package 境界を確立する
+- [x] 1. 基盤: 実行基盤と package 境界を確立する
 - [x] 1.1 project root と分離された runtime context 解決を提供する
   - takt-marp package 自身の位置から package root と実行ファイル置き場を決定論的に導出し、cwd の影響を受けずに takt / marp の実行ファイル path と package 内 script path を解決できるようにする
   - 既存 foundation validation が使う明示 root の override を引き続き受け付ける
@@ -31,7 +31,7 @@
   - _Boundary:_ PackageMetadata
   - _Depends:_ none
 
-- [ ] 2. コア: installer コンポーネント群を実装する
+- [x] 2. コア: installer コンポーネント群を実装する
 - [x] 2.1 (P) 配布 template の境界定義を実装する
   - workflows / facets の 2 domain に固定した allowlist、禁止 pattern(provider 設定・runtime state・認証情報など)、template entry の列挙を単一の定義として実装する
   - 2 つの tree(配布正本と開発用 .takt)の差分(欠落 / 内容不一致)を byte 単位で計算できるようにする
@@ -88,7 +88,7 @@
   - _Boundary:_ SmokeEntry
   - _Depends:_ 2.4, 2.5
 
-- [ ] 3. 統合: installer 検証と CI を配線する
+- [x] 3. 統合: installer 検証と CI を配線する
 - [x] 3.1 package 境界検証を実装する
   - 配布正本 tree が workflows / facets のみで構成され禁止 pattern を含まないこと、npm pack の実 file 一覧が files allowlist と過不足なく整合すること、bin / engines / runtime dependencies の宣言が揃っていることを検証する
   - pack 内容の必須 assertion は bin 実体・runner / smoke / lib script・template 全 entry を対象とする(検証 script 自身は allowlist 内包で足り、必須 assertion の対象にしない)
