@@ -286,7 +286,8 @@ section.tag-ccsdd::before { content: "cc-sdd"; background: #d9822b; letter-spaci
 <p class="maintitle">TAKTでAI駆動開発の品質を設計する</p>
 <p class="subtitle">実例 takt-sdd で学ぶ、AI駆動開発の品質ゲート設計</p>
 <p class="author">かとじゅん(@j5ik2o)</p>
-<p class="event">takt-sdd with cc-sdd v3 — 2026-06-10 / Online / 28min</p>
+<p class="event">Findy / TAKTで実践するマルチエージェントのオーケストレーション / 2026-06-10</p>
+<p class="event">v1.1</p>
 
 <!--
 【0.5分 / 累計 0:30】TAKT勉強会として、takt-sddの紹介にとどめず「TAKTでAI駆動開発の品質をどう設計するか」という実例として話す。冒頭で線を引く: AIを賢くする話ではなく、AIの周りを設計する話。
@@ -306,6 +307,7 @@ section.tag-ccsdd::before { content: "cc-sdd"; background: #d9822b; letter-spaci
 - 2014–2024年: kubell（旧Chatwork）テックリード
 - 2025年1月: 独立。技術顧問として SaaS 企業を支援
 - 関心領域: DDD / 関数型 / 分散システム設計 / AI-DLC
+- takt コントリビューター（40 PR）— オブザーバビリティ基盤・セキュリティ強化・cursor provider 対応など。takt-sdd 作者
 
 <!--
 【1分 / 累計 1:30】30秒で。TAKTとの関わり（takt-sddの開発）に一言触れて本題へ。
