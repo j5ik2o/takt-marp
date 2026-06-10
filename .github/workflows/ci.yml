@@ -16,7 +16,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -27,3 +27,12 @@ jobs:
 
       - name: Run mock smoke
         run: npm run slide:smoke
+
+      - name: Check template drift
+        run: npm run installer:check-templates
+
+      - name: Check package boundary
+        run: npm run installer:check-package
+
+      - name: Validate global install
+        run: npm run installer:validate

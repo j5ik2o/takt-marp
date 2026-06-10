@@ -109,7 +109,7 @@
   - _Boundary:_ GlobalInstallValidator
   - _Depends:_ 1.3, 2.6
 
-- [ ] 3.3 CI を Node 24 と installer 検証へ更新する
+- [x] 3.3 CI を Node 24 と installer 検証へ更新する
   - CI の Node version を 24 へ更新し、既存の test と repo-local smoke step を維持したまま、template drift 検証・package 境界検証・global install 検証の step を追加する
   - real provider smoke を CI の必須条件に含めない
   - 完了条件: CI 定義に新 step が追加され、同じ command 列がローカルで全て成功する
