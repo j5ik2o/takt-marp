@@ -10,9 +10,9 @@
 7. render output の生成や品質判定は行わず、source artifact の作成に集中してください。
 
 **コンテキスト反映規約:**
-- `brief.normalized.md` の `Event Context` の `Name`(イベント名)が指定されている場合は、タイトルスライドに反映してください。
-- `Speaker Profile` が指定されている場合は、自己紹介相当スライドに反映してください。
-- いずれの項目も「未指定」の場合は反映せず、値を捏造・補完してはなりません。
+- `brief.normalized.md` の `Event Context` の `Name`(イベント名)の値が「未指定」以外の場合は、タイトルスライドに反映してください。
+- `Speaker Profile` 節の内容が「未指定」以外の場合は、自己紹介相当スライドに反映してください。
+- 値が「未指定」の項目・節は反映せず、値を捏造・補完してはなりません(節自体は contract 上常に存在します)。
 
 **機械規約適合:**
 - `SLIDES.md` 本文にHTML要素(inline SVG含む)を使う場合は、front matterに `html: true` を設定してください。
