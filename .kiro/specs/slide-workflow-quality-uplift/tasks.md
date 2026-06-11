@@ -19,7 +19,7 @@
   - _Depends:_ none
 
 - [ ] 2. コア: 品質定義 facet の改訂
-- [ ] 2.1 plan の Layout 指定を基本語彙+custom 句に開放する
+- [x] 2.1 plan の Layout 指定を基本語彙+custom 句に開放する
   - `takt-marp-plan.md`(instruction)と `takt-marp-slide-plan.md`(output contract)のインライン enum を撤去し、語彙表参照+`custom: <kebab-case-class> — <用途1行>` 句に置換する
   - `deliverables:` 行と Deck Summary 構造には触れない
   - 完了条件: plan が基本語彙外の layout を `custom:` 句で要求できる記述になり、旧 enum の複製が両ファイルから消える
