@@ -71,7 +71,7 @@
   - _Boundary:_ C7 機械的規約・捏造禁止
   - _Depends:_ 1.2
 
-- [ ] 2.7 compose の生成規約に尺・コンテキスト・機械規約適合を追加する
+- [x] 2.7 compose の生成規約に尺・コンテキスト・機械規約適合を追加する
   - `takt-marp-compose-slides.md` に notes 生成規約(発表時間がある場合のみ尺マーカー+累計整合、各 notes に強調点、未確定時はマーカー禁止)を追加する
   - `Event Context` のイベント名をタイトルスライドへ、`Speaker Profile` を自己紹介相当スライドへ反映し、「未指定」項目は反映も捏造もしない規約を追加する
   - HTML 要素使用時の `html: true` 設定と font 規約適合(path 実在確認)の手順を追加する
