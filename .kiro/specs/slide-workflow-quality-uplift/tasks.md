@@ -116,7 +116,7 @@
   - _Depends:_ 3.2
 
 - [ ] 4. 検証: 回帰と非破壊確認
-- [ ] 4.1 既存契約・smoke・既存 deck 非破壊の回帰検証を行う
+- [x] 4.1 既存契約・smoke・既存 deck 非破壊の回帰検証を行う
   - `npm test`(foundation 回帰)と `npm run slide:smoke`(mock provider 全 command 遷移)を実行する
   - `npm run installer:check-package` で pack 境界を確認する
   - workflow YAML・scripts・report schema に差分が無いこと、`slides/takt-sdd/**` に差分が無いことを git status / git diff で確認する
@@ -130,3 +130,4 @@
 - 2.3: policy に節を追加する際、冒頭の原則表(要約表)の既存断言が新節と論理矛盾として残りやすい。節追加時は必ず冒頭表との整合を確認すること(2.4/2.6 の policy 改訂でも同様)。
 - 2.5: normalized-brief contract は `Event Context` の項目構造(Name/Date/Duration/Venue)を列挙していない(節名+「未指定」規定のみ)。項目構造の正本は design.md データモデル節。2.7(compose 反映)と 2.8(review 照合)は Name と Duration を参照する想定で書くこと。
 - 3.1: 語彙表の同期は全件突合(基本 12+modifier 7 = 19 件)が必要。複数エントリの 1 行まとめや用途文言の短縮は drift として REJECT された。3.2 の整合検証でも同じ粒度で突合すること。
+- 4.1: `installer:check-package` はローカルで FAIL するが、違反 4 件はすべて事前から存在する未追跡の補助スクリプト(`scripts/run-*.sh`、`.git/info/exclude` 管理)によるもの。本 feature は `scripts/` を変更しておらず(main との diff 0)、クリーンな CI checkout では green になる既知の dirty-workstation 条件。
