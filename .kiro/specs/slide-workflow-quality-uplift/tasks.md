@@ -35,7 +35,7 @@
   - _Boundary:_ C2 layout 計画・実現規約
   - _Depends:_ 1.1
 
-- [ ] 2.3 (P) inline SVG を規約付き許可に反転し生成所有権を定義する
+- [x] 2.3 (P) inline SVG を規約付き許可に反転し生成所有権を定義する
   - `takt-marp-svg-first-visual.md` の禁止事項から inline SVG 行を削除し、外部 SVG と inline SVG の使い分け基準節を追加する
   - inline SVG 規約(フォントスタック・スライド領域内 containment・`html: true` 前提)を追加する
   - svg-first-visual の長文禁止規則と文字量上限を inline SVG にも明示的に適用した記述を置く(新規基準の発明はしない)
