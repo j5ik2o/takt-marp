@@ -4,7 +4,7 @@
 1. `brief.normalized.md`、`plan.md`、`design-system.md`を読んでください。
 2. `SLIDES.md`をMarp形式で作成または更新してください。
 3. 各スライドにspeaker notesを付けてください。`brief.normalized.md` の `Event Context` に `Duration`(発表時間)が指定されている場合は、各スライドのspeaker notes冒頭行に尺マーカー `【N分 / 累計 M:SS】` を書き、最終スライドの累計を発表時間と整合させてください。`Duration` が「未指定」の場合はマーカーを書かず、推測した時間を記載してはなりません。各スライドのspeaker notesには、聴衆に最も伝えるべき1点(強調点)を含めてください。
-4. visual予定があるスライドには placeholder(例: `<!-- Visual: svg: <ファイル名またはテーマ> -->`)を配置してください。SVG markup(外部ファイル・inline両形式)は書かず、generate_visualsが所有します。
+4. visual予定があるスライドには、planの `Visual:` 値に対応する placeholder(例: `<!-- Visual: svg: <ファイル名またはテーマ> -->`、`<!-- Visual: existing: <パス> -->`)を配置してください。SVG markup と画像参照の挿入(外部ファイル・inline・既存画像のすべて)は generate_visuals が所有します。
 5. planの `Layout` と `design-system.md` に従い、Marp classとCSS tokenで表現してください。
 6. `SLIDES.md` のCSSは `design-system.md` のtokenに揃え、スライドごとの個別 `font-size`、`line-height`、`margin`、`padding` の追加を避けてください。
 7. render output の生成や品質判定は行わず、source artifact の作成に集中してください。

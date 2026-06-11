@@ -25,6 +25,6 @@
 
 ## 制約
 
-- Layout は knowledge `takt-marp-repo-conventions` の「Layout 語彙」表にある基本語彙のいずれかにしてください。基本語彙で表現できない場合のみ `custom: <kebab-case-class> — <用途1行>` 句を使用してください。
+- Layout は knowledge `takt-marp-repo-conventions` の「Layout 語彙」表にある基本語彙のいずれかにしてください。基本語彙で表現できない場合のみ `custom: <kebab-case-class> — <用途1行>` 句を使用してください。modifier を使う場合は基本 class と併記してください(例: `single profile`)。modifier 単独は不可です。
 - Visual は `none`、`svg: ...`、`existing: ...` のいずれかで明示してください。
 - `brief.md` / `brief.normalized.md` の Output Requirements と矛盾する deliverables を計画しないでください。

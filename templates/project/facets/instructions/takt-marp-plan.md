@@ -4,7 +4,7 @@
 1. `brief.normalized.md`と必要なSource Materialsを読んでください。deck-local `slides/<deck>/brief.normalized.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` を読んでください。
 2. `docs/marp-slide-workflow.md`のplan契約に従って`plan.md`を作成してください。
 3. 各スライドに `Message`、`Layout`、`Content`、`Visual`、`Speaker note intent`、`Source` を必ず書いてください。
-4. `Layout` は knowledge `takt-marp-repo-conventions` の「Layout 語彙」表にある基本語彙のいずれかを選んでください。基本語彙で表現できない場合のみ `custom: <kebab-case-class> — <用途1行>` 句を使用してください(後続の design-system step が同名 class を定義します)。modifier は必ず基本 class と組み合わせて使用してください。1列/2列の理由と比率を短く書いてください。
+4. `Layout` は knowledge `takt-marp-repo-conventions` の「Layout 語彙」表にある基本語彙のいずれかを選んでください。基本語彙で表現できない場合のみ `custom: <kebab-case-class> — <用途1行>` 句を使用してください(後続の design-system step が同名 class を定義します)。modifier を使う場合は `Layout` に基本 class と併記してください(例: `single profile`)。modifier 単独の指定は不可です。1列/2列の理由と比率を短く書いてください。
 5. visualは `none`、`svg: ...`、`existing: ...` のいずれかで明示してください。
 6. `plan.md` に `Requested Deliverables` セクションを作り、`deliverables: [html, pdf]` のような単一行を必ず含めてください。値は `html`、`pdf`、`pptx` のうち後続 delivery command が生成・確認すべき成果物だけを指定してください。
 7. appendixが必要な場合は本編と分けて計画してください。
