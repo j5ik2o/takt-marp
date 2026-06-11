@@ -1,0 +1,27 @@
+{
+  "git": {
+    "requireBranch": "main",
+    "requireCleanWorkingDir": true,
+    "requireUpstream": true,
+    "commitMessage": "chore(release): v${version}",
+    "tagName": "v${version}",
+    "push": true
+  },
+  "github": {
+    "release": false
+  },
+  "npm": {
+    "publish": false
+  },
+  "hooks": {
+    "before:init": ["npm test", "npm run installer:check-templates"]
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": {
+        "name": "conventionalcommits"
+      },
+      "infile": "CHANGELOG.md"
+    }
+  }
+}

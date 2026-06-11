@@ -1,0 +1,56 @@
+name: Cut Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      increment:
+        description: "Version increment (auto = derive from conventional commits)"
+        type: choice
+        default: auto
+        options:
+          - auto
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  cut-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898148+github-actions[bot]@users.noreply.github.com"
+          git branch --set-upstream-to=origin/main main
+      - name: Run release-it
+        env:
+          INCREMENT: ${{ inputs.increment }}
+        run: |
+          case "$INCREMENT" in
+            auto) npx release-it --ci ;;
+            patch|minor|major) npx release-it --ci --increment "$INCREMENT" ;;
+            *) echo "Unsupported increment: $INCREMENT" >&2; exit 1 ;;
+          esac
+      - name: Dispatch publish workflow for the new tag
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          echo "Dispatching release.yml for $TAG"
+          gh workflow run release.yml --ref "$TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
