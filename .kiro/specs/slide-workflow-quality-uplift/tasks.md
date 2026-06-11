@@ -108,7 +108,7 @@
   - _Boundary:_ C3, C4, C7 にまたがる整合検証の明示的統合タスク
   - _Depends:_ 2.4, 2.6, 2.7, 2.8
 
-- [ ] 3.3 配布 template を同期し drift 検証を成功させる
+- [x] 3.3 配布 template を同期し drift 検証を成功させる
   - `npm run installer:sync-templates` を実行して `templates/project/facets/**` を同期する(手編集しない)
   - 完了条件: `npm run installer:check-templates` が green
   - _Requirements:_ 7.2

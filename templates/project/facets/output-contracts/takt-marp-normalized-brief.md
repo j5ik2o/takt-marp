@@ -20,6 +20,9 @@
 - Speaker Notes
 - Output Requirements
 - Non-blocking Notes
+- Event Context(値が無い場合も節は必須。各項目は「未指定」と記載)
+- Speaker Profile(値が無い場合も節は必須。「未指定」と記載)
+- Fact Inventory(値が無い場合も節は必須。「未指定」と記載)
 
 ## 制約
 
