@@ -223,6 +223,3 @@ fabric.properties
 dist/
 slides/**/*.html
 slides/_workflow-smoke/
-
-/scripts/run-codex-corporate.sh
-/scripts/run-codex-personal.sh
