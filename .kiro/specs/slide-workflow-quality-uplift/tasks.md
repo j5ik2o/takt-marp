@@ -1,7 +1,7 @@
 # 実装計画
 
 - [ ] 1. 基盤: 語彙・機械規約の単一定義源
-- [ ] 1.1 リポジトリ規約 knowledge に layout 語彙表を追加し stale 記述を削除する
+- [x] 1.1 リポジトリ規約 knowledge に layout 語彙表を追加し stale 記述を削除する
   - 基本 12 class(title, single, visual, visual-dense, visual-full, split-50-50, split-45-55, split-40-60, split-60-40, compare-2col, infographic, code-2col)に用途 1 行と構造ヒントを付した語彙表を `takt-marp-repo-conventions.md` に追加する
   - modifier(profile→single、layers→infographic、dual、tag-*)を適用先 base class 付きで区分し、単独使用不可を明記する
   - 削除済み Kroki への言及を削除する
