@@ -34,7 +34,8 @@
     "installer:sync-templates": "node scripts/takt-marp-sync-project-templates.mjs --write",
     "installer:check-templates": "node scripts/takt-marp-sync-project-templates.mjs",
     "installer:check-package": "node scripts/takt-marp-validate-package-boundary.mjs",
-    "installer:validate": "node scripts/takt-marp-validate-global-install.mjs"
+    "installer:validate": "node scripts/takt-marp-validate-global-install.mjs",
+    "release": "release-it"
   },
   "dependencies": {
     "@fontsource/noto-sans-jp": "^5.2.5",
@@ -44,5 +45,9 @@
   },
   "overrides": {
     "yargs": "^18.0.0"
+  },
+  "devDependencies": {
+    "@release-it/conventional-changelog": "^11.0.1",
+    "release-it": "^20.2.0"
   }
 }
