@@ -91,7 +91,7 @@
   - _Depends:_ 2.2, 2.3, 2.4, 2.5, 2.6, 2.7
 
 - [ ] 3. 統合: 横断整合と配布同期
-- [ ] 3.1 workflow ドキュメントの語彙・テンプレートを同期する
+- [x] 3.1 workflow ドキュメントの語彙・テンプレートを同期する
   - `docs/marp-slide-workflow.md` の brief テンプレートに `## Speaker Profile` / `## Fact Inventory` を追加する(`## Event` は既存)
   - 同ドキュメントの Layout 語彙節を語彙表(基本+modifier+custom 句)と同期する
   - 完了条件: docs の語彙・テンプレートが facet 側の定義と矛盾しない
