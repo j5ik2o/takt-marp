@@ -99,7 +99,7 @@
   - _Boundary:_ C2, C6 にまたがる docs 統合タスク
   - _Depends:_ 1.1, 2.1, 2.2, 2.5
 
-- [ ] 3.2 facet 間の責務宣言と語彙参照の整合を検証する
+- [x] 3.2 facet 間の責務宣言と語彙参照の整合を検証する
   - general-slide-quality / slide-quality / svg-first-visual の「扱うこと/扱わないこと」宣言が改訂後も相互矛盾しないことを確認し、必要なら宣言を修正する
   - grep で旧 Layout enum の複製が `.takt` / `docs` / `templates` に残存しないことを確認する
   - 参照実装の全 `_class:` が語彙表で正しい区分のままカバーされることを突合する
@@ -129,3 +129,4 @@
 
 - 2.3: policy に節を追加する際、冒頭の原則表(要約表)の既存断言が新節と論理矛盾として残りやすい。節追加時は必ず冒頭表との整合を確認すること(2.4/2.6 の policy 改訂でも同様)。
 - 2.5: normalized-brief contract は `Event Context` の項目構造(Name/Date/Duration/Venue)を列挙していない(節名+「未指定」規定のみ)。項目構造の正本は design.md データモデル節。2.7(compose 反映)と 2.8(review 照合)は Name と Duration を参照する想定で書くこと。
+- 3.1: 語彙表の同期は全件突合(基本 12+modifier 7 = 19 件)が必要。複数エントリの 1 行まとめや用途文言の短縮は drift として REJECT された。3.2 の整合検証でも同じ粒度で突合すること。
