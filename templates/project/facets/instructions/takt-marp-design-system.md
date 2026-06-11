@@ -6,7 +6,13 @@
 3. typography、spacing、layout、visual、color、QA rules をdeck単位のtokenとして定義してください。
 4. tokenは `SLIDES.md` のfront matter CSSに転記しやすい名前にしてください。
 5. スライドごとの個別調整ではなく、classとCSS変数で一括制御できる設計にしてください。
-6. planの `Layout` に対応する `title`、`single`、`visual`、`visual-dense`、`visual-full`、`split-50-50`、`split-45-55`、`split-40-60`、`split-60-40`、`compare-2col` の使い分けを定義してください。
+6. planの `Layout` に対応する class の使い分けを、knowledge `takt-marp-repo-conventions` の「Layout 語彙」表に従って定義してください。
+7. planの `Layout` に `custom: <class名> — <用途>` 句がある場合、同名 class を新規定義してください。命名は kebab-case とし、deck の既存 token 体系(CSS 変数・class 命名)と整合させてください。
+8. 新規定義した class(および使用する modifier の組み合わせ)を deck-local `design-system.md` に以下の項目で文書化してください。後続の review / fix がその class を識別できる記述にしてください。
+   - class 名
+   - 用途(1行)
+   - 構造(CSS レイアウト・HTML 構造の概要)
+   - 使用スライド番号
 
 **必須項目**
 - Typography tokens: font family、letter-spacing、H1、lead、bullet、code label、line-height
