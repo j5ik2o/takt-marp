@@ -27,7 +27,7 @@
   - _Boundary:_ C2 layout 計画・実現規約
   - _Depends:_ 1.1
 
-- [ ] 2.2 design-system instruction に新 class 定義権限と文書化規約を追加する
+- [x] 2.2 design-system instruction に新 class 定義権限と文書化規約を追加する
   - 閉集合 enum を語彙表参照に置換し、plan の `custom:` 句に対応する class の定義権限を与える
   - 命名規約(kebab-case、既存 token 体系との整合)と deck-local `design-system.md` への文書化規約(class 名・用途・構造・使用スライド番号)を記述する
   - 完了条件: 新 class が「review/fix が識別できる形」で文書化される規約が instruction に存在する
