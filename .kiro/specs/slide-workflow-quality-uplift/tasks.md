@@ -63,7 +63,7 @@
   - _Boundary:_ C6 発表コンテキスト入力
   - _Depends:_ none
 
-- [ ] 2.6 (P) Marp 固有 policy に機械的規約と捏造禁止を追加する
+- [x] 2.6 (P) Marp 固有 policy に機械的規約と捏造禁止を追加する
   - `takt-marp-slide-quality.md` の Marp Front Matter 節に `html: true` 規約、Typography 節に font path 規約(スタック必須+@font-face は path 実在時のみ)を追加する
   - 入力根拠節に「brief に存在しないイベント名・実績数値・version を生成・補完しない」を特化追記する
   - 完了条件: 3 規約が policy に存在し、C1 の規約文と矛盾しない
