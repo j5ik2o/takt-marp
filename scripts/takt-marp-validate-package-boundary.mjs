@@ -52,7 +52,7 @@ const EXPECTED_FILES_ALLOWLIST = ["bin/", "scripts/", "templates/", "fixtures/ma
 const EXPECTED_BIN_NAME = "takt-marp";
 const EXPECTED_BIN_TARGET = "bin/takt-marp.mjs";
 const EXPECTED_ENGINES_NODE = ">=24";
-const REQUIRED_DEPENDENCIES = ["takt", "@marp-team/marp-cli", "@kazumatu981/markdown-it-kroki"];
+const REQUIRED_DEPENDENCIES = ["takt", "@marp-team/marp-cli"];
 
 function runNpmPackDryRun(packageRoot) {
   const npmCli = process.platform === "win32" ? "npm.cmd" : "npm";
