@@ -10,7 +10,7 @@
   - _Boundary:_ C1 layout 語彙基盤
   - _Depends:_ none
 
-- [ ] 1.2 リポジトリ規約 knowledge に font 規約と html front matter 規約を追加する
+- [x] 1.2 リポジトリ規約 knowledge に font 規約と html front matter 規約を追加する
   - 日本語優先フォールバックスタック必須+`@font-face` は `SLIDES.md` からの相対 path が実在する場合のみ任意、の 2 層 font 規約を記述する
   - HTML 要素(inline SVG 含む)使用時は front matter `html: true` を必須とする規約を記述する
   - 完了条件: 両規約が `takt-marp-repo-conventions.md` に記載され、後続 policy/instruction が参照できる規約文として成立している

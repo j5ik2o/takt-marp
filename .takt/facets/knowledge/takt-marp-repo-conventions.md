@@ -21,6 +21,7 @@ slides/<deck>/
 
 `SLIDES.md` は Marp Markdown である。
 front matter には少なくとも `marp: true`、`theme`、`paginate` を含める。
+`SLIDES.md` 本文に HTML 要素(inline SVG 含む)を使う場合は、front matter に `html: true` を設定する。
 
 既存 deck は日本語 speaker notes を HTML コメントで持つ。
 
@@ -29,6 +30,12 @@ front matter には少なくとも `marp: true`、`theme`、`paginate` を含め
 このスライドで話す補足を書く。
 -->
 ```
+
+## Font
+
+font style には日本語優先フォールバックスタックを必ず指定する。
+推奨スタック: `"Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif`
+`@font-face` を宣言する場合は、`SLIDES.md` からの相対 path が実在するファイルのみを参照する(path が存在しない環境では `@font-face` を省略し、フォールバックスタックのみで描画する)。
 
 ## Design System
 
