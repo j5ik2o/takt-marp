@@ -2,6 +2,7 @@ import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
 
 export const COMMANDS = ["plan", "compose", "polish", "deliver"];
 export const COMMAND_STATES = {
@@ -114,8 +115,7 @@ export function assertWorkflowAvailable(command, options = {}) {
 }
 
 export function taktExecutablePath(options = {}) {
-  const root = options.root ?? process.cwd();
-  return path.join(root, "node_modules", ".bin", process.platform === "win32" ? "takt.cmd" : "takt");
+  return runtimeExecutablePath("takt", options);
 }
 
 export function assertTaktExecutableAvailable(options = {}) {
@@ -124,7 +124,7 @@ export function assertTaktExecutableAvailable(options = {}) {
     accessSync(executablePath, constants.X_OK);
   } catch {
     throw new SlideWorkflowError(
-      `TAKT executable is not available: ${path.relative(options.root ?? process.cwd(), executablePath)}. Run npm install and verify the takt devDependency.`,
+      `TAKT executable is not available: ${executablePath}. Reinstall takt-marp (npm install -g takt-marp) and verify its dependencies.`,
       "TAKT_EXECUTABLE_MISSING",
     );
   }

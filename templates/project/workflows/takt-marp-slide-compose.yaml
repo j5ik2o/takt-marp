@@ -1,0 +1,209 @@
+name: takt-marp-slide-compose
+description: 承認済みplanからdesign-system、SLIDES.md、SVG sourceを作成し、review/fix/supervisionを閉じるcompose command。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 30
+initial_step: design_system
+loop_monitors:
+  - cycle:
+      - review_compose
+      - fix_compose
+      - summarize_compose_work
+    threshold: 3
+    judge:
+      persona: takt-marp-slide-supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全（進捗あり）
+          next: review_compose
+        - condition: 非生産的（同じ指摘の反復・修正未反映）
+          next: ABORT
+
+personas:
+  takt-marp-slide-writer: ../facets/personas/takt-marp-slide-writer.md
+  takt-marp-slide-reviewer: ../facets/personas/takt-marp-slide-reviewer.md
+  takt-marp-slide-reviser: ../facets/personas/takt-marp-slide-reviser.md
+  takt-marp-slide-supervisor: ../facets/personas/takt-marp-slide-supervisor.md
+policies:
+  takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
+  takt-marp-slide-quality: ../facets/policies/takt-marp-slide-quality.md
+  takt-marp-svg-first-visual: ../facets/policies/takt-marp-svg-first-visual.md
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+instructions:
+  takt-marp-design-system: ../facets/instructions/takt-marp-design-system.md
+  takt-marp-compose-slides: ../facets/instructions/takt-marp-compose-slides.md
+  takt-marp-visual-generate: ../facets/instructions/takt-marp-visual-generate.md
+  takt-marp-compose-work-summary: ../facets/instructions/takt-marp-compose-work-summary.md
+  takt-marp-compose-review: ../facets/instructions/takt-marp-compose-review.md
+  takt-marp-compose-fix: ../facets/instructions/takt-marp-compose-fix.md
+  takt-marp-supervise-command: ../facets/instructions/takt-marp-supervise-command.md
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+report_formats:
+  takt-marp-command-work: ../facets/output-contracts/takt-marp-command-work.md
+  takt-marp-command-review: ../facets/output-contracts/takt-marp-command-review.md
+  takt-marp-command-fix: ../facets/output-contracts/takt-marp-command-fix.md
+  takt-marp-supervision: ../facets/output-contracts/takt-marp-supervision.md
+
+steps:
+  - name: design_system
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-writer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    instruction: takt-marp-design-system
+    rules:
+      - condition: deck design systemを作成した
+        next: compose_slides
+      - condition: design system作成に必要な情報が不足
+        next: ABORT
+
+  - name: compose_slides
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-writer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-compose-slides
+    rules:
+      - condition: SLIDES.mdをcomposeした
+        next: generate_visuals
+      - condition: composeに必要な情報が不足
+        next: ABORT
+
+  - name: generate_visuals
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-writer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-visual-generate
+    rules:
+      - condition: SVG sourceを作成した
+        next: summarize_compose_work
+      - condition: SVG生成に必要な情報が不足
+        next: ABORT
+
+  - name: summarize_compose_work
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-writer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-compose-work-summary
+    output_contracts:
+      report:
+        - name: compose-work.md
+          format: takt-marp-command-work
+    rules:
+      - condition: resultがpassed
+        next: ai_quality_gate_compose
+      - condition: resultがneeds_inputまたはfailed
+        next: ABORT
+
+  - name: ai_quality_gate_compose
+    kind: workflow_call
+    call: ./takt-marp-slide-ai-quality-gate.yaml
+    args:
+      fix_instruction: takt-marp-ai-antipattern-fix
+      domain_knowledge:
+        - takt-marp-repo-conventions
+    rules:
+      - condition: COMPLETE
+        next: review_compose
+      - condition: need_replan
+        next: summarize_compose_work
+      - condition: ABORT
+        next: ABORT
+
+  - name: review_compose
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-reviewer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-compose-review
+    output_contracts:
+      report:
+        - name: compose-review.md
+          format: takt-marp-command-review
+    rules:
+      - condition: approved
+        next: supervise_compose
+      - condition: needs_fix
+        next: fix_compose
+      - condition: blocked
+        next: ABORT
+
+  - name: fix_compose
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-reviser
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-compose-fix
+    output_contracts:
+      report:
+        - name: compose-fix.md
+          format: takt-marp-command-fix
+    rules:
+      - condition: fixed
+        next: summarize_compose_work
+      - condition: blocked
+        next: ABORT
+
+  - name: supervise_compose
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-supervisor
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-svg-first-visual
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-supervise-command
+    output_contracts:
+      report:
+        - name: compose-supervision.md
+          format: takt-marp-supervision
+    rules:
+      - condition: resultがpassed
+        next: COMPLETE
+      - condition: resultがrejected
+        next: ABORT

@@ -1,0 +1,213 @@
+name: takt-marp-slide-plan
+description: Marpスライド生成のplan command。briefを検証し、正規化brief、slide plan、review/fix/supervision reportを生成する。
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 30
+initial_step: intake
+loop_monitors:
+  - cycle:
+      - review_plan
+      - fix_plan
+      - summarize_plan_work
+    threshold: 3
+    judge:
+      persona: takt-marp-slide-supervisor
+      instruction: loop-monitor-reviewers-fix
+      rules:
+        - condition: 健全（進捗あり）
+          next: review_plan
+        - condition: 非生産的（同じ指摘の反復・修正未反映）
+          next: ABORT
+
+personas:
+  takt-marp-slide-planner: ../facets/personas/takt-marp-slide-planner.md
+  takt-marp-slide-reviewer: ../facets/personas/takt-marp-slide-reviewer.md
+  takt-marp-slide-reviser: ../facets/personas/takt-marp-slide-reviser.md
+  takt-marp-slide-supervisor: ../facets/personas/takt-marp-slide-supervisor.md
+policies:
+  takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
+  takt-marp-slide-quality: ../facets/policies/takt-marp-slide-quality.md
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+instructions:
+  takt-marp-intake: ../facets/instructions/takt-marp-intake.md
+  takt-marp-normalize-brief: ../facets/instructions/takt-marp-normalize-brief.md
+  takt-marp-plan: ../facets/instructions/takt-marp-plan.md
+  takt-marp-plan-work-summary: ../facets/instructions/takt-marp-plan-work-summary.md
+  takt-marp-plan-review: ../facets/instructions/takt-marp-plan-review.md
+  takt-marp-plan-fix: ../facets/instructions/takt-marp-plan-fix.md
+  takt-marp-supervise-command: ../facets/instructions/takt-marp-supervise-command.md
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+report_formats:
+  takt-marp-normalized-brief: ../facets/output-contracts/takt-marp-normalized-brief.md
+  takt-marp-slide-plan: ../facets/output-contracts/takt-marp-slide-plan.md
+  takt-marp-command-work: ../facets/output-contracts/takt-marp-command-work.md
+  takt-marp-command-review: ../facets/output-contracts/takt-marp-command-review.md
+  takt-marp-command-fix: ../facets/output-contracts/takt-marp-command-fix.md
+  takt-marp-supervision: ../facets/output-contracts/takt-marp-supervision.md
+
+steps:
+  - name: intake
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    instruction: takt-marp-intake
+    rules:
+      - condition: briefが利用可能
+        next: normalize_brief
+      - condition: briefテンプレートを作成して停止
+        next: ABORT
+      - condition: briefの必須項目が不足
+        next: ABORT
+
+  - name: normalize_brief
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    instruction: takt-marp-normalize-brief
+    output_contracts:
+      report:
+        - name: brief.normalized.md
+          format: takt-marp-normalized-brief
+    rules:
+      - condition: 任意確認事項を残してbriefを正規化した
+        next: plan_deck
+      - condition: briefを正規化した
+        next: plan_deck
+      - condition: 必須入力が不足して正規化できない
+        next: ABORT
+
+  - name: plan_deck
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    instruction: takt-marp-plan
+    output_contracts:
+      report:
+        - name: plan.md
+          format: takt-marp-slide-plan
+    rules:
+      - condition: planを作成した
+        next: summarize_plan_work
+      - condition: plan作成に必要な情報が不足
+        next: ABORT
+
+  - name: summarize_plan_work
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-plan-work-summary
+    output_contracts:
+      report:
+        - name: plan-work.md
+          format: takt-marp-command-work
+    rules:
+      - condition: resultがpassed
+        next: ai_quality_gate_plan
+      - condition: resultがneeds_inputまたはfailed
+        next: ABORT
+
+  - name: ai_quality_gate_plan
+    kind: workflow_call
+    call: ./takt-marp-slide-ai-quality-gate.yaml
+    args:
+      fix_instruction: takt-marp-ai-antipattern-fix
+      domain_knowledge:
+        - takt-marp-repo-conventions
+    rules:
+      - condition: COMPLETE
+        next: review_plan
+      - condition: need_replan
+        next: summarize_plan_work
+      - condition: ABORT
+        next: ABORT
+
+  - name: review_plan
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-reviewer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-plan-review
+    output_contracts:
+      report:
+        - name: plan-review.md
+          format: takt-marp-command-review
+    rules:
+      - condition: approved
+        next: supervise_plan
+      - condition: needs_fix
+        next: fix_plan
+      - condition: blocked
+        next: ABORT
+
+  - name: fix_plan
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-reviser
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-plan-fix
+    output_contracts:
+      report:
+        - name: plan-fix.md
+          format: takt-marp-command-fix
+    rules:
+      - condition: fixed
+        next: summarize_plan_work
+      - condition: blocked
+        next: ABORT
+
+  - name: supervise_plan
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-supervisor
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-supervise-command
+    output_contracts:
+      report:
+        - name: plan-supervision.md
+          format: takt-marp-supervision
+    rules:
+      - condition: resultがpassed
+        next: COMPLETE
+      - condition: resultがrejected
+        next: ABORT

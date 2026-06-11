@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -79,10 +79,11 @@ async function main() {
   await check("missing TAKT executable does not archive or clean force outputs", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
+    const fakePackage = await makeFakePackageRoot();
     await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
     await mkdir(path.join(root, "dist", "demo"), { recursive: true });
     await writeFile(path.join(root, "dist", "demo", "index.html"), "<html></html>", "utf8");
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo", "--force"], { cwd: root, encoding: "utf8" });
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo", "--force"], { cwd: root, encoding: "utf8" });
     assert(result.status !== 0, "runner unexpectedly succeeded without TAKT executable");
     assert(result.stderr.includes("TAKT_EXECUTABLE_MISSING"), `expected missing TAKT executable, got: ${result.stderr}`);
     assert(existsSync(supervisionPath(targetInfo, "plan")), "supervision was archived despite missing TAKT executable");
@@ -99,9 +100,10 @@ async function main() {
   await check("successful rerun rejection is formatted without stack trace", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
-    await makeTaktExecutable(root);
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot);
     await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status !== 0, "runner unexpectedly allowed successful rerun");
     assert(result.stderr.includes("RERUN_BLOCKED:"), `expected formatted rerun error, got: ${result.stderr}`);
     assert(!result.stderr.includes("Error:"), `rerun error included a stack trace: ${result.stderr}`);
@@ -110,8 +112,9 @@ async function main() {
   await check("runner syncs passed TAKT report to deck", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
-    await makeTaktExecutable(root, fakeTaktScript(["run-current"], "passed"));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status === 0, `runner failed to sync passed report: ${result.stderr}`);
     const synced = await readFile(supervisionPath(targetInfo, "plan"), "utf8");
     assert(synced.includes("workflow_run_id: run-current"), `runner synced wrong report: ${synced}`);
@@ -120,8 +123,9 @@ async function main() {
   await check("runner syncs plan source artifacts from TAKT reports to deck", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
-    await makeTaktExecutable(root, fakeTaktScript(["run-current"], "passed"));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status === 0, `runner failed to sync plan source artifacts: ${result.stderr}`);
     const normalized = await readFile(path.join(targetInfo.deckPath, "brief.normalized.md"), "utf8");
     const plan = await readFile(path.join(targetInfo.deckPath, "plan.md"), "utf8");
@@ -133,8 +137,9 @@ async function main() {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
     await writeFile(path.join(targetInfo.reviewPath, "plan-ai-antipattern-fix.md"), "stale ai fix\n", "utf8");
-    await makeTaktExecutable(root, fakeTaktScriptWithAiGateReport("run-current", { includeFix: false }));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScriptWithAiGateReport("run-current", { includeFix: false }));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status === 0, `runner failed to sync AI gate report: ${result.stderr}`);
     const syncedReview = await readFile(path.join(targetInfo.reviewPath, "plan-ai-antipattern-review.md"), "utf8");
     assert(syncedReview.includes("workflow_run_id: run-current"), `runner synced wrong AI review report: ${syncedReview}`);
@@ -144,8 +149,9 @@ async function main() {
   await check("runner syncs latest AI gate review cycle to deck", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
-    await makeTaktExecutable(root, fakeTaktScriptWithAiGateReport("run-current", { reviewCycles: [1, 2] }));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScriptWithAiGateReport("run-current", { reviewCycles: [1, 2] }));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status === 0, `runner failed to sync latest AI gate review report: ${result.stderr}`);
     const syncedReview = await readFile(path.join(targetInfo.reviewPath, "plan-ai-antipattern-review.md"), "utf8");
     assert(syncedReview.includes("cycle: 2"), `runner did not sync latest AI review cycle: ${syncedReview}`);
@@ -156,8 +162,9 @@ async function main() {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
     await writeFile(path.join(targetInfo.reviewPath, "plan-ai-antipattern-review.md"), "stale ai review\n", "utf8");
-    await makeTaktExecutable(root, fakeTaktScriptWithAiGateReport("run-current", { aiWorkflowRunId: "stale-run" }));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScriptWithAiGateReport("run-current", { aiWorkflowRunId: "stale-run" }));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status === 0, `runner failed with mismatched AI gate metadata: ${result.stderr}`);
     assert(!existsSync(path.join(targetInfo.reviewPath, "plan-ai-antipattern-review.md")), "runner treated mismatched AI gate report as current evidence");
   });
@@ -165,8 +172,9 @@ async function main() {
   await check("runner ignores non-passed TAKT supervision reports", async () => {
     const root = await fixtureRoot();
     await makeDeck(root, "demo");
-    await makeTaktExecutable(root, fakeTaktScript(["run-rejected"], "rejected"));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-rejected"], "rejected"));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status !== 0, "runner unexpectedly synced a non-passed report");
     assert(result.stderr.includes("TAKT_REPORT_SYNC_MISSING"), `expected sync-missing error, got: ${result.stderr}`);
   });
@@ -174,8 +182,9 @@ async function main() {
   await check("runner rejects ambiguous matching TAKT report directories", async () => {
     const root = await fixtureRoot();
     await makeDeck(root, "demo");
-    await makeTaktExecutable(root, fakeTaktScript(["run-a", "run-b"], "passed"));
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-a", "run-b"], "passed"));
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status !== 0, "runner unexpectedly synced an ambiguous report");
     assert(result.stderr.includes("TAKT_REPORT_SYNC_AMBIGUOUS"), `expected ambiguous sync error, got: ${result.stderr}`);
   });
@@ -344,6 +353,24 @@ async function makeDeck(root, deckName) {
   await mkdir(path.join(deckPath, "review"), { recursive: true });
   await writeFile(path.join(deckPath, "brief.md"), "# Brief\n");
   return resolveDeckTarget(`slides/${deckName}`, { root });
+}
+
+async function makeFakePackageRoot() {
+  const packageRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-package-"));
+  // Copy (not symlink) so ESM realpath resolution derives packageRoot from the fake package, not the repo.
+  for (const relative of [
+    "takt-marp-run-slide-workflow.mjs",
+    path.join("lib", "takt-marp-slide-workflow.mjs"),
+    path.join("lib", "takt-marp-runtime-context.mjs"),
+  ]) {
+    const destination = path.join(packageRoot, "scripts", relative);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await cp(path.join(SCRIPT_DIR, relative), destination);
+  }
+  return {
+    packageRoot,
+    runnerScript: path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
+  };
 }
 
 async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {

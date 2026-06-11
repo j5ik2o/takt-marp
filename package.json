@@ -2,6 +2,19 @@
   "name": "takt-marp",
   "version": "0.0.1",
   "description": "takt-marp",
+  "bin": {
+    "takt-marp": "bin/takt-marp.mjs"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "templates/",
+    "fixtures/marp-slide-workflow/",
+    "marp.config.mjs"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "slide:plan": "node scripts/takt-marp-run-slide-workflow.mjs plan",
     "slide:compose": "node scripts/takt-marp-run-slide-workflow.mjs compose",
@@ -17,12 +30,14 @@
     "build:html": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files -o dist/takt-sdd/SLIDES.html",
     "build:pptx": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files --pptx -o dist/takt-sdd/SLIDES.pptx",
     "build:pdf": "marp slides/takt-sdd/SLIDES.md --html --allow-local-files --pdf -o dist/takt-sdd/SLIDES.pdf",
-    "preview": "marp -s . --html"
+    "preview": "marp -s . --html",
+    "installer:sync-templates": "node scripts/takt-marp-sync-project-templates.mjs --write",
+    "installer:check-templates": "node scripts/takt-marp-sync-project-templates.mjs",
+    "installer:check-package": "node scripts/takt-marp-validate-package-boundary.mjs",
+    "installer:validate": "node scripts/takt-marp-validate-global-install.mjs"
   },
   "dependencies": {
-    "@fontsource/noto-sans-jp": "^5.2.5"
-  },
-  "devDependencies": {
+    "@fontsource/noto-sans-jp": "^5.2.5",
     "@kazumatu981/markdown-it-kroki": "^1.3.6",
     "@marp-team/marp-cli": "^4.4.0",
     "takt": "^0.44.0"
