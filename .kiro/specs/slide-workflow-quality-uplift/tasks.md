@@ -45,7 +45,7 @@
   - _Boundary:_ C3 inline SVG ガードレール
   - _Depends:_ 1.2
 
-- [ ] 2.4 (P) 尺契約と先鋭度・密度基準を一般品質 policy に追加する
+- [x] 2.4 (P) 尺契約と先鋭度・密度基準を一般品質 policy に追加する
   - `takt-marp-general-slide-quality.md` に Speaker Notes 尺契約節(canonical 尺マーカー `【N分 / 累計 M:SS】`、累計と発表時間の整合、強調点、発表時間未確定時の記載禁止)を追加する
   - 先鋭度基準(deck 固有要素を除去しても他 deck で成立する表現は汎用と判定)と密度基準(並列 bullet の表・カード・コード例への置換可能性判定)を追加する
   - 既存の severity 分類・完了判定節は変更しない
@@ -126,3 +126,5 @@
   - _Depends:_ 3.3
 
 ## Implementation Notes
+
+- 2.3: policy に節を追加する際、冒頭の原則表(要約表)の既存断言が新節と論理矛盾として残りやすい。節追加時は必ず冒頭表との整合を確認すること(2.4/2.6 の policy 改訂でも同様)。
