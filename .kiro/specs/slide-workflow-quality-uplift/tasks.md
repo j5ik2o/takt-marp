@@ -54,7 +54,7 @@
   - _Boundary:_ C4 尺契約・先鋭度密度基準
   - _Depends:_ none
 
-- [ ] 2.5 (P) brief 正規化に発表コンテキストの確認・収集を追加する
+- [x] 2.5 (P) brief 正規化に発表コンテキストの確認・収集を追加する
   - `takt-marp-normalize-brief.md` にイベント名・発表時間の確認必須(欠落は「未指定」明示+Non-blocking notes 記録)と、登壇者プロフィール・事実インベントリの推奨収集を追加する
   - `takt-marp-normalized-brief.md` contract の必須内容に `Event Context` / `Speaker Profile` / `Fact Inventory` を追加する(値が無い場合も節必須で「未指定」記載)
   - intake の hard-block 必須見出しと normalize の needs_input 条件は変更しない
@@ -128,3 +128,4 @@
 ## Implementation Notes
 
 - 2.3: policy に節を追加する際、冒頭の原則表(要約表)の既存断言が新節と論理矛盾として残りやすい。節追加時は必ず冒頭表との整合を確認すること(2.4/2.6 の policy 改訂でも同様)。
+- 2.5: normalized-brief contract は `Event Context` の項目構造(Name/Date/Duration/Venue)を列挙していない(節名+「未指定」規定のみ)。項目構造の正本は design.md データモデル節。2.7(compose 反映)と 2.8(review 照合)は Name と Duration を参照する想定で書くこと。
