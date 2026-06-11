@@ -39,12 +39,14 @@ jobs:
           git config user.email "41898148+github-actions[bot]@users.noreply.github.com"
           git branch --set-upstream-to=origin/main main
       - name: Run release-it
+        env:
+          INCREMENT: ${{ inputs.increment }}
         run: |
-          if [ "${{ inputs.increment }}" = "auto" ]; then
-            npx release-it --ci
-          else
-            npx release-it --ci --increment "${{ inputs.increment }}"
-          fi
+          case "$INCREMENT" in
+            auto) npx release-it --ci ;;
+            patch|minor|major) npx release-it --ci --increment "$INCREMENT" ;;
+            *) echo "Unsupported increment: $INCREMENT" >&2; exit 1 ;;
+          esac
       - name: Dispatch publish workflow for the new tag
         run: |
           TAG="v$(node -p "require('./package.json').version")"

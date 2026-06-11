@@ -10,6 +10,11 @@ permissions:
   contents: write
   id-token: write
 
+# 同一タグへの二重起動(将来 PAT で push した場合の push + dispatch 重複など)を直列化する
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   publish:
     # workflow_dispatch はタグ ref で起動されたときだけ実行する

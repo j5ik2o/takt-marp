@@ -2,6 +2,10 @@
   "name": "takt-marp",
   "version": "0.0.1",
   "description": "takt-marp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/j5ik2o/takt-marp.git"
+  },
   "bin": {
     "takt-marp": "bin/takt-marp.mjs"
   },
