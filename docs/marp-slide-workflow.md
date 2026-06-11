@@ -293,7 +293,7 @@ SVG-first とする。SVG は原則 `slides/<deck>/images/*.svg` として保存
 SVG 共通制約:
 
 - `viewBox` は原則 `0 0 1100 540`
-- font は `Noto Sans JP`, `Hiragino Sans`, `sans-serif`
+- font は `Noto Sans JP`, `Hiragino Sans`, `Yu Gothic`, `sans-serif`(knowledge の日本語優先フォールバックスタックと同順)
 - 1 SVG = 1 message
 - 本文テキストを詰め込まない
 - 外周余白は 40-60px
