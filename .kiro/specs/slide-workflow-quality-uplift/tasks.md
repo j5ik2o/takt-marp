@@ -81,7 +81,7 @@
   - _Boundary:_ C5 compose 生成規約
   - _Depends:_ 2.3, 2.4, 2.5, 2.6
 
-- [ ] 2.8 compose review に品質検出観点を追加する
+- [x] 2.8 compose review に品質検出観点を追加する
   - `takt-marp-compose-review.md` の読み込み対象に `brief.normalized.md` を追加する
   - 観点を追加する: (a) plan の Layout と `_class:` 使用に対応する style 定義・design-system 文書化の存在照合 (b) inline SVG の規約適合 (c) 尺マーカーの累計整合と発表時間未指定時の捏造検出 (d) 先鋭度・密度 (e) `html: true` 欠落と font path 解決不能
   - severity 既定(設計のエラーハンドリング節)に従い、report front matter・Findings テーブル・severity 分類は変更しない
