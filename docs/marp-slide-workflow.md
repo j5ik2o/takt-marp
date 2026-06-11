@@ -282,7 +282,7 @@ Steps:
 
 ## Visual 方針
 
-SVG-first とする。SVG は Marp 本文に inline せず、`slides/<deck>/images/*.svg` として保存し、`SLIDES.md` から参照する。
+SVG-first とする。SVG は原則 `slides/<deck>/images/*.svg` として保存し、`SLIDES.md` から参照する(外部ファイルが既定)。スライド固有で deck の CSS 変数・class と一体で制御する図版は、`takt-marp-svg-first-visual` policy の使い分け基準に従い inline SVG も利用できる(front matter `html: true` が前提)。
 
 優先順位:
 
