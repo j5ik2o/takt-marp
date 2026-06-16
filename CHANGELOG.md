@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0](https://github.com/j5ik2o/takt-marp/compare/v0.1.0...v0.2.0) (2026-06-16)
+
+### Features
+
+* **cli:** add approve command to takt-marp CLI ([08efd8f](https://github.com/j5ik2o/takt-marp/commit/08efd8f29b24c1819ee2ecc5760e9d24a407ac6d))
+
+### Bug Fixes
+
+* **cli:** show approve help without requiring initialized project ([8512b74](https://github.com/j5ik2o/takt-marp/commit/8512b74f7533e7e7cd1f61dc97287520815ecf18))
+
 ## 0.1.0 (2026-06-11)
 
 ### Features
