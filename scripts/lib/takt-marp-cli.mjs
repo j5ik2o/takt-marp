@@ -192,7 +192,6 @@ function approveUsage() {
 }
 
 async function runApprove(args) {
-  assertProjectInitialized();
   let parsed;
   try {
     parsed = parseArgs({
@@ -214,6 +213,7 @@ async function runApprove(args) {
     console.log(approveUsage());
     return 0;
   }
+  assertProjectInitialized();
   if (parsed.positionals.length !== 2) {
     throw new SlideWorkflowError(
       `Expected <slides/deck> and <command>. Run 'takt-marp approve --help' for usage.`,

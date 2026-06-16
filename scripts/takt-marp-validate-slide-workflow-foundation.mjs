@@ -307,8 +307,16 @@ async function main() {
     assert(verifyResult.stdout.includes("skipped for non-successful verify report"), `verify verifier did not report skip: ${verifyResult.stdout}`);
   });
 
-  await check("approve command is exposed through CLI", async () => {
-    const output = await captureStdout(() => runCli(["approve", "--help"]));
+  await check("approve command shows help without initialized project", async () => {
+    const root = await fixtureRoot();
+    const originalCwd = process.cwd();
+    let output;
+    try {
+      process.chdir(root);
+      output = await captureStdout(() => runCli(["approve", "--help"]));
+    } finally {
+      process.chdir(originalCwd);
+    }
     assert(output.includes("Usage: takt-marp approve"), `approve help missing usage: ${output}`);
   });
 
