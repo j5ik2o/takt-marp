@@ -20,6 +20,7 @@ import {
   supervisionPath,
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
+import { runCli } from "./lib/takt-marp-cli.mjs";
 
 const checks = [];
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -306,6 +307,47 @@ async function main() {
     assert(verifyResult.stdout.includes("skipped for non-successful verify report"), `verify verifier did not report skip: ${verifyResult.stdout}`);
   });
 
+  await check("approve command shows help without initialized project", async () => {
+    const root = await fixtureRoot();
+    const originalCwd = process.cwd();
+    let output;
+    try {
+      process.chdir(root);
+      output = await captureStdout(() => runCli(["approve", "--help"]));
+    } finally {
+      process.chdir(originalCwd);
+    }
+    assert(output.includes("Usage: takt-marp approve"), `approve help missing usage: ${output}`);
+  });
+
+  await check("approve command requires initialized project", async () => {
+    const root = await fixtureRoot();
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(root);
+      const code = await runCli(["approve", "slides/demo", "plan", "--by", "foundation-test"]);
+      assert(code !== 0, "approve unexpectedly succeeded in uninitialized project");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
+  await check("approve command writes approval file", async () => {
+    const root = await initializedFixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(root);
+      const code = await runCli(["approve", targetInfo.target, "plan", "--by", "foundation-test"]);
+      assert(code === 0, `approve command failed: check stderr`);
+    } finally {
+      process.chdir(originalCwd);
+    }
+    const approval = await readFile(path.join(targetInfo.reviewPath, "plan-approval.md"), "utf8");
+    assert(approval.includes("approved_by: foundation-test"), `approval file missing approver: ${approval}`);
+  });
+
   await check("package scripts expose canonical entrypoints only", async () => {
     const pkg = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
     const scripts = pkg.scripts ?? {};
@@ -346,6 +388,32 @@ async function fixtureRoot() {
   await mkdir(path.join(root, ".takt", "workflows"), { recursive: true });
   await writeFile(path.join(root, ".takt", "workflows", "takt-marp-slide-plan.yaml"), "name: takt-marp-slide-plan\n");
   return root;
+}
+
+async function initializedFixtureRoot() {
+  const root = await fixtureRoot();
+  await mkdir(path.join(root, ".takt", "facets"), { recursive: true });
+  return root;
+}
+
+async function captureStdout(fn) {
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  const chunks = [];
+  process.stdout.write = (chunk, encoding, callback) => {
+    chunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+    if (typeof encoding === "function") {
+      encoding();
+    } else if (typeof callback === "function") {
+      callback();
+    }
+    return true;
+  };
+  try {
+    await fn();
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  return chunks.join("");
 }
 
 async function makeDeck(root, deckName) {
