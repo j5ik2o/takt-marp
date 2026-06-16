@@ -6,11 +6,16 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { initializeProject } from "./takt-marp-project-init.mjs";
 import { packageScriptPath } from "./takt-marp-runtime-context.mjs";
-import { formatError, SlideWorkflowError } from "./takt-marp-slide-workflow.mjs";
+import {
+  APPROVAL_COMMANDS,
+  formatError,
+  SlideWorkflowError,
+} from "./takt-marp-slide-workflow.mjs";
 
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
-const VALID_COMMANDS = ["init", ...WORKFLOW_COMMANDS, "smoke"];
+const VALID_COMMANDS = ["init", ...WORKFLOW_COMMANDS, "approve", "smoke"];
 const RUNNER_SCRIPT = "scripts/takt-marp-run-slide-workflow.mjs";
+const APPROVE_SCRIPT = "scripts/takt-marp-approve-slide-workflow-state.mjs";
 const SMOKE_SCRIPT = "scripts/takt-marp-validate-slide-workflow-smoke.mjs";
 const REQUIRED_PROJECT_DIRS = [".takt/workflows", ".takt/facets"];
 
@@ -24,6 +29,8 @@ function usage() {
     "  compose <slides/deck> [options]   Run the compose workflow for a deck in the current project",
     "  polish <slides/deck> [options]    Run the polish workflow for a deck in the current project",
     "  deliver <slides/deck> [options]   Run the deliver workflow for a deck in the current project",
+    "  approve <slides/deck> <command> --by <name> [--force]",
+    "                                    Approve a workflow state (command: plan or compose)",
     "  smoke [--provider <name>]         Run smoke validation in a temporary project (default provider: mock)",
     "",
     "Workflow options (passed through to the workflow runner unchanged):",
@@ -171,6 +178,62 @@ async function runSmoke(args) {
   return exitCode;
 }
 
+function approveUsage() {
+  return [
+    "Usage: takt-marp approve <slides/deck> <command> --by <name> [--force]",
+    "",
+    `Commands: ${APPROVAL_COMMANDS.join(", ")}`,
+    "",
+    "Options:",
+    "  --by <name>   Approver identifier (required)",
+    "  --force       Overwrite an existing approval",
+    "  --help, -h    Show this message",
+  ].join("\n");
+}
+
+async function runApprove(args) {
+  assertProjectInitialized();
+  let parsed;
+  try {
+    parsed = parseArgs({
+      args,
+      allowPositionals: true,
+      options: {
+        by: { type: "string" },
+        force: { type: "boolean", default: false },
+        help: { type: "boolean", short: "h", default: false },
+      },
+    });
+  } catch (error) {
+    throw new SlideWorkflowError(
+      `Invalid approve arguments: ${error.message}. Run 'takt-marp approve --help' for usage.`,
+      "INVALID_ARGS",
+    );
+  }
+  if (parsed.values.help) {
+    console.log(approveUsage());
+    return 0;
+  }
+  if (parsed.positionals.length !== 2) {
+    throw new SlideWorkflowError(
+      `Expected <slides/deck> and <command>. Run 'takt-marp approve --help' for usage.`,
+      "INVALID_ARGS",
+    );
+  }
+  const [target, command] = parsed.positionals;
+  if (!parsed.values.by) {
+    throw new SlideWorkflowError(
+      `Missing required --by <name>. Run 'takt-marp approve --help' for usage.`,
+      "INVALID_ARGS",
+    );
+  }
+  const approveArgs = [target, command, "--by", parsed.values.by];
+  if (parsed.values.force) {
+    approveArgs.push("--force");
+  }
+  return runPackageScript(APPROVE_SCRIPT, approveArgs);
+}
+
 export async function runCli(argv) {
   const [command, ...rest] = argv;
   if (command === undefined || command === "--help" || command === "-h" || command === "help") {
@@ -187,6 +250,9 @@ export async function runCli(argv) {
     }
     if (command === "init") {
       return await runInit(rest);
+    }
+    if (command === "approve") {
+      return await runApprove(rest);
     }
     if (command === "smoke") {
       return await runSmoke(rest);
