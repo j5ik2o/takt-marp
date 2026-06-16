@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.1](https://github.com/j5ik2o/takt-marp/compare/v0.2.0...v0.2.1) (2026-06-16)
+
+### Bug Fixes
+
+* tighten SVG canvas usage guidance ([3b288ba](https://github.com/j5ik2o/takt-marp/commit/3b288bacab53477de4d14a86a7c6e22b97dce4ff))
+
 ## [0.2.0](https://github.com/j5ik2o/takt-marp/compare/v0.1.0...v0.2.0) (2026-06-16)
 
 ### Features
