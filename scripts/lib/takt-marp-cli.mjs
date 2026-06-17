@@ -26,6 +26,7 @@ const SMOKE_SCRIPT = "scripts/takt-marp-validate-slide-workflow-smoke.mjs";
 const BUILD_SCRIPT = "scripts/takt-marp-build-slide-artifact.mjs";
 const PREVIEW_SCRIPT = "scripts/takt-marp-preview-slide.mjs";
 const REQUIRED_PROJECT_DIRS = [".takt/workflows", ".takt/facets"];
+const FORWARDED_SIGNALS = new Set(["SIGINT", "SIGTERM"]);
 
 function usage() {
   return [
@@ -88,12 +89,39 @@ function assertProjectInitialized() {
 
 function runPackageScript(relativeScriptPath, args, options = {}) {
   return new Promise((resolve, reject) => {
+    let stopping = false;
     const child = spawn(process.execPath, [packageScriptPath(relativeScriptPath), ...args], {
       cwd: options.cwd ?? process.cwd(),
       stdio: "inherit",
     });
-    child.on("error", reject);
-    child.on("close", (code) => {
+    const signalHandlers = [];
+    if (options.successOnSignal) {
+      for (const signal of FORWARDED_SIGNALS) {
+        const handler = () => {
+          stopping = true;
+          if (!child.killed) {
+            child.kill(signal);
+          }
+        };
+        process.once(signal, handler);
+        signalHandlers.push([signal, handler]);
+      }
+    }
+    const cleanup = () => {
+      for (const [signal, handler] of signalHandlers) {
+        process.off(signal, handler);
+      }
+    };
+    child.on("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      cleanup();
+      if (options.successOnSignal && (stopping || FORWARDED_SIGNALS.has(signal))) {
+        resolve(0);
+        return;
+      }
       resolve(code ?? 1);
     });
   });
@@ -109,7 +137,7 @@ async function runBuildCommand(command, args) {
 }
 
 async function runPreview(args) {
-  return runPackageScript(PREVIEW_SCRIPT, args);
+  return runPackageScript(PREVIEW_SCRIPT, args, { successOnSignal: true });
 }
 
 async function runInit(args) {

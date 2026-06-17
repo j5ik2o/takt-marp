@@ -34,7 +34,7 @@
     "build:html": "node scripts/takt-marp-build-slide-artifact.mjs html",
     "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx",
     "build:pdf": "node scripts/takt-marp-build-slide-artifact.mjs pdf",
-    "preview": "node scripts/takt-marp-preview-slide.mjs",
+    "preview": "node scripts/takt-marp-preview-slide.mjs takt-sdd",
     "installer:sync-templates": "node scripts/takt-marp-sync-project-templates.mjs --write",
     "installer:check-templates": "node scripts/takt-marp-sync-project-templates.mjs",
     "installer:check-package": "node scripts/takt-marp-validate-package-boundary.mjs",

@@ -8,6 +8,8 @@ import {
 import { resolveSlideArtifactTarget } from "./lib/takt-marp-slide-artifact-target.mjs";
 import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 
+const PREVIEW_STOP_SIGNALS = new Set(["SIGINT", "SIGTERM"]);
+
 function usage() {
   return [
     "Usage: takt-marp preview <deck|slides/<deck>|slides/<deck>/SLIDES.md>",
@@ -33,24 +35,42 @@ async function main() {
 
   const target = resolveSlideArtifactTarget(positional[0]);
   const marpPath = runtimeExecutablePath("marp");
-  const code = await run(marpPath, [
+  const result = await run(marpPath, [
     target.deckPath,
     "--server",
     "--html",
     "--allow-local-files",
   ]);
-  if (code !== 0) {
+  if (!result.ok) {
     throw new SlideWorkflowError(`Marp preview failed for slides/${target.deckName}/SLIDES.md`, "MARP_PREVIEW_FAILED");
   }
 }
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
+    let stopping = false;
     const child = spawn(command, args, {
       shell: process.platform === "win32",
       stdio: "inherit",
     });
+    const signalHandlers = [];
+    for (const signal of PREVIEW_STOP_SIGNALS) {
+      const handler = () => {
+        stopping = true;
+        if (!child.killed) {
+          child.kill(signal);
+        }
+      };
+      process.once(signal, handler);
+      signalHandlers.push([signal, handler]);
+    }
+    const cleanup = () => {
+      for (const [signal, handler] of signalHandlers) {
+        process.off(signal, handler);
+      }
+    };
     child.on("error", (error) => {
+      cleanup();
       reject(
         new SlideWorkflowError(
           `Failed to start Marp executable: ${command}. Reinstall takt-marp and verify the @marp-team/marp-cli dependency. ${error.message}`,
@@ -58,7 +78,10 @@ function run(command, args) {
         ),
       );
     });
-    child.on("close", (code) => resolve(code ?? 1));
+    child.on("close", (code, signal) => {
+      cleanup();
+      resolve({ ok: stopping || PREVIEW_STOP_SIGNALS.has(signal) || code === 0 });
+    });
   });
 }
 
