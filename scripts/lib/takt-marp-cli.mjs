@@ -13,11 +13,20 @@ import {
 } from "./takt-marp-slide-workflow.mjs";
 
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
-const VALID_COMMANDS = ["init", ...WORKFLOW_COMMANDS, "approve", "smoke"];
+const BUILD_COMMANDS = Object.freeze({
+  "build:html": "html",
+  "build:pdf": "pdf",
+  "build:pptx": "pptx",
+});
+const UTILITY_COMMANDS = [...Object.keys(BUILD_COMMANDS), "preview"];
+const VALID_COMMANDS = ["init", ...WORKFLOW_COMMANDS, ...UTILITY_COMMANDS, "approve", "smoke"];
 const RUNNER_SCRIPT = "scripts/takt-marp-run-slide-workflow.mjs";
 const APPROVE_SCRIPT = "scripts/takt-marp-approve-slide-workflow-state.mjs";
 const SMOKE_SCRIPT = "scripts/takt-marp-validate-slide-workflow-smoke.mjs";
+const BUILD_SCRIPT = "scripts/takt-marp-build-slide-artifact.mjs";
+const PREVIEW_SCRIPT = "scripts/takt-marp-preview-slide.mjs";
 const REQUIRED_PROJECT_DIRS = [".takt/workflows", ".takt/facets"];
+const FORWARDED_SIGNALS = new Set(["SIGINT", "SIGTERM"]);
 
 function usage() {
   return [
@@ -29,6 +38,14 @@ function usage() {
     "  compose <slides/deck> [options]   Run the compose workflow for a deck in the current project",
     "  polish <slides/deck> [options]    Run the polish workflow for a deck in the current project",
     "  deliver <slides/deck> [options]   Run the deliver workflow for a deck in the current project",
+    "  build:html [deck|slides/<deck>|slides/<deck>/SLIDES.md]",
+    "                                    Build HTML artifact without changing workflow state",
+    "  build:pdf [deck|slides/<deck>|slides/<deck>/SLIDES.md]",
+    "                                    Build PDF artifact without changing workflow state",
+    "  build:pptx [deck|slides/<deck>|slides/<deck>/SLIDES.md]",
+    "                                    Build PPTX artifact without changing workflow state",
+    "  preview <deck|slides/<deck>|slides/<deck>/SLIDES.md>",
+    "                                    Start Marp server mode without changing workflow state",
     "  approve <slides/deck> <command> --by <name> [--force]",
     "                                    Approve a workflow state (command: plan or compose)",
     "  smoke [--provider <name>]         Run smoke validation in a temporary project (default provider: mock)",
@@ -72,12 +89,39 @@ function assertProjectInitialized() {
 
 function runPackageScript(relativeScriptPath, args, options = {}) {
   return new Promise((resolve, reject) => {
+    let stopping = false;
     const child = spawn(process.execPath, [packageScriptPath(relativeScriptPath), ...args], {
       cwd: options.cwd ?? process.cwd(),
       stdio: "inherit",
     });
-    child.on("error", reject);
-    child.on("close", (code) => {
+    const signalHandlers = [];
+    if (options.successOnSignal) {
+      for (const signal of FORWARDED_SIGNALS) {
+        const handler = () => {
+          stopping = true;
+          if (!child.killed) {
+            child.kill(signal);
+          }
+        };
+        process.once(signal, handler);
+        signalHandlers.push([signal, handler]);
+      }
+    }
+    const cleanup = () => {
+      for (const [signal, handler] of signalHandlers) {
+        process.off(signal, handler);
+      }
+    };
+    child.on("error", (error) => {
+      cleanup();
+      reject(error);
+    });
+    child.on("close", (code, signal) => {
+      cleanup();
+      if (options.successOnSignal && (stopping || FORWARDED_SIGNALS.has(signal))) {
+        resolve(0);
+        return;
+      }
       resolve(code ?? 1);
     });
   });
@@ -86,6 +130,14 @@ function runPackageScript(relativeScriptPath, args, options = {}) {
 async function runWorkflowCommand(command, args) {
   assertProjectInitialized();
   return runPackageScript(RUNNER_SCRIPT, [command, ...args]);
+}
+
+async function runBuildCommand(command, args) {
+  return runPackageScript(BUILD_SCRIPT, [BUILD_COMMANDS[command], ...args]);
+}
+
+async function runPreview(args) {
+  return runPackageScript(PREVIEW_SCRIPT, args, { successOnSignal: true });
 }
 
 async function runInit(args) {
@@ -256,6 +308,12 @@ export async function runCli(argv) {
     }
     if (command === "smoke") {
       return await runSmoke(rest);
+    }
+    if (Object.hasOwn(BUILD_COMMANDS, command)) {
+      return await runBuildCommand(command, rest);
+    }
+    if (command === "preview") {
+      return await runPreview(rest);
     }
     return await runWorkflowCommand(command, rest);
   } catch (error) {

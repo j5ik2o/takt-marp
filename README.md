@@ -34,21 +34,21 @@ Example output requirement:
 ### 2. Run the workflows
 
 ```bash
-npm run slide:plan -- "slides/<deck>"
-npm run slide:approve -- "slides/<deck>" plan --by <name>
-npm run slide:compose -- "slides/<deck>"
-npm run slide:approve -- "slides/<deck>" compose --by <name>
-npm run slide:polish -- "slides/<deck>"
-npm run slide:deliver -- "slides/<deck>"
+takt-marp plan "slides/<deck>"
+takt-marp approve "slides/<deck>" plan --by <name>
+takt-marp compose "slides/<deck>"
+takt-marp approve "slides/<deck>" compose --by <name>
+takt-marp polish "slides/<deck>"
+takt-marp deliver "slides/<deck>"
 ```
 
 Use `slides/<deck>` as the target:
 
 ```bash
-npm run slide:plan -- "slides/<deck>"
+takt-marp plan "slides/<deck>"
 ```
 
-Human approval is recorded by `slide:approve` for `plan` and `compose` only. `review`, `revise`, `qa`, and `build-qa` are internal workflow responsibilities, not top-level commands.
+Human approval is recorded by `takt-marp approve` for `plan` and `compose` only. `review`, `revise`, `qa`, and `build-qa` are internal workflow responsibilities, not top-level commands.
 
 ### 3. Generated files
 
@@ -75,24 +75,21 @@ slides/<deck>/
 - spatial balance: top/left bias, large unintended blank areas, visual center of gravity
 - design-system usage: tokenized CSS, no per-slide style drift
 
-`deliver` is responsible for requested artifacts. PDF generation builds only the target deck's `SLIDES.md`:
+`deliver` is responsible for requested artifacts, delivery verification, and final supervision.
+For simple local generation or inspection, use utility commands that do not change workflow state:
 
 ```bash
-npm run build:pdf -- <deck>
+takt-marp build:html <deck>
+takt-marp build:pdf <deck>
+takt-marp preview <deck>
 ```
 
 ### 5. Validation
 
-Use the foundation validation for fast local checks:
-
-```bash
-npm test
-```
-
 Use the smoke validation when changing workflow routing, state gates, render evidence, delivery verification, or approval handling:
 
 ```bash
-npm run slide:smoke -- --keep
+takt-marp smoke --keep
 ```
 
 The smoke validation creates a temporary `_workflow-smoke` deck from the fixture, exercises invalid target and approval failure paths, runs the `plan` -> `compose` -> `polish` -> `deliver` sequence, verifies render evidence metadata, checks delivery artifacts, and covers rerun/force behavior. `--keep` leaves the generated deck and reports under `slides/_workflow-smoke/` for inspection.

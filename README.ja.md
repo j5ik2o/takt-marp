@@ -34,21 +34,21 @@ Output Requirementsの例:
 ### 2. workflowを実行する
 
 ```bash
-npm run slide:plan -- "slides/<deck>"
-npm run slide:approve -- "slides/<deck>" plan --by <name>
-npm run slide:compose -- "slides/<deck>"
-npm run slide:approve -- "slides/<deck>" compose --by <name>
-npm run slide:polish -- "slides/<deck>"
-npm run slide:deliver -- "slides/<deck>"
+takt-marp plan "slides/<deck>"
+takt-marp approve "slides/<deck>" plan --by <name>
+takt-marp compose "slides/<deck>"
+takt-marp approve "slides/<deck>" compose --by <name>
+takt-marp polish "slides/<deck>"
+takt-marp deliver "slides/<deck>"
 ```
 
 targetは `slides/<deck>` を指定します。
 
 ```bash
-npm run slide:plan -- "slides/<deck>"
+takt-marp plan "slides/<deck>"
 ```
 
-人間承認は `plan` と `compose` に対してのみ `slide:approve` で記録します。`review`、`revise`、`qa`、`build-qa` はworkflow内部の責務であり、トップレベルコマンドではありません。
+人間承認は `plan` と `compose` に対してのみ `takt-marp approve` で記録します。`review`、`revise`、`qa`、`build-qa` はworkflow内部の責務であり、トップレベルコマンドではありません。
 
 ### 3. 生成されるファイル
 
@@ -75,24 +75,21 @@ slides/<deck>/
 - spatial balance: 上寄り、左寄り、大きな意図しない余白、視覚重心
 - design-system usage: token化されたCSS、スライドごとのstyle drift防止
 
-`deliver` は要求された成果物を生成します。PDF生成は対象deckの `SLIDES.md` だけをbuildします。
+`deliver` は要求された成果物を生成し、delivery verification と supervision まで行います。
+単純なローカル生成や確認だけなら、workflow state を変更しない utility command を使います。
 
 ```bash
-npm run build:pdf -- <deck>
+takt-marp build:html <deck>
+takt-marp build:pdf <deck>
+takt-marp preview <deck>
 ```
 
 ### 5. 検証
 
-軽量なローカル確認には foundation validation を使います。
-
-```bash
-npm test
-```
-
 workflow routing、state gate、render evidence、delivery verification、approval handling を変更した場合は smoke validation を実行します。
 
 ```bash
-npm run slide:smoke -- --keep
+takt-marp smoke --keep
 ```
 
 smoke validation は fixture から一時的な `_workflow-smoke` deck を作成し、invalid target、approval failure path、`plan` -> `compose` -> `polish` -> `deliver` の一連の実行、render evidence metadata、delivery artifact、rerun/force behavior を検証します。`--keep` を付けると、生成された deck と report を `slides/_workflow-smoke/` に残して確認できます。

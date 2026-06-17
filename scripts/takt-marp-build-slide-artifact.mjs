@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, readdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import {
   formatError,
   parseArgs,
   SlideWorkflowError,
 } from "./lib/takt-marp-slide-workflow.mjs";
+import { resolveSlideArtifactTargets } from "./lib/takt-marp-slide-artifact-target.mjs";
 import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 
 const ARTIFACT_OPTIONS = Object.freeze({
@@ -23,9 +23,9 @@ function usage() {
     "When deck is omitted, all slides/*/SLIDES.md files are built.",
     "",
     "Examples:",
-    "  npm run build:pdf -- my-talk",
-    "  npm run build:html -- slides/my-talk",
-    "  npm run build:pptx -- slides/my-talk/SLIDES.md",
+    "  takt-marp build:pdf my-talk",
+    "  takt-marp build:html slides/my-talk",
+    "  takt-marp build:pptx slides/my-talk/SLIDES.md",
   ].join("\n");
 }
 
@@ -37,77 +37,17 @@ async function main() {
   }
 
   const [artifact, target] = positional;
+  if (positional.length > 2) {
+    throw new SlideWorkflowError(usage(), "INVALID_ARGS");
+  }
   if (!ARTIFACT_OPTIONS[artifact]) {
     throw new SlideWorkflowError(usage(), "INVALID_ARGS");
   }
 
-  const targets = await resolveBuildTargets(target);
+  const targets = await resolveSlideArtifactTargets(target);
   for (const item of targets) {
     await buildArtifact(artifact, item);
   }
-}
-
-async function resolveBuildTargets(target) {
-  if (!target) {
-    return listDecksWithSlides();
-  }
-  return [resolveBuildTarget(target)];
-}
-
-async function listDecksWithSlides() {
-  const slidesRoot = path.join(process.cwd(), "slides");
-  const entries = await readdir(slidesRoot, { withFileTypes: true });
-  const targets = entries
-    .filter((entry) => entry.isDirectory())
-    .filter((entry) => existsSync(path.join(slidesRoot, entry.name, "SLIDES.md")))
-    .map((entry) => resolveBuildTarget(entry.name))
-    .sort((left, right) => left.deckName.localeCompare(right.deckName));
-
-  if (targets.length === 0) {
-    throw new SlideWorkflowError("No slides/*/SLIDES.md files found.", "SLIDES_NOT_FOUND");
-  }
-  return targets;
-}
-
-function resolveBuildTarget(target) {
-  if (!target || path.isAbsolute(target)) {
-    throw new SlideWorkflowError(`Invalid deck target '${target}'.`, "INVALID_TARGET");
-  }
-
-  const normalized = path.posix.normalize(target.replaceAll(path.sep, "/"));
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../")) {
-    throw new SlideWorkflowError(`Invalid deck target '${target}'.`, "INVALID_TARGET");
-  }
-
-  const parts = normalized.split("/");
-  const deckName = deckNameFromParts(parts, target);
-  const deckPath = path.join(process.cwd(), "slides", deckName);
-  const slidesPath = path.join(deckPath, "SLIDES.md");
-  if (!existsSync(slidesPath)) {
-    throw new SlideWorkflowError(`SLIDES.md not found: slides/${deckName}/SLIDES.md`, "SLIDES_NOT_FOUND");
-  }
-
-  return Object.freeze({
-    deckName,
-    slidesPath,
-    distPath: path.join(process.cwd(), "dist", deckName),
-  });
-}
-
-function deckNameFromParts(parts, original) {
-  if (parts.length === 1 && parts[0] && !parts[0].endsWith(".md")) {
-    return parts[0];
-  }
-  if (parts.length === 2 && parts[0] === "slides" && parts[1] && !parts[1].endsWith(".md")) {
-    return parts[1];
-  }
-  if (parts.length === 3 && parts[0] === "slides" && parts[1] && parts[2] === "SLIDES.md") {
-    return parts[1];
-  }
-  throw new SlideWorkflowError(
-    `Invalid deck target '${original}'. Expected deck, slides/<deck>, or slides/<deck>/SLIDES.md.`,
-    "INVALID_TARGET",
-  );
 }
 
 async function buildArtifact(artifact, target) {

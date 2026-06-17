@@ -23,7 +23,19 @@ import { listTemplateEntries } from "./lib/takt-marp-project-templates.mjs";
 import { resolveRuntimeContext } from "./lib/takt-marp-runtime-context.mjs";
 import { SlideWorkflowError, formatError } from "./lib/takt-marp-slide-workflow.mjs";
 
-const CLI_COMMANDS = ["init", "plan", "compose", "polish", "deliver", "smoke"];
+const CLI_COMMANDS = [
+  "init",
+  "plan",
+  "compose",
+  "polish",
+  "deliver",
+  "build:html",
+  "build:pdf",
+  "build:pptx",
+  "preview",
+  "approve",
+  "smoke",
+];
 // Runtime state / provider configuration that init must never generate (8.2).
 const RUNTIME_STATE_NAMES = [
   "config.yaml",
@@ -148,6 +160,12 @@ async function assertFileContent(filePath, expectedContent, label) {
   check(actual === expectedContent, `${label}: file content changed: ${filePath}`);
 }
 
+async function assertNonEmptyFile(filePath, label) {
+  check(existsSync(filePath), `${label}: file is missing: ${filePath}`);
+  const actual = await readFile(filePath);
+  check(actual.length > 0, `${label}: file is empty: ${filePath}`);
+}
+
 // Phase 1 (8.1): real tarball -> temp global prefix; later phases run the CLI
 // from that prefix via PATH.
 async function phasePackInstall(ctx) {
@@ -172,7 +190,7 @@ async function phasePackInstall(ctx) {
   return `tarball ${tarballs[0]} installed into temp prefix`;
 }
 
-// Phase 2 (1.1, 1.2, 1.3): help lists all six commands; slide:* is rejected.
+// Phase 2 (1.1, 1.2, 1.3): help lists all public commands; slide:* is rejected.
 async function phaseSurface(ctx) {
   const help = await runTaktMarp(ctx, ["--help"], { cwd: ctx.workDir });
   check(help.code === 0, `takt-marp --help must exit 0.\n${commandSummary(help)}`);
@@ -189,7 +207,52 @@ async function phaseSurface(ctx) {
     unknown.output.includes("UNKNOWN_COMMAND"),
     `takt-marp slide:plan must be rejected with UNKNOWN_COMMAND.\n${commandSummary(unknown)}`,
   );
-  return "help lists 6 commands; slide:* rejected with UNKNOWN_COMMAND";
+  return "help lists public commands; slide:* rejected with UNKNOWN_COMMAND";
+}
+
+// Phase 2b: utility commands must work from the installed CLI without requiring
+// the target project to own package.json, node_modules, or .takt workflow state.
+async function phaseUtilityCommands(ctx) {
+  const projectDir = path.join(ctx.workDir, "utility-project");
+  const deckDir = path.join(projectDir, "slides", "sample");
+  await mkdir(deckDir, { recursive: true });
+  await writeFile(
+    path.join(deckDir, "SLIDES.md"),
+    [
+      "---",
+      "marp: true",
+      "html: true",
+      "---",
+      "",
+      "# Utility Build",
+      "",
+      "<strong>HTML enabled</strong>",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  check(!existsSync(path.join(projectDir, "package.json")), "precondition: utility project must not have package.json");
+  check(!existsSync(path.join(projectDir, "node_modules")), "precondition: utility project must not have node_modules");
+  check(!existsSync(path.join(projectDir, ".takt")), "precondition: utility project must not have .takt");
+
+  const html = await runTaktMarp(ctx, ["build:html", "slides/sample"], { cwd: projectDir });
+  check(html.code === 0, `takt-marp build:html must exit 0 in a non-npm project.\n${commandSummary(html)}`);
+  await assertNonEmptyFile(path.join(projectDir, "dist", "sample", "SLIDES.html"), "build:html output");
+
+  const pdf = await runTaktMarp(ctx, ["build:pdf", "sample"], { cwd: projectDir });
+  check(pdf.code === 0, `takt-marp build:pdf must exit 0 in a non-npm project.\n${commandSummary(pdf)}`);
+  await assertNonEmptyFile(path.join(projectDir, "dist", "sample", "SLIDES.pdf"), "build:pdf output");
+
+  const previewHelp = await runTaktMarp(ctx, ["preview", "--help"], { cwd: projectDir });
+  check(previewHelp.code === 0, `takt-marp preview --help must exit 0.\n${commandSummary(previewHelp)}`);
+  check(
+    previewHelp.stdout.includes("Usage: takt-marp preview"),
+    `preview help must show preview usage.\n${commandSummary(previewHelp)}`,
+  );
+
+  check(!existsSync(path.join(projectDir, ".takt")), "utility commands must not create .takt workflow state");
+  return "build utilities ran without project package.json/node_modules/.takt; preview help is available";
 }
 
 // Phase 3 (8.2): init generates exactly workflows/** + facets/** under .takt,
@@ -327,6 +390,7 @@ async function phaseMockSmoke(ctx) {
 const PHASES = [
   { name: "pack-install", run: phasePackInstall, deps: [] },
   { name: "surface", run: phaseSurface, deps: [] },
+  { name: "utility-commands", run: phaseUtilityCommands, deps: [] },
   { name: "init-boundary", run: phaseInitBoundary, deps: [] },
   { name: "conflict-force", run: phaseConflictForce, deps: ["init-boundary"] },
   { name: "workflow-command-modes", run: phaseWorkflowCommandModes, deps: ["init-boundary"] },
