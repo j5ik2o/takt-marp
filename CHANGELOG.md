@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0](https://github.com/j5ik2o/takt-marp/compare/v0.2.1...v0.3.0) (2026-06-17)
+
+### Features
+
+* add CLI build and preview utilities ([846df5d](https://github.com/j5ik2o/takt-marp/commit/846df5de7a88270321eba8a4b4ff706c5e8c1ee7))
+
+### Bug Fixes
+
+* handle preview command shutdown ([0a1d8d1](https://github.com/j5ik2o/takt-marp/commit/0a1d8d1ed582f0898efba2fc6fb41f449380e729))
+
 ## [0.2.1](https://github.com/j5ik2o/takt-marp/compare/v0.2.0...v0.2.1) (2026-06-16)
 
 ### Bug Fixes
