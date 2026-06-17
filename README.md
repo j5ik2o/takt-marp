@@ -75,10 +75,13 @@ slides/<deck>/
 - spatial balance: top/left bias, large unintended blank areas, visual center of gravity
 - design-system usage: tokenized CSS, no per-slide style drift
 
-`deliver` is responsible for requested artifacts. PDF generation builds only the target deck's `SLIDES.md`:
+`deliver` is responsible for requested artifacts, delivery verification, and final supervision.
+For simple local generation or inspection, use utility commands that do not change workflow state:
 
 ```bash
-npm run build:pdf -- <deck>
+takt-marp build:html <deck>
+takt-marp build:pdf <deck>
+takt-marp preview <deck>
 ```
 
 ### 5. Validation

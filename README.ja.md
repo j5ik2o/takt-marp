@@ -75,10 +75,13 @@ slides/<deck>/
 - spatial balance: 上寄り、左寄り、大きな意図しない余白、視覚重心
 - design-system usage: token化されたCSS、スライドごとのstyle drift防止
 
-`deliver` は要求された成果物を生成します。PDF生成は対象deckの `SLIDES.md` だけをbuildします。
+`deliver` は要求された成果物を生成し、delivery verification と supervision まで行います。
+単純なローカル生成や確認だけなら、workflow state を変更しない utility command を使います。
 
 ```bash
-npm run build:pdf -- <deck>
+takt-marp build:html <deck>
+takt-marp build:pdf <deck>
+takt-marp preview <deck>
 ```
 
 ### 5. 検証

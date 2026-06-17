@@ -263,6 +263,9 @@ Steps:
 Marp HTML/PDF/PPTX 生成、delivery verification、delivery-only fix、最終 supervision を command 内部で完結させる。
 `plan.md` の `deliverables` に `pdf` がある場合は `dist/<deck>/SLIDES.pdf` を生成・検証する。
 
+単純なローカル生成や preview は `takt-marp build:html`、`takt-marp build:pdf`、`takt-marp build:pptx`、`takt-marp preview` を使う。
+これらは TAKT workflow を起動せず、workflow state、review report、approval file を変更しない utility command とする。
+
 Steps:
 
 1. `build_delivery`
@@ -339,7 +342,7 @@ Appendix は必要な場合だけ生成し、本編と明確に分離する。
 
 必須:
 
-- `npm run build:html -- <deck>` が成功する
+- `takt-marp build:html <deck>` が成功する
 - `SLIDES.md` から参照される `images/*.svg` が存在する
 - SVG が XML として壊れていない
 - `dist/` に HTML が生成される
@@ -353,7 +356,7 @@ Appendix は必要な場合だけ生成し、本編と明確に分離する。
 
 ## Smoke fixture
 
-通常の `npm run build` は `slides/` 配下の Markdown を変換対象にする。
+通常の `takt-marp build:*` と `npm run build` は target 省略時に `slides/` 配下の Markdown を変換対象にする。
 そのため smoke 用の入力は `slides/` 外に置き、実行確認時だけ `slides/_workflow-smoke/` にコピーする。
 
 ```text
