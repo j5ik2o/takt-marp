@@ -1,133 +1,184 @@
 # 実装計画
 
-- [x] 1. 基盤: 実行基盤と package 境界を確立する
-- [x] 1.1 project root と分離された runtime context 解決を提供する
-  - takt-marp package 自身の位置から package root と実行ファイル置き場を決定論的に導出し、cwd の影響を受けずに takt / marp の実行ファイル path と package 内 script path を解決できるようにする
-  - 既存 foundation validation が使う明示 root の override を引き続き受け付ける
-  - Windows の実行ファイル拡張子差(.cmd)を既存実装と同じ規則で扱う
-  - 完了条件: repo root で解決される takt / marp の path が従来の cwd 基準の解決結果と一致し、別 directory から実行しても同じ path が返る
-  - _Requirements:_ 4.3, 5.1
-  - _Boundary:_ RuntimeContextResolver
-  - _Depends:_ none
-
-- [x] 1.2 既存の実行ファイル解決を package 基準へ差し替える
-  - workflow runner が使う takt 解決の既定を cwd 基準から package 基準へ変更し、明示 root override の互換を維持する
-  - slide artifact build の marp 解決も同じ解決機構へ揃える
-  - 実行ファイル不在時のエラーメッセージを global install 文脈(takt-marp の再 install 案内)へ更新する
-  - workflow の成功条件・状態遷移・report sync には手を入れない
-  - foundation validation の spawn 型 fixture(runner subprocess + fake takt)を packageRoot / projectRoot 分離レイアウトへ追随させる(assertion・期待エラーコードは不変。design「変更対象ファイル」参照)
-  - 完了条件: `npm test`(foundation validation)が成功し、repo-local の `npm run slide:*` 入口が従来どおり動作する
-  - _Requirements:_ 4.3, 5.1, 5.5
-  - _Boundary:_ 既存 lib / build / smoke の変更, foundation validation fixture
-  - _Depends:_ 1.1
-
-- [x] 1.3 (P) package metadata の境界を宣言する
-  - bin entrypoint、files allowlist(bin / scripts / templates / smoke fixture / marp 設定)、engines.node >= 24 を宣言する
-  - takt、Marp CLI、kroki plugin を runtime dependencies へ移行し、yargs override を維持したまま lockfile を再生成する
-  - installer 系 npm scripts(同期 / drift 検証 / package 境界検証 / global install 検証)の入口を追加する(実体 script は後続タスクで作成)
-  - bin の実体ファイルは後続タスクで作成されるため、この時点では global install 経路は未検証でよい
-  - 完了条件: `npm ci` と `npm test` が成功し、`npm pack --dry-run` の file 一覧が allowlist の範囲に収まる
-  - _Requirements:_ 1.1, 1.4, 4.3
+- [ ] 1. 基盤: global 実行と template 境界の土台を整える
+- [ ] 1.1 package install 境界を global CLI 契約へ更新する
+  - global install 後に `takt-marp` が PATH から起動できる bin、runtime dependency、Node.js runtime、package include 境界を宣言する
+  - package に含める範囲を CLI、workflow 実行、template、smoke、Marp utility の実行に必要なものへ限定する
+  - 完了条件: package metadata と pack dry-run 検証で PATH 起動、対応 Node.js version、include 境界の期待値が確認できる
+  - _Requirements:_ 1.1, 1.5, 7.5, 8.1
   - _Boundary:_ PackageMetadata
   - _Depends:_ none
 
-- [x] 2. コア: installer コンポーネント群を実装する
-- [x] 2.1 (P) 配布 template の境界定義を実装する
-  - workflows / facets の 2 domain に固定した allowlist、禁止 pattern(provider 設定・runtime state・認証情報など)、template entry の列挙を単一の定義として実装する
-  - 2 つの tree(配布正本と開発用 .takt)の差分(欠落 / 内容不一致)を byte 単位で計算できるようにする
-  - 完了条件: 列挙結果が workflows / facets 配下のみを返し、禁止 pattern を含む tree に対する検証が違反 path を報告して失敗する
-  - _Requirements:_ 2.3, 2.4, 7.1, 7.2
-  - _Boundary:_ ProjectTemplateSet
+- [ ] 1.2 CLI entry の version guard と dispatcher 起動を確立する
+  - 未対応 Node.js runtime では workflow を開始せず、必要 version が分かる失敗情報を返す
+  - 対応 runtime では global CLI entry から command dispatcher へ処理を委譲する
+  - 完了条件: 対応外 runtime の失敗と対応 runtime の dispatcher 起動を、CLI entry 単体の検証で再現できる
+  - _Requirements:_ 1.1, 1.5
+  - _Boundary:_ CliEntry
   - _Depends:_ 1.1
 
-- [x] 2.2 template の同期と drift 検証を実装し配布正本を生成する
-  - 開発用 .takt から配布正本への同期(書き込みモード)と、drift 検出(既定モード、種別ごとの path 一覧表示と失敗)を実装する
-  - 初回同期を実行して配布正本(workflows / facets)を repo に生成し、git 管理下へ置く
-  - 完了条件: 同期直後の drift 検証が成功し、template 側 1 file を改変すると該当 path を表示して失敗する
+- [ ] 1.3 package root と project root を分離した runtime 解決を固定する
+  - global package 側の `takt`、Marp utility、内部実行 script を対象 project の `package.json` や `node_modules` に依存せず解決する
+  - workflow 実行時の current working directory は対象 project として維持し、target project の `npm run` 経由へ戻らないようにする
+  - 完了条件: `package.json` と `node_modules` がない対象 project でも、それらの不在だけを理由に workflow command が失敗しないことを検証できる
+  - _Requirements:_ 2.5, 2.7, 5.5
+  - _Boundary:_ RuntimeContext
+  - _Depends:_ 1.1
+
+- [ ] 1.4 workflow と template が共有する error 境界を独立させる
+  - `init` 廃止、partial template state、eject conflict、target error、workflow file 欠落を一貫した error code と表示形式で扱う
+  - template 判定側と slide workflow 側が相互 import せず、共通 error 境界だけを参照する構造にする
+  - 完了条件: 主要 error code の表示形式が単体検証で固定され、template と workflow の import 循環が発生しない
+  - _Requirements:_ 1.4, 2.4, 4.1, 5.2
+  - _Boundary:_ TaktMarpErrors
+  - _Depends:_ none
+
+- [ ] 1.5 bundled template の配布対象を workflow/facet だけに固定する
+  - bundled 実行と eject の対象を `.takt/workflows/**` と `.takt/facets/**` に限定し、provider 設定、runtime state、認証情報を除外する
+  - template entry の列挙と禁止 pattern 検査を、eject、resolver、validator が同じ前提で使えるようにする
+  - 完了条件: template 列挙が workflow/facet だけを返し、禁止対象を含む template は path 付きで検出される
+  - _Requirements:_ 3.3, 3.4, 7.1, 7.2
+  - _Boundary:_ ProjectTemplateSet
+  - _Depends:_ 1.4
+
+- [ ] 2. コア: no-copy template selection と eject を実装する
+- [ ] 2.1 TemplateSourceResolver で bundled/ejected/partial state を判定する
+  - 対象 project に workflow/facet の両方がない場合は package bundled template を no-copy で選ぶ
+  - 両方がある場合は ejected override として扱い、片方だけの場合は混在させず修復が必要な失敗にする
+  - current working directory だけを対象 project として扱い、親 directory を暗黙探索しない
+  - 完了条件: none、both、partial の各 template state が期待どおりの source selection または失敗情報になる
+  - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.6, 8.3
+  - _Boundary:_ TemplateSourceResolver
+  - _Depends:_ 1.3, 1.5
+
+- [ ] 2.2 (P) ProjectEjector で明示的な template copy だけを提供する
+  - `eject .` と `eject <dir>` は workflow/facet template だけを対象 directory へ生成する
+  - runtime state、provider 設定、認証情報、template 対象外ファイルは成功時も force 時も生成・削除・変更しない
+  - 既存 template 対象ファイルは既定で衝突一覧付きの書き込みゼロ失敗にし、`--force` と `--overwrite` の明示時だけ template 対象を上書きする
+  - takt-marp upgrade 時に ejected assets を自動 merge、自動置換、best-effort 更新しない前提を挙動として固定する
+  - 完了条件: 通常 eject、衝突失敗、force 上書き、対象外ファイル不変、state/config 非生成を一時 project で検証できる
+  - _Requirements:_ 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 4.5, 8.4, 8.5
+  - _Boundary:_ ProjectEjector
+  - _Depends:_ 1.5
+
+- [ ] 2.3 (P) TemplateSyncValidator で開発用 workflow/facet との drift を検出する
+  - package bundled template と開発用 `.takt/workflows/**` / `.takt/facets/**` の byte drift を検出する
+  - drift がある場合は、差分種別と path が分かる失敗情報を返す
+  - 完了条件: 同期済み状態では成功し、template 側または開発用側の差分を入れると path 付きで失敗する
   - _Requirements:_ 7.3, 7.4
   - _Boundary:_ TemplateSyncValidator
-  - _Depends:_ 2.1
+  - _Depends:_ 1.5
 
-- [x] 2.3 project initializer を実装する
-  - 指定 directory(既定は現在地)へ template entry のみをコピーし、中間 directory を必要に応じて作成する
-  - 全 entry の衝突を書き込み前に走査し、衝突があれば書き込みゼロのまま衝突 path 全件を表示して失敗する
-  - `--force` / `--overwrite`(完全 alias)指定時のみ template 対象 path の上書きを許可し、対象外の既存ファイルはどの分岐でも変更しない
-  - 対象 directory 不在時は明確なエラーで失敗する
-  - 完了条件: 一時 directory への初期化で workflows / facets のみが生成され、再実行が衝突一覧付きで失敗し、force 指定で template 対象だけが上書きされる
-  - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.5, 3.1, 3.2, 3.3, 3.4, 3.5
-  - _Boundary:_ ProjectInitializer
+- [ ] 2.4 (P) PackageBoundaryValidator を eject/no-copy 前提へ更新する
+  - package 内容が workflow/facet template、runtime 実行物、smoke fixture、utility 実行物の範囲に収まることを検証する
+  - `init` 前提の必須 file や project-local template 必須化を除去し、禁止 pattern と include 境界の不一致を失敗にする
+  - 完了条件: 正常 package は成功し、禁止 file 混入や include 境界の欠落は path または項目名付きで失敗する
+  - _Requirements:_ 7.1, 7.2, 7.5
+  - _Boundary:_ PackageBoundaryValidator
+  - _Depends:_ 1.1, 1.5
+
+- [ ] 3. 統合: CLI command surface と workflow 実行を接続する
+- [ ] 3.1 CommandDispatcher の public command surface を置き換える
+  - help に `eject`、`plan`、`compose`、`polish`、`deliver`、`approve`、`smoke`、`build:html`、`build:pdf`、`build:pptx`、`preview` を表示する
+  - `slide:*` は global CLI の有効 command として扱わず、`init` は廃止済みとして `eject` guidance を返す
+  - `eject` の対象 directory と `--force` / `--overwrite` を ProjectEjector へ渡す
+  - 完了条件: help、未知 command、`slide:*` 拒否、`init` 廃止、`eject` 委譲が CLI 検証で確認できる
+  - _Requirements:_ 1.2, 1.3, 1.4, 2.1, 2.6, 3.1, 3.2, 4.3
+  - _Boundary:_ CommandDispatcher
   - _Depends:_ 2.1, 2.2
 
-- [x] 2.4 (P) 既存 smoke script を global 経路対応にする
-  - smoke の project root を script 位置基準から cwd 基準へ変更する(fixture と runner の package 内解決は不変)
-  - npm run 経由の 3 spawn(approve 系と workflow command 系)を package 内 script の直接起動へ置換する(検証意味論は不変)
-  - workflow doctor の takt 解決を runtime context 経由へ変更する
-  - 検証 phase の構成・provider 分離・summary 生成には手を入れない
-  - 完了条件: repo root での `npm run slide:smoke` が従来どおり成功し、smoke script 内に npm run 経由の spawn が残っていない
-  - _Requirements:_ 6.1, 8.4
-  - _Boundary:_ 既存 lib / build / smoke の変更
-  - _Depends:_ 1.1, 1.2
+- [ ] 3.2 SlideWorkflowLib を selected template source で動く薄い契約層にする
+  - selected template source の workflow path を使い、target contract、prerequisite、rerun blocking、force invalidation、report freshness、approval ownership を再定義せず維持する
+  - 無効 target は TAKT workflow 開始前に既存 slide workflow と同等の target error として返す
+  - 完了条件: invalid target、既存成功状態、force 指定、provider 指定の既存契約が global CLI 経由でも同じ判定になる
+  - _Requirements:_ 5.1, 5.2, 5.3, 5.4, 5.5
+  - _Boundary:_ SlideWorkflowLib
+  - _Depends:_ 1.4
 
-- [x] 2.5 global CLI の入口と command dispatch を実装する
-  - bin entry: Node version guard(24 未満は必要 version を表示して失敗)後に dispatcher を起動する
-  - help(引数なし / --help)で 6 command を表示して正常終了し、それ以外の command(slide:* 形式を含む)は有効 command 一覧付きで失敗する
-  - workflow command は cwd 直下の workflows / facets の存在を確認し(親 directory は探索しない)、欠落時は初期化の案内付きで失敗、存在時は cwd を維持したまま package 内 runner script を直接起動して引数を素通しし、exit code を伝播する(npm run は経由しない)
-  - init subcommand は対象 directory と force option を解析して initializer を呼び出し、成功時は次手順(provider 設定がユーザ所有であること、workflow 実行例)を案内する(ファイル生成はしない)
-  - 完了条件: repo 内から bin を直接実行して、help 表示 / 未知 command 拒否 / 未初期化検出 / init 実行 / init 済み一時 project での workflow command 委譲(runner の target エラーが表面化)が確認できる
-  - _Requirements:_ 1.2, 1.3, 1.4, 2.2, 4.1, 4.2, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5
-  - _Boundary:_ CliEntry, CommandDispatcher
-  - _Depends:_ 1.2, 2.3
+- [ ] 3.3 WorkflowRunner で no-copy workflow 実行を実現する
+  - TemplateSourceResolver の選択結果から workflow file を明示指定し、target project へ template assets をコピーしない
+  - TAKT は global package 側 runtime から直接起動し、target project の `npm run` を経由しない
+  - provider 引数は workflow 実行へ素通しし、cwd は対象 project のまま維持する
+  - 完了条件: bundled no-copy、ejected override、partial state、npm project 不在の各経路が期待どおりに成功または失敗する
+  - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.7, 5.1, 5.3, 5.4, 5.5, 8.3
+  - _Boundary:_ WorkflowRunner
+  - _Depends:_ 2.1, 3.2
 
-- [x] 2.6 smoke subcommand を実装する
-  - 一時プロジェクトを作成して initializer で template を導入し、cwd を一時プロジェクトにして既存 smoke script を起動、provider 指定を素通しする(未指定時は smoke script の mock 既定が適用される)
-  - 終了後に結果と一時プロジェクト path(provider 別 summary の所在)を表示し、一時プロジェクトは保持する
-  - TAKT が provider 設定ファイル不在で実行できるか(mock 指定時 / 未指定時)を検証し、不可の場合のみ一時プロジェクト内に限り ephemeral な最小設定を生成する(利用者 project へは生成しない)
-  - real provider の設定不足は失敗としてそのまま表面化させ、provider 設定の生成・変更は行わない
-  - 完了条件: `takt-marp smoke` 相当の実行が一時プロジェクトで mock smoke を完走し、mock 用と分かる検証結果の所在が表示される
-  - _Requirements:_ 6.1, 6.2, 6.3, 6.4, 6.5
+- [ ] 3.4 approve command から template asset preflight を外す
+  - `approve` は approval file の読み書きに必要な既存 contract だけを使い、workflow/facet template の存在を要求しない
+  - command dispatch は approve を workflow command と混同せず、template source selection を不要なまま維持する
+  - 完了条件: workflow/facet template がない対象 project でも、approval contract の成否だけで `approve` の結果が決まる
+  - _Requirements:_ 1.2, 5.6
+  - _Boundary:_ CommandDispatcher, ApproveScript
+  - _Depends:_ 3.1
+
+- [ ] 3.5 retained utility commands を package runtime で維持する
+  - `build:html`、`build:pdf`、`build:pptx`、`preview` は help と dispatch の public command として残す
+  - Marp utility は package root 側 runtime を使い、target project の local install 有無に依存しない
+  - 完了条件: utility command の help 表示と package runtime 解決が、target project の `node_modules` 不在でも確認できる
+  - _Requirements:_ 1.2, 2.5, 5.5
+  - _Boundary:_ CommandDispatcher, BuildAndPreview
+  - _Depends:_ 1.3, 3.1
+
+- [ ] 4. smoke: mock/real 分離と no-copy 検証を実装する
+- [ ] 4.1 SmokeEntry を no-copy temp project 実行へ変更する
+  - provider 未指定時は mock provider を既定にし、指定時は provider 名を smoke validation へ素通しする
+  - smoke 用 workspace は利用者 cwd を汚さず、temp project にも既定で workflow/facet template を eject しない
+  - real provider 設定が不足している場合も provider 設定を生成せず、環境確認につながる失敗情報を返す
+  - 完了条件: user cwd に template、provider 設定、runtime state を生成せず、mock 既定と provider pass-through が確認できる
+  - _Requirements:_ 6.1, 6.3, 6.5, 6.6, 6.7, 8.7
   - _Boundary:_ SmokeEntry
-  - _Depends:_ 2.4, 2.5
-
-- [x] 3. 統合: installer 検証と CI を配線する
-- [x] 3.1 package 境界検証を実装する
-  - 配布正本 tree が workflows / facets のみで構成され禁止 pattern を含まないこと、npm pack の実 file 一覧が files allowlist と過不足なく整合すること、bin / engines / runtime dependencies の宣言が揃っていることを検証する
-  - pack 内容の必須 assertion は bin 実体・runner / smoke / lib script・template 全 entry を対象とする(検証 script 自身は allowlist 内包で足り、必須 assertion の対象にしない)
-  - 違反時は違反 path / 欠落項目の一覧を表示して失敗する
-  - 負シナリオ(allowlist から template を外す・禁止 file を混入させる)の動作確認は repo を変異させず、隔離した一時 copy 上で行う
-  - 完了条件: 正常構成で成功し、負シナリオの各ケースで違反一覧付きの失敗になる
-  - _Requirements:_ 1.4, 7.1, 7.2, 7.5
-  - _Boundary:_ PackageBoundaryValidator
-  - _Depends:_ 1.3, 2.2, 2.5
-
-- [x] 3.2 global install の E2E 検証を実装する
-  - tarball を一時 npm prefix へ global install し、PATH 経由で help 表示と slide:* 拒否を確認する
-  - 一時 target project での init が workflows / facets のみを生成し(provider 設定・runtime state 不在、事前置きした対象外 file 不変)、再 init の衝突失敗(書き込みゼロ)と force 上書きが要件どおり動くことを検証する
-  - 未初期化 directory での workflow command が初期化案内で失敗すること、init 済みかつ package.json / node_modules 不在の project で npm project 不在以外の理由でのみ失敗すること、provider 設定不在時の失敗モードが npm project 不在を理由にしないことを assertion として固定する
-  - mock provider の smoke を必須 phase として実行し、real provider は実行も必須化もしない
-  - 完了条件: 検証一式が全 phase pass で成功し、任意の phase 失敗が phase 名付きの失敗情報になる
-  - _Requirements:_ 1.1, 1.2, 1.3, 4.2, 4.3, 8.1, 8.2, 8.3, 8.4, 8.5
-  - _Boundary:_ GlobalInstallValidator
-  - _Depends:_ 1.3, 2.6
-
-- [x] 3.3 CI を Node 24 と installer 検証へ更新する
-  - CI の Node version を 24 へ更新し、既存の test と repo-local smoke step を維持したまま、template drift 検証・package 境界検証・global install 検証の step を追加する
-  - real provider smoke を CI の必須条件に含めない
-  - 完了条件: CI 定義に新 step が追加され、同じ command 列がローカルで全て成功する
-  - _Requirements:_ 7.3, 8.1, 8.4, 8.5
-  - _Boundary:_ CI 配線
-  - _Depends:_ 3.1, 3.2
-
-- [x] 4. 検証: 全経路の回帰を確認する
-  - クリーンな依存状態から、foundation validation(npm test)、repo-local mock smoke、template drift 検証、package 境界検証、global install E2E 検証を順に実行し、すべて成功させる
-  - 失敗が出た場合は該当タスクへ戻して修正し、ここでは回避策を入れない
-  - 完了条件: 上記 5 系統の command がすべて exit 0 で完走したログが揃う
-  - _Requirements:_ 5.1, 5.5, 6.1, 7.3, 7.5, 8.1, 8.4
-  - _Boundary:_ 統合検証(全 validator 横断)
   - _Depends:_ 3.3
 
-## Implementation Notes
+- [ ] 4.2 SmokeValidator が selected template source を検査に使うようにする
+  - workflow inspection と workflow doctor は global CLI と同じ TemplateSourceResolver 規則で選ばれた template source を参照する
+  - mock summary は mock 用、real summary は provider 名付き real 用として区別できる検証結果にする
+  - smoke temp project に workflow/facet template が生成されていないことを assertion として固定する
+  - 完了条件: smoke validation の inspection、doctor、summary、no-copy assertion が bundled template と ejected override の両方で確認できる
+  - _Requirements:_ 6.2, 6.4, 6.7, 8.6
+  - _Boundary:_ SmokeValidator
+  - _Depends:_ 4.1
 
-- 3.1: `installer:check-package` はこの開発端末ではローカル未追跡 `scripts/run-*.sh` を検出して意図どおり失敗する(dirty-workstation publish 防止)。クリーン checkout / CI では成功する。タスク 4 の回帰はクリーン clone 相当の環境で実行すること。
-- 2.6: TAKT 0.44 は `.takt/config.yaml` 不在(かつ `TAKT_CONFIG_DIR` 空)でも `--provider mock` の full smoke を完走する。ephemeral config 分岐は不要だった。3.2 の validator は「config 不在の workflow command 失敗モード」観測時にこの前提(TAKT 自体は config 不要、失敗は target/brief 系エラー)を踏まえること。
-- 1.3: `files` の `scripts/` は directory 単位のため、git 未追跡のローカル file(例: `scripts/run-claude-*.sh`、`.git/info/exclude` 管理)も `npm pack` に同梱され得る。3.1 の PackageBoundaryValidator は git 追跡状態または file pattern(`takt-marp-*.mjs` / `lib/`)で予期しない scripts 同梱を検出すること。
-- 1.2: foundation validation の 8 チェックは runner を subprocess 起動し fake takt を fixture cwd の `node_modules/.bin` に置く方式のため、`options.root` override では互換にならない。fixture は fake packageRoot(runner / lib / runtime-context をコピー、fake takt は fake packageRoot 側)で global レイアウトをモデル化する。symlink は ESM の realpath 解決で packageRoot が repo に戻るためコピー必須。assertion・期待エラーコードは upstream 所有の契約本体なので変更禁止。
+- [ ] 4.3 smoke regression で mock 必須・real 任意の契約を固定する
+  - `takt-marp smoke` は mock provider で完走することを必須検証にする
+  - `--provider <name>` は指定 provider の結果を生成するが、CI 必須条件として real provider 成功を要求しない
+  - provider 設定不足時に設定ファイルを生成しないこと、user cwd と temp project の no-copy 状態を検証する
+  - 完了条件: mock smoke、provider 指定、設定不足、no-copy temp project の各回帰が自動検証で固定される
+  - _Requirements:_ 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 8.6, 8.7
+  - _Boundary:_ SmokeEntry, SmokeValidator
+  - _Depends:_ 4.2
+
+- [ ] 5. 検証: global install 経路と stale init 前提を固定する
+- [ ] 5.1 GlobalInstallValidator を no-copy/eject 契約へ更新する
+  - tarball を global install 相当の環境へ導入し、PATH 経由の `takt-marp` command を検証する
+  - help surface は `init` を含まず、eject、workflow、approve、smoke、retained utility command を含むことを検証する
+  - no-copy workflow は未初期化エラーで停止せず、target project へ workflow/facet template をコピーしないことを検証する
+  - eject の生成境界、衝突失敗、force 上書き、mock smoke、real smoke 非必須を phase ごとに検証する
+  - 完了条件: global install validator が全 phase pass し、任意 phase の失敗時は phase 名と失敗内容が分かる
+  - _Requirements:_ 1.1, 1.2, 1.3, 1.4, 2.2, 2.3, 2.4, 2.5, 3.1, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7
+  - _Boundary:_ GlobalInstallValidator
+  - _Depends:_ 3.3, 4.3
+
+- [ ] 5.2 installer validation の CI 入口を更新する
+  - template drift、package boundary、foundation、global install、mock smoke の検証を CI から実行できる command 列に揃える
+  - real provider smoke は CI 必須条件に含めず、明示実行時だけ失敗を表面化する
+  - 完了条件: CI と同じ command 列をローカルで実行でき、template drift、package 境界、global install、mock smoke の失敗が無視されない
+  - _Requirements:_ 7.3, 7.4, 7.5, 8.1, 8.6, 8.7
+  - _Boundary:_ CI配線
+  - _Depends:_ 2.3, 2.4, 5.1
+
+- [ ] 5.3 stale init 前提を検出して除去する
+  - public command、validator、smoke、package boundary に残る `init` 有効化や project-local template 必須化の前提を失敗条件として扱う
+  - ejected assets は upgrade で自動置換されないことを、validator と回帰検証の期待値に含める
+  - 完了条件: `init` が有効 command として表示または実行される変更、ならびに ejected assets の暗黙更新は自動検証で失敗する
+  - _Requirements:_ 1.4, 3.6, 8.2
+  - _Boundary:_ IntegrationCleanup
+  - _Depends:_ 5.2
+
+- [ ] 5.4 全経路の回帰を実行して実装可能状態を確認する
+  - foundation、template drift、package boundary、global install、mock smoke、workflow no-copy、eject conflict の検証を一通り実行する
+  - 失敗が出た場合は該当境界のタスクへ戻して修正し、検証タスク側で回避策を入れない
+  - 完了条件: no-copy workflow と eject-only template copy の主要 command がすべて exit 0 で完走したログが揃う
+  - _Requirements:_ 1.1, 1.2, 1.3, 1.4, 1.5, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 4.1, 4.2, 4.3, 4.4, 4.5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 7.1, 7.2, 7.3, 7.4, 7.5, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7
+  - _Boundary:_ 統合検証
+  - _Depends:_ 5.3
