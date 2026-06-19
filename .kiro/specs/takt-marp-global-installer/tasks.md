@@ -61,7 +61,7 @@
   - _Boundary:_ ProjectEjector
   - _Depends:_ 1.5
 
-- [ ] 2.3 (P) TemplateSyncValidator で開発用 workflow/facet との drift を検出する
+- [x] 2.3 (P) TemplateSyncValidator で開発用 workflow/facet との drift を検出する
   - package bundled template と開発用 `.takt/workflows/**` / `.takt/facets/**` の byte drift を検出する
   - drift がある場合は、差分種別と path が分かる失敗情報を返す
   - 完了条件: 同期済み状態では成功し、template 側または開発用側の差分を入れると path 付きで失敗する

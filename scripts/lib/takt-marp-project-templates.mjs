@@ -6,6 +6,11 @@ import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 
 export const TEMPLATE_DOMAINS = Object.freeze(["workflows", "facets"]);
 export const WORKFLOW_TEMPLATE_COMMANDS = Object.freeze(["plan", "compose", "polish", "deliver"]);
+export const TEMPLATE_DRIFT_KINDS = Object.freeze([
+  { key: "missingInTemplate", label: "missing in template (exists only in dev .takt)" },
+  { key: "missingInDev", label: "missing in dev .takt (exists only in template)" },
+  { key: "contentMismatch", label: "content mismatch" },
+]);
 
 export const PROHIBITED_TEMPLATE_PATTERNS = Object.freeze([
   /(^|\/)config\.yaml$/i,
@@ -172,4 +177,23 @@ export async function diffTemplateTrees(templateRoot, devTaktRoot) {
   contentMismatch.sort();
 
   return { missingInTemplate, missingInDev, contentMismatch };
+}
+
+export function countTemplateDriftPaths(drift) {
+  return TEMPLATE_DRIFT_KINDS.reduce((total, kind) => total + (drift[kind.key]?.length ?? 0), 0);
+}
+
+export function formatTemplateDrift(drift) {
+  const lines = [];
+  for (const kind of TEMPLATE_DRIFT_KINDS) {
+    const relativePaths = drift[kind.key] ?? [];
+    if (relativePaths.length === 0) {
+      continue;
+    }
+    lines.push(`${kind.label} (${relativePaths.length}):`);
+    for (const relativePath of relativePaths) {
+      lines.push(`  - ${relativePath}`);
+    }
+  }
+  return lines;
 }

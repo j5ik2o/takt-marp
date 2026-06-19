@@ -13,6 +13,8 @@ import {
 import { ejectProject } from "./lib/takt-marp-project-eject.mjs";
 import { initializeProject } from "./lib/takt-marp-project-init.mjs";
 import {
+  diffTemplateTrees,
+  formatTemplateDrift,
   listTemplateEntries,
   resolveTemplateSource,
   workflowFilePath,
@@ -496,6 +498,86 @@ async function main() {
     }
   });
 
+  await check("template sync validator detects byte drift between package template and dev .takt trees", async () => {
+    const identicalRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-identical-"));
+    const identicalTemplateRoot = path.join(identicalRoot, "templates", "project");
+    const identicalDevRoot = path.join(identicalRoot, ".takt");
+    await writeTemplateTree(identicalTemplateRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", "name: plan\n"],
+      ["facets/instructions/takt-marp-compose-fix.md", "# Compose fix\n"],
+    ]));
+    await writeTemplateTree(identicalDevRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", "name: plan\n"],
+      ["facets/instructions/takt-marp-compose-fix.md", "# Compose fix\n"],
+    ]));
+    const identical = await diffTemplateTrees(identicalTemplateRoot, identicalDevRoot);
+    assert(identical.missingInTemplate.length === 0, `identical trees reported missingInTemplate: ${identical.missingInTemplate.join(", ")}`);
+    assert(identical.missingInDev.length === 0, `identical trees reported missingInDev: ${identical.missingInDev.join(", ")}`);
+    assert(identical.contentMismatch.length === 0, `identical trees reported contentMismatch: ${identical.contentMismatch.join(", ")}`);
+
+    const devOnlyRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-dev-only-"));
+    const devOnlyTemplateRoot = path.join(devOnlyRoot, "templates", "project");
+    const devOnlyDevRoot = path.join(devOnlyRoot, ".takt");
+    await writeTemplateTree(devOnlyTemplateRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", "name: plan\n"],
+    ]));
+    await writeTemplateTree(devOnlyDevRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", "name: plan\n"],
+      ["facets/instructions/dev-only.md", "# Dev only\n"],
+    ]));
+    const devOnly = await diffTemplateTrees(devOnlyTemplateRoot, devOnlyDevRoot);
+    assert(
+      JSON.stringify(devOnly.missingInTemplate) === JSON.stringify(["facets/instructions/dev-only.md"]),
+      `dev-only file should be missingInTemplate with path, got: ${JSON.stringify(devOnly)}`,
+    );
+
+    const templateOnlyRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-template-only-"));
+    const templateOnlyTemplateRoot = path.join(templateOnlyRoot, "templates", "project");
+    const templateOnlyDevRoot = path.join(templateOnlyRoot, ".takt");
+    await writeTemplateTree(templateOnlyTemplateRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", "name: plan\n"],
+      ["facets/instructions/template-only.md", "# Template only\n"],
+    ]));
+    await writeTemplateTree(templateOnlyDevRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", "name: plan\n"],
+    ]));
+    const templateOnly = await diffTemplateTrees(templateOnlyTemplateRoot, templateOnlyDevRoot);
+    assert(
+      JSON.stringify(templateOnly.missingInDev) === JSON.stringify(["facets/instructions/template-only.md"]),
+      `template-only file should be missingInDev with path, got: ${JSON.stringify(templateOnly)}`,
+    );
+
+    const mismatchRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-mismatch-"));
+    const mismatchTemplateRoot = path.join(mismatchRoot, "templates", "project");
+    const mismatchDevRoot = path.join(mismatchRoot, ".takt");
+    await writeTemplateTree(mismatchTemplateRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", Buffer.from([0x00, 0xff, 0x0a])],
+    ]));
+    await writeTemplateTree(mismatchDevRoot, new Map([
+      ["workflows/takt-marp-slide-plan.yaml", Buffer.from([0x00, 0xfe, 0x0a])],
+    ]));
+    const mismatch = await diffTemplateTrees(mismatchTemplateRoot, mismatchDevRoot);
+    assert(
+      JSON.stringify(mismatch.contentMismatch) === JSON.stringify(["workflows/takt-marp-slide-plan.yaml"]),
+      `byte mismatch should be contentMismatch with path, got: ${JSON.stringify(mismatch)}`,
+    );
+  });
+
+  await check("template drift formatter reports drift kind labels and paths", async () => {
+    const lines = formatTemplateDrift({
+      missingInTemplate: ["facets/instructions/dev-only.md"],
+      missingInDev: ["workflows/template-only.yaml"],
+      contentMismatch: ["workflows/takt-marp-slide-plan.yaml"],
+    });
+    const output = lines.join("\n");
+    assert(output.includes("missing in template (exists only in dev .takt) (1):"), `missingInTemplate label omitted: ${output}`);
+    assert(output.includes("  - facets/instructions/dev-only.md"), `missingInTemplate path omitted: ${output}`);
+    assert(output.includes("missing in dev .takt (exists only in template) (1):"), `missingInDev label omitted: ${output}`);
+    assert(output.includes("  - workflows/template-only.yaml"), `missingInDev path omitted: ${output}`);
+    assert(output.includes("content mismatch (1):"), `contentMismatch label omitted: ${output}`);
+    assert(output.includes("  - workflows/takt-marp-slide-plan.yaml"), `contentMismatch path omitted: ${output}`);
+  });
+
   await check("CLI entry delegates supported runtime to dispatcher", async () => {
     const result = spawnSync(process.execPath, [BIN_ENTRY_SCRIPT, "--help"], { encoding: "utf8" });
     assert(result.status === 0, `CLI entry help failed: ${result.stderr}`);
@@ -893,6 +975,14 @@ async function check(name, fn) {
     checks.push({ name, status: "PASS" });
   } catch (error) {
     checks.push({ name, status: "FAIL", error: formatError(error) });
+  }
+}
+
+async function writeTemplateTree(root, entries) {
+  for (const [relativePath, content] of entries) {
+    const destination = path.join(root, ...relativePath.split("/"));
+    await mkdir(path.dirname(destination), { recursive: true });
+    await writeFile(destination, content);
   }
 }
 
