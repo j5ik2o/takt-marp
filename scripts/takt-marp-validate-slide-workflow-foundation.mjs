@@ -762,6 +762,65 @@ async function main() {
     }
   });
 
+  await check("global CLI retained utility commands use package Marp without npm project", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-utility-package-runtime-"));
+    await mkdir(path.join(root, "slides", "demo"), { recursive: true });
+    await writeFile(
+      path.join(root, "slides", "demo", "SLIDES.md"),
+      ["---", "marp: true", "---", "", "# Demo", ""].join("\n"),
+      "utf8",
+    );
+
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeMarpExecutable(fakePackage.packageRoot);
+
+    const help = spawnSync(process.execPath, [fakePackage.binScript, "--help"], { cwd: root, encoding: "utf8" });
+    assert(help.status === 0, `global CLI help failed from package-less project: ${help.stderr}`);
+    for (const command of ["build:html", "build:pdf", "build:pptx", "preview"]) {
+      assert(new RegExp(`^  ${command}\\b`, "m").test(help.stdout), `global CLI help missing retained utility '${command}': ${help.stdout}`);
+    }
+
+    for (const command of ["build:html", "build:pptx", "preview"]) {
+      const utilityHelp = spawnSync(process.execPath, [fakePackage.binScript, command, "--help"], { cwd: root, encoding: "utf8" });
+      assert(utilityHelp.status === 0, `${command} help dispatch failed from fake package root: ${utilityHelp.stderr}`);
+      assert(utilityHelp.stdout.includes("Usage:"), `${command} help dispatch did not reach utility script: ${utilityHelp.stdout}`);
+    }
+
+    const marpArgsPath = path.join(root, "marp-args.txt");
+    const marpExecutablePath = path.join(root, "marp-executable.txt");
+    const build = spawnSync(
+      process.execPath,
+      [fakePackage.binScript, "build:pdf", "slides/demo"],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          MARP_ARGS_CAPTURE: marpArgsPath,
+          MARP_EXECUTABLE_CAPTURE: marpExecutablePath,
+        },
+      },
+    );
+    assert(build.status === 0, `build:pdf failed from package-less project: ${build.stderr}`);
+    assert(!existsSync(path.join(root, "package.json")), "utility command created or required project package.json");
+    assert(!existsSync(path.join(root, "node_modules")), "utility command created or required project node_modules");
+
+    const outputPath = path.join(root, "dist", "demo", "SLIDES.pdf");
+    assert(existsSync(outputPath), `fake Marp did not create requested output: ${outputPath}`);
+
+    const expectedProjectRoot = await realpath(root);
+    const expectedMarpPath = path.join(fakePackage.packageRoot, "node_modules", ".bin", runtimeExecutableName("marp"));
+    const actualMarpPath = (await readFile(marpExecutablePath, "utf8")).trim();
+    assert(actualMarpPath === expectedMarpPath, `Marp executable should resolve from package root: expected ${expectedMarpPath}, got ${actualMarpPath}`);
+
+    const args = (await readFile(marpArgsPath, "utf8")).trim().split("\n");
+    assert(args[0] === path.join(expectedProjectRoot, "slides", "demo", "SLIDES.md"), `Marp did not receive target SLIDES.md first: ${args.join(" ")}`);
+    assert(args.includes("--pdf"), `build:pdf did not pass --pdf to Marp: ${args.join(" ")}`);
+    const outputArgIndex = args.indexOf("--output");
+    assert(outputArgIndex >= 0, `Marp args did not include --output: ${args.join(" ")}`);
+    assert(args[outputArgIndex + 1] === path.join(expectedProjectRoot, "dist", "demo", "SLIDES.pdf"), `Marp output path should stay in target project dist: ${args.join(" ")}`);
+  });
+
   await check("invalid target rejects markdown file", async () => {
     const root = await fixtureRoot();
     await makeDeck(root, "demo");
@@ -1454,10 +1513,13 @@ async function makeFakeCliPackageRoot() {
   await mkdir(path.join(packageRoot, "bin"), { recursive: true });
   await cp(path.join(ROOT_DIR, "bin", "takt-marp.mjs"), path.join(packageRoot, "bin", "takt-marp.mjs"));
   await mkdir(path.join(packageRoot, "scripts"), { recursive: true });
-  await cp(
-    path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs"),
-    path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
-  );
+  for (const scriptName of [
+    "takt-marp-run-slide-workflow.mjs",
+    "takt-marp-build-slide-artifact.mjs",
+    "takt-marp-preview-slide.mjs",
+  ]) {
+    await cp(path.join(SCRIPT_DIR, scriptName), path.join(packageRoot, "scripts", scriptName));
+  }
   await cp(path.join(SCRIPT_DIR, "lib"), path.join(packageRoot, "scripts", "lib"), { recursive: true });
   await cp(path.join(ROOT_DIR, "templates", "project"), path.join(packageRoot, "templates", "project"), { recursive: true });
   const realPackageRoot = await realpath(packageRoot);
@@ -1471,6 +1533,38 @@ async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {
   const executablePath = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "takt.cmd" : "takt");
   await mkdir(path.dirname(executablePath), { recursive: true });
   await writeFile(executablePath, script, { encoding: "utf8", mode: 0o755 });
+}
+
+async function makeMarpExecutable(root) {
+  const executablePath = path.join(root, "node_modules", ".bin", runtimeExecutableName("marp"));
+  await mkdir(path.dirname(executablePath), { recursive: true });
+  await writeFile(
+    executablePath,
+    [
+      "#!/bin/sh",
+      "if [ -n \"$MARP_EXECUTABLE_CAPTURE\" ]; then",
+      "  printf '%s\\n' \"$0\" > \"$MARP_EXECUTABLE_CAPTURE\"",
+      "fi",
+      "if [ -n \"$MARP_ARGS_CAPTURE\" ]; then",
+      "  printf '%s\\n' \"$@\" > \"$MARP_ARGS_CAPTURE\"",
+      "fi",
+      "output=\"\"",
+      "while [ \"$#\" -gt 0 ]; do",
+      "  if [ \"$1\" = \"--output\" ]; then",
+      "    shift",
+      "    output=\"$1\"",
+      "  fi",
+      "  shift",
+      "done",
+      "if [ -n \"$output\" ]; then",
+      "  mkdir -p \"$(dirname \"$output\")\"",
+      "  printf 'fake marp output\\n' > \"$output\"",
+      "fi",
+      "exit 0",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
 }
 
 function runtimeExecutableName(tool) {

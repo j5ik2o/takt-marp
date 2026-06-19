@@ -112,7 +112,7 @@
   - _Boundary:_ CommandDispatcher, ApproveScript
   - _Depends:_ 3.1
 
-- [ ] 3.5 retained utility commands を package runtime で維持する
+- [x] 3.5 retained utility commands を package runtime で維持する
   - `build:html`、`build:pdf`、`build:pptx`、`preview` は help と dispatch の public command として残す
   - Marp utility は package root 側 runtime を使い、target project の local install 有無に依存しない
   - 完了条件: utility command の help 表示と package runtime 解決が、target project の `node_modules` 不在でも確認できる
