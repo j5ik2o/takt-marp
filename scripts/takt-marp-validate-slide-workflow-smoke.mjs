@@ -294,7 +294,6 @@ async function assertPlanSourceArtifacts(targetInfo) {
   const blueprint = await readFile(artifactPaths[3], "utf8");
   for (const [label, source, artifactPath] of [
     ["normalized", normalized, artifactPaths[0]],
-    ["reference", referenceAnalysis, artifactPaths[1]],
     ["plan", plan, artifactPaths[2]],
     ["blueprint", blueprint, artifactPaths[3]],
   ]) {
@@ -303,6 +302,7 @@ async function assertPlanSourceArtifacts(targetInfo) {
     assert(source.includes(SMOKE_SPEAKER_AFFILIATION), `sequence:plan-source-artifacts ${label} missing speaker affiliation`);
     assert(source.includes(SMOKE_COMMON_EXAMPLE), `sequence:plan-source-artifacts ${label} missing common example`);
   }
+  assertNoExternalSourceReferences(referenceAnalysis, artifactPaths[1]);
   for (const phrase of [
     "Fixed Outline",
     "Required Topics",

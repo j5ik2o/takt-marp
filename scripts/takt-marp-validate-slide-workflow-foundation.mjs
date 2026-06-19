@@ -129,9 +129,13 @@ async function main() {
     const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
     assert(result.status === 0, `runner failed to sync plan source artifacts: ${result.stderr}`);
     const normalized = await readFile(path.join(targetInfo.deckPath, "brief.normalized.md"), "utf8");
+    const referenceAnalysis = await readFile(path.join(targetInfo.deckPath, "reference-analysis.md"), "utf8");
     const plan = await readFile(path.join(targetInfo.deckPath, "plan.md"), "utf8");
+    const blueprint = await readFile(path.join(targetInfo.deckPath, "slide-blueprint.md"), "utf8");
     assert(normalized.includes("Mock normalized brief for run-current"), `normalized brief was not synced from reports: ${normalized}`);
+    assert(referenceAnalysis.includes("Mock reference analysis for run-current"), `reference analysis was not synced from reports: ${referenceAnalysis}`);
     assert(plan.includes("deliverables: [html, pdf]"), `plan deliverables were not synced from reports: ${plan}`);
+    assert(blueprint.includes("Mock slide blueprint for run-current"), `slide blueprint was not synced from reports: ${blueprint}`);
   });
 
   await check("runner syncs AI gate reports to deck", async () => {
@@ -467,12 +471,22 @@ function fakeTaktScript(runNames, result) {
       "",
       `Mock normalized brief for ${runName}.`,
       "EOF",
+      `cat > ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
+      "# Reference Deck Analysis",
+      "",
+      `Mock reference analysis for ${runName}.`,
+      "EOF",
       `cat > ".takt/runs/${runName}/reports/plan.md" <<EOF`,
       "# Slide Plan",
       "",
       "deliverables: [html, pdf]",
       "",
       `Mock plan for ${runName}.`,
+      "EOF",
+      `cat > ".takt/runs/${runName}/reports/slide-blueprint.md" <<EOF`,
+      "# Slide Blueprint",
+      "",
+      `Mock slide blueprint for ${runName}.`,
       "EOF",
       `cat > ".takt/runs/${runName}/reports/plan-supervision.md" <<EOF`,
       "---",
@@ -538,12 +552,22 @@ function fakeTaktScriptWithAiGateReport(runName, options = {}) {
     "",
     `Mock normalized brief for ${runName}.`,
     "EOF",
+    `cat > ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
+    "# Reference Deck Analysis",
+    "",
+    `Mock reference analysis for ${runName}.`,
+    "EOF",
     `cat > ".takt/runs/${runName}/reports/plan.md" <<EOF`,
     "# Slide Plan",
     "",
     "deliverables: [html, pdf]",
     "",
     `Mock plan for ${runName}.`,
+    "EOF",
+    `cat > ".takt/runs/${runName}/reports/slide-blueprint.md" <<EOF`,
+    "# Slide Blueprint",
+    "",
+    `Mock slide blueprint for ${runName}.`,
     "EOF",
     `cat > ".takt/runs/${runName}/reports/plan-supervision.md" <<EOF`,
     "---",

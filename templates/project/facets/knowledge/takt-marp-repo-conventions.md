@@ -10,8 +10,13 @@
 slides/<deck>/
   brief.md
   brief.normalized.md
+  reference-analysis.md
   plan.md
+  slide-blueprint.md
   design-system.md
+  sections/
+    manifest.md
+    *.md
   SLIDES.md
   images/
   review/
