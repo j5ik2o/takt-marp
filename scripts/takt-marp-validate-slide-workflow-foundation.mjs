@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -10,6 +10,7 @@ import {
   resolveRuntimeContext,
   runtimeExecutablePath,
 } from "./lib/takt-marp-runtime-context.mjs";
+import { ejectProject } from "./lib/takt-marp-project-eject.mjs";
 import { initializeProject } from "./lib/takt-marp-project-init.mjs";
 import {
   listTemplateEntries,
@@ -56,6 +57,7 @@ async function main() {
     const errorModulePath = path.join(SCRIPT_DIR, "lib", "takt-marp-errors.mjs");
     const slideWorkflowPath = path.join(SCRIPT_DIR, "lib", "takt-marp-slide-workflow.mjs");
     const templateModulePaths = [
+      path.join(SCRIPT_DIR, "lib", "takt-marp-project-eject.mjs"),
       path.join(SCRIPT_DIR, "lib", "takt-marp-project-init.mjs"),
       path.join(SCRIPT_DIR, "lib", "takt-marp-project-templates.mjs"),
     ];
@@ -136,6 +138,287 @@ async function main() {
       );
     } finally {
       await rm(prohibitedTemplatePath, { force: true });
+    }
+  });
+
+  await check("project ejector rejects invalid target directories", async () => {
+    let caught;
+    try {
+      await ejectProject({ targetDir: "relative-project", force: false });
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "TARGET_DIR_NOT_FOUND", `expected TARGET_DIR_NOT_FOUND for relative target, got ${caught?.code ?? "success"}`);
+
+    const root = await mkdtemp(path.join(os.tmpdir(), "project-eject-missing-parent-"));
+    const missingTarget = path.join(root, "missing");
+    caught = undefined;
+    try {
+      await ejectProject({ targetDir: missingTarget, force: false });
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "TARGET_DIR_NOT_FOUND", `expected TARGET_DIR_NOT_FOUND, got ${caught?.code ?? "success"}`);
+    assert(!existsSync(missingTarget), "eject created a missing target directory");
+
+    const fileTarget = path.join(root, "file-target");
+    await writeFile(fileTarget, "not a directory\n", "utf8");
+    caught = undefined;
+    try {
+      await ejectProject({ targetDir: fileTarget, force: false });
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "TARGET_DIR_NOT_FOUND", `expected TARGET_DIR_NOT_FOUND for file target, got ${caught?.code ?? "success"}`);
+  });
+
+  await check("project ejector copies only workflow and facet templates", async () => {
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-eject-normal-"));
+    const entries = await listTemplateEntries();
+    const expected = entries.map((entry) => `.takt/${entry.relativePath}`);
+    const result = await ejectProject({ targetDir, force: false });
+
+    assert(JSON.stringify(result.created) === JSON.stringify(expected), `created paths differ from template entries: ${JSON.stringify(result.created)}`);
+    assert(result.overwritten.length === 0, `normal eject should not overwrite files: ${result.overwritten.join(", ")}`);
+    for (const entry of entries) {
+      assert(
+        existsSync(path.join(targetDir, ".takt", ...entry.relativePath.split("/"))),
+        `template entry was not ejected: .takt/${entry.relativePath}`,
+      );
+      assert(
+        entry.relativePath.startsWith("workflows/") || entry.relativePath.startsWith("facets/"),
+        `eject exposed non workflow/facet template entry: ${entry.relativePath}`,
+      );
+    }
+    await assertNoRuntimeOrProviderFiles(targetDir);
+  });
+
+  await check("project ejector reports all conflicts and writes nothing without force", async () => {
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-eject-conflict-"));
+    const entries = await listTemplateEntries();
+    const conflictEntries = [
+      entries.find((entry) => entry.relativePath.startsWith("workflows/")),
+      entries.find((entry) => entry.relativePath.startsWith("facets/")),
+    ].filter(Boolean);
+    const untouchedEntry = entries.find((entry) => !conflictEntries.includes(entry));
+    assert(conflictEntries.length === 2 && untouchedEntry, "test requires workflow, facet, and untouched template entries");
+
+    for (const entry of conflictEntries) {
+      const destination = path.join(targetDir, ".takt", ...entry.relativePath.split("/"));
+      await mkdir(path.dirname(destination), { recursive: true });
+      await writeFile(destination, `custom ${entry.relativePath}\n`, "utf8");
+    }
+
+    let caught;
+    try {
+      await ejectProject({ targetDir, force: false });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert(caught?.code === "EJECT_CONFLICT", `expected EJECT_CONFLICT, got ${caught?.code ?? "success"}`);
+    for (const entry of conflictEntries) {
+      const relativePath = `.takt/${entry.relativePath}`;
+      assert(caught.message.includes(relativePath), `conflict message omitted ${relativePath}: ${caught.message}`);
+      const content = await readFile(path.join(targetDir, ".takt", ...entry.relativePath.split("/")), "utf8");
+      assert(content === `custom ${entry.relativePath}\n`, `conflicting file was changed without force: ${relativePath}`);
+    }
+    assert(
+      !existsSync(path.join(targetDir, ".takt", ...untouchedEntry.relativePath.split("/"))),
+      `non-conflicting template file was partially created: .takt/${untouchedEntry.relativePath}`,
+    );
+  });
+
+  await check("project ejector rejects non-directory template ancestors before writing", async () => {
+    const entries = await listTemplateEntries();
+    const workflowEntry = entries.find((entry) => entry.relativePath.startsWith("workflows/"));
+    const facetEntry = entries.find((entry) => entry.relativePath.startsWith("facets/"));
+    assert(workflowEntry && facetEntry, "test requires workflow and facet template entries");
+
+    const bothBlockedTarget = await mkdtemp(path.join(os.tmpdir(), "project-eject-blocked-ancestors-"));
+    await mkdir(path.join(bothBlockedTarget, ".takt"), { recursive: true });
+    await writeFile(path.join(bothBlockedTarget, ".takt", "workflows"), "not a directory\n", "utf8");
+    await writeFile(path.join(bothBlockedTarget, ".takt", "facets"), "not a directory\n", "utf8");
+
+    let caught;
+    try {
+      await ejectProject({ targetDir: bothBlockedTarget, force: false });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert(caught?.code === "EJECT_CONFLICT", `expected EJECT_CONFLICT, got ${caught?.code ?? "success"}`);
+    for (const relativePath of [".takt/workflows", ".takt/facets"]) {
+      assert(caught.message.includes(relativePath), `non-directory ancestor conflict omitted ${relativePath}: ${caught.message}`);
+    }
+    assert(
+      !existsSync(path.join(bothBlockedTarget, ".takt", ...workflowEntry.relativePath.split("/"))),
+      `workflow template was generated under a non-directory ancestor: .takt/${workflowEntry.relativePath}`,
+    );
+    assert(
+      !existsSync(path.join(bothBlockedTarget, ".takt", ...facetEntry.relativePath.split("/"))),
+      `facet template was generated under a non-directory ancestor: .takt/${facetEntry.relativePath}`,
+    );
+
+    const singleBlockedCases = [
+      { blocked: "workflows", counterpart: "facets", counterpartEntry: facetEntry },
+      { blocked: "facets", counterpart: "workflows", counterpartEntry: workflowEntry },
+    ];
+    for (const { blocked, counterpart, counterpartEntry } of singleBlockedCases) {
+      const targetDir = await mkdtemp(path.join(os.tmpdir(), `project-eject-${blocked}-file-`));
+      await mkdir(path.join(targetDir, ".takt"), { recursive: true });
+      await writeFile(path.join(targetDir, ".takt", blocked), "not a directory\n", "utf8");
+
+      caught = undefined;
+      try {
+        await ejectProject({ targetDir, force: false });
+      } catch (error) {
+        caught = error;
+      }
+
+      assert(caught?.code === "EJECT_CONFLICT", `expected EJECT_CONFLICT for .takt/${blocked}, got ${caught?.code ?? "success"}`);
+      assert(caught.message.includes(`.takt/${blocked}`), `blocked ancestor was not reported: ${caught.message}`);
+      assert(!existsSync(path.join(targetDir, ".takt", counterpart)), `counterpart template directory was created before conflict: .takt/${counterpart}`);
+      assert(
+        !existsSync(path.join(targetDir, ".takt", ...counterpartEntry.relativePath.split("/"))),
+        `counterpart template file was created before conflict: .takt/${counterpartEntry.relativePath}`,
+      );
+      const blockedContent = await readFile(path.join(targetDir, ".takt", blocked), "utf8");
+      assert(blockedContent === "not a directory\n", `blocked ancestor was modified: .takt/${blocked}`);
+    }
+  });
+
+  await check("project ejector force rejects ancestor symlinks before writing", async () => {
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-eject-ancestor-symlink-"));
+    const symlinkTarget = await mkdtemp(path.join(os.tmpdir(), "project-eject-workflows-target-"));
+    const entries = await listTemplateEntries();
+    const workflowEntry = entries.find((entry) => entry.relativePath === "workflows/takt-marp-slide-plan.yaml");
+    const facetEntry = entries.find((entry) => entry.relativePath === "facets/instructions/takt-marp-compose-fix.md");
+    assert(workflowEntry && facetEntry, "test requires workflow and facet template entries");
+
+    await mkdir(path.join(targetDir, ".takt"), { recursive: true });
+    await symlink(symlinkTarget, path.join(targetDir, ".takt", "workflows"), "dir");
+
+    let caught;
+    try {
+      await ejectProject({ targetDir, force: true });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert(caught?.code === "EJECT_CONFLICT", `expected EJECT_CONFLICT for ancestor symlink, got ${caught?.code ?? "success"}`);
+    assert(Array.isArray(caught.conflicts), "EJECT_CONFLICT must expose conflicts array");
+    assert(caught.conflicts.includes(".takt/workflows"), `ancestor symlink conflict omitted from error.conflicts: ${caught.conflicts?.join(", ")}`);
+    assert(caught.message.includes(".takt/workflows"), `ancestor symlink conflict omitted from message: ${caught.message}`);
+    assert(
+      !existsSync(path.join(symlinkTarget, "takt-marp-slide-plan.yaml")),
+      "workflow template was written through an ancestor symlink",
+    );
+    assert(
+      !existsSync(path.join(targetDir, ".takt", ...facetEntry.relativePath.split("/"))),
+      `facet template was partially created after ancestor symlink conflict: .takt/${facetEntry.relativePath}`,
+    );
+  });
+
+  await check("project ejector force rejects leaf directory conflicts before writing", async () => {
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-eject-leaf-dir-conflict-"));
+    const entries = await listTemplateEntries();
+    const conflictEntries = [
+      entries.find((entry) => entry.relativePath === "facets/instructions/takt-marp-compose-fix.md"),
+      entries.find((entry) => entry.relativePath === "workflows/takt-marp-slide-plan.yaml"),
+    ].filter(Boolean);
+    const untouchedEntry = entries.find((entry) => entry.relativePath === "facets/instructions/takt-marp-ai-antipattern-fix.md");
+    assert(conflictEntries.length === 2 && untouchedEntry, "test requires leaf directory conflicts and another template path");
+
+    for (const entry of conflictEntries) {
+      await mkdir(path.join(targetDir, ".takt", ...entry.relativePath.split("/")), { recursive: true });
+    }
+
+    let caught;
+    try {
+      await ejectProject({ targetDir, force: true });
+    } catch (error) {
+      caught = error;
+    }
+
+    assert(caught?.code === "EJECT_CONFLICT", `expected EJECT_CONFLICT for force leaf directory conflict, got ${caught?.code ?? "success"}`);
+    assert(Array.isArray(caught.conflicts), "EJECT_CONFLICT must expose conflicts array");
+    for (const entry of conflictEntries) {
+      const relativePath = `.takt/${entry.relativePath}`;
+      assert(caught.conflicts.includes(relativePath), `leaf directory conflict omitted from error.conflicts: ${relativePath}`);
+      assert(caught.message.includes(relativePath), `leaf directory conflict omitted from message: ${relativePath}`);
+      assert(existsSync(path.join(targetDir, ".takt", ...entry.relativePath.split("/"))), `leaf directory conflict was removed: ${relativePath}`);
+    }
+    assert(
+      !existsSync(path.join(targetDir, ".takt", ...untouchedEntry.relativePath.split("/"))),
+      `force leaf directory conflict partially wrote another template: .takt/${untouchedEntry.relativePath}`,
+    );
+  });
+
+  await check("project ejector force rejects leaf symlinks before writing", async () => {
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-eject-leaf-symlink-"));
+    const entries = await listTemplateEntries();
+    const conflictEntry = entries.find((entry) => entry.relativePath === "workflows/takt-marp-slide-plan.yaml");
+    const untouchedEntry = entries.find((entry) => entry.relativePath === "facets/instructions/takt-marp-compose-fix.md");
+    assert(conflictEntry && untouchedEntry, "test requires a workflow symlink conflict and another template path");
+
+    const credentialsPath = path.join(targetDir, ".takt", "credentials.env");
+    const symlinkPath = path.join(targetDir, ".takt", ...conflictEntry.relativePath.split("/"));
+    const credentials = "user-owned credential placeholder\n";
+    await mkdir(path.dirname(symlinkPath), { recursive: true });
+    await writeFile(credentialsPath, credentials, "utf8");
+    await symlink(path.join("..", "credentials.env"), symlinkPath);
+
+    let caught;
+    try {
+      await ejectProject({ targetDir, force: true });
+    } catch (error) {
+      caught = error;
+    }
+
+    const conflictPath = `.takt/${conflictEntry.relativePath}`;
+    assert(caught?.code === "EJECT_CONFLICT", `expected EJECT_CONFLICT for force leaf symlink conflict, got ${caught?.code ?? "success"}`);
+    assert(Array.isArray(caught.conflicts), "EJECT_CONFLICT must expose conflicts array");
+    assert(caught.conflicts.includes(conflictPath), `leaf symlink conflict omitted from error.conflicts: ${conflictPath}`);
+    assert(caught.message.includes(conflictPath), `leaf symlink conflict omitted from message: ${caught.message}`);
+    assert((await readFile(credentialsPath, "utf8")) === credentials, "force modified credentials through a leaf symlink");
+    assert(
+      !existsSync(path.join(targetDir, ".takt", ...untouchedEntry.relativePath.split("/"))),
+      `force leaf symlink conflict partially wrote another template: .takt/${untouchedEntry.relativePath}`,
+    );
+  });
+
+  await check("project ejector force overwrites only template paths and leaves non-template state untouched", async () => {
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-eject-force-"));
+    const entries = await listTemplateEntries();
+    const existingTemplate = entries.find((entry) => entry.relativePath.startsWith("workflows/"));
+    assert(existingTemplate, "test requires at least one workflow template entry");
+    const existingDestination = path.join(targetDir, ".takt", ...existingTemplate.relativePath.split("/"));
+    await mkdir(path.dirname(existingDestination), { recursive: true });
+    await writeFile(existingDestination, "custom workflow\n", "utf8");
+
+    const sentinels = new Map([
+      [path.join(targetDir, ".takt", "config.yaml"), "provider: user-owned\n"],
+      [path.join(targetDir, ".takt", "runs", "run-1", "state.json"), "{\"state\":\"kept\"}\n"],
+      [path.join(targetDir, ".takt", "render", "demo", "metadata.json"), "{\"render\":\"kept\"}\n"],
+      [path.join(targetDir, ".takt", "provider-settings.yaml"), "provider: external\n"],
+      [path.join(targetDir, ".takt", "credentials.env"), "user-owned credential placeholder\n"],
+      [path.join(targetDir, "notes.md"), "outside target template\n"],
+    ]);
+    for (const [filePath, content] of sentinels) {
+      await mkdir(path.dirname(filePath), { recursive: true });
+      await writeFile(filePath, content, "utf8");
+    }
+
+    const result = await ejectProject({ targetDir, force: true });
+    const overwrittenPath = `.takt/${existingTemplate.relativePath}`;
+    assert(result.overwritten.includes(overwrittenPath), `force result did not report overwritten template: ${JSON.stringify(result)}`);
+    const copied = await readFile(existingDestination, "utf8");
+    const expected = await readFile(existingTemplate.sourcePath, "utf8");
+    assert(copied === expected, `force did not overwrite template path ${overwrittenPath}`);
+    for (const [filePath, content] of sentinels) {
+      const actual = await readFile(filePath, "utf8");
+      assert(actual === content, `force modified non-template file ${path.relative(targetDir, filePath)}`);
     }
   });
 
@@ -624,6 +907,19 @@ async function initializedFixtureRoot() {
   const root = await fixtureRoot();
   await mkdir(path.join(root, ".takt", "facets"), { recursive: true });
   return root;
+}
+
+async function assertNoRuntimeOrProviderFiles(root) {
+  const forbidden = [
+    ".takt/config.yaml",
+    ".takt/runs",
+    ".takt/render",
+    ".takt/provider-settings.yaml",
+    ".takt/credentials.env",
+  ];
+  for (const relativePath of forbidden) {
+    assert(!existsSync(path.join(root, ...relativePath.split("/"))), `eject generated non-template path: ${relativePath}`);
+  }
 }
 
 async function captureStdout(fn) {

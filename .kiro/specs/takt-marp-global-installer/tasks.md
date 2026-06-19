@@ -51,7 +51,7 @@
   - _Boundary:_ TemplateSourceResolver
   - _Depends:_ 1.3, 1.5
 
-- [ ] 2.2 (P) ProjectEjector で明示的な template copy だけを提供する
+- [x] 2.2 (P) ProjectEjector で明示的な template copy だけを提供する
   - `eject .` と `eject <dir>` は workflow/facet template だけを対象 directory へ生成する
   - runtime state、provider 設定、認証情報、template 対象外ファイルは成功時も force 時も生成・削除・変更しない
   - 既存 template 対象ファイルは既定で衝突一覧付きの書き込みゼロ失敗にし、`--force` と `--overwrite` の明示時だけ template 対象を上書きする
