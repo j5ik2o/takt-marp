@@ -6,6 +6,7 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { initializeProject } from "./takt-marp-project-init.mjs";
 import { ejectProject } from "./takt-marp-project-eject.mjs";
+import { resolveTemplateSource, workflowFilePath } from "./takt-marp-project-templates.mjs";
 import { packageScriptPath } from "./takt-marp-runtime-context.mjs";
 import {
   APPROVAL_COMMANDS,
@@ -129,8 +130,9 @@ function runPackageScript(relativeScriptPath, args, options = {}) {
 }
 
 async function runWorkflowCommand(command, args) {
-  assertProjectInitialized();
-  return runPackageScript(RUNNER_SCRIPT, [command, ...args]);
+  const source = resolveTemplateSource({ projectRoot: process.cwd() });
+  const selectedWorkflowFilePath = workflowFilePath(source, command);
+  return runPackageScript(RUNNER_SCRIPT, [command, ...args, "--workflow-file", selectedWorkflowFilePath]);
 }
 
 async function runBuildCommand(command, args) {

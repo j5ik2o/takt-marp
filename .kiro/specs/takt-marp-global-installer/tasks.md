@@ -95,7 +95,7 @@
   - _Boundary:_ SlideWorkflowLib
   - _Depends:_ 1.4
 
-- [ ] 3.3 WorkflowRunner で no-copy workflow 実行を実現する
+- [x] 3.3 WorkflowRunner で no-copy workflow 実行を実現する
   - TemplateSourceResolver の選択結果から workflow file を明示指定し、target project へ template assets をコピーしない
   - TAKT は global package 側 runtime から直接起動し、target project の `npm run` を経由しない
   - provider 引数は workflow 実行へ素通しし、cwd は対象 project のまま維持する

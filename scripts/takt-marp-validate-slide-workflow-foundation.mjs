@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -857,6 +857,94 @@ async function main() {
     assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
   });
 
+  await check("global CLI workflow command uses bundled no-copy templates without npm project", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-bundled-"));
+    await makeDeck(root, "demo");
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.binScript, "plan", "slides/demo", "--provider", "mock"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `global CLI bundled no-copy workflow failed: ${result.stderr}`);
+    assert(!existsSync(path.join(root, "package.json")), "test project unexpectedly has package.json");
+    assert(!existsSync(path.join(root, "node_modules")), "test project unexpectedly has node_modules");
+    assert(!existsSync(path.join(root, ".takt", "workflows")), "global CLI copied project-local workflow templates");
+    assert(!existsSync(path.join(root, ".takt", "facets")), "global CLI copied project-local facet templates");
+
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    const expectedWorkflowPath = path.join(fakePackage.packageRoot, "templates", "project", "workflows", "takt-marp-slide-plan.yaml");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(args[workflowArgIndex + 1] === expectedWorkflowPath, `TAKT did not receive bundled workflow path: ${args.join(" ")}`);
+    const providerArgIndex = args.indexOf("--provider");
+    assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
+    assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
+  });
+
+  await check("global CLI workflow command uses ejected workflow override", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-ejected-"));
+    await makeDeck(root, "demo");
+    await mkdir(path.join(root, ".takt", "workflows"), { recursive: true });
+    await mkdir(path.join(root, ".takt", "facets"), { recursive: true });
+    const ejectedWorkflowPath = path.join(root, ".takt", "workflows", "takt-marp-slide-plan.yaml");
+    const expectedEjectedWorkflowPath = path.join(await realpath(root), ".takt", "workflows", "takt-marp-slide-plan.yaml");
+    await writeFile(ejectedWorkflowPath, "name: ejected-plan\n", "utf8");
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.binScript, "plan", "slides/demo"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `global CLI ejected workflow failed: ${result.stderr}`);
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(args[workflowArgIndex + 1] === expectedEjectedWorkflowPath, `TAKT did not receive ejected workflow path: ${args.join(" ")}`);
+  });
+
+  await check("global CLI partial template state fails before TAKT", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-partial-"));
+    await makeDeck(root, "demo");
+    await mkdir(path.join(root, ".takt", "workflows"), { recursive: true });
+    await writeFile(path.join(root, ".takt", "workflows", "takt-marp-slide-plan.yaml"), "name: partial-plan\n", "utf8");
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.binScript, "plan", "slides/demo"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "global CLI unexpectedly accepted partial template state");
+    assert(result.stderr.includes("PROJECT_TEMPLATE_STATE_INVALID:"), `partial state error was not reported: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite partial template state");
+  });
+
+  await check("global CLI invalid target is not masked by no-copy template selection", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-invalid-target-"));
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.binScript, "plan", "deck"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "global CLI unexpectedly accepted invalid target");
+    assert(result.stderr.includes("INVALID_TARGET:"), `invalid target did not surface INVALID_TARGET: ${result.stderr}`);
+    assert(!result.stderr.includes("PROJECT_NOT_INITIALIZED"), `initialization preflight masked invalid target: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite invalid target");
+  });
+
   await check("runner with selected workflow file path preserves rerun blocking", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-rerun-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -1355,6 +1443,24 @@ async function makeFakePackageRoot() {
   return {
     packageRoot,
     runnerScript: path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
+  };
+}
+
+async function makeFakeCliPackageRoot() {
+  const packageRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-package-"));
+  await mkdir(path.join(packageRoot, "bin"), { recursive: true });
+  await cp(path.join(ROOT_DIR, "bin", "takt-marp.mjs"), path.join(packageRoot, "bin", "takt-marp.mjs"));
+  await mkdir(path.join(packageRoot, "scripts"), { recursive: true });
+  await cp(
+    path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs"),
+    path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
+  );
+  await cp(path.join(SCRIPT_DIR, "lib"), path.join(packageRoot, "scripts", "lib"), { recursive: true });
+  await cp(path.join(ROOT_DIR, "templates", "project"), path.join(packageRoot, "templates", "project"), { recursive: true });
+  const realPackageRoot = await realpath(packageRoot);
+  return {
+    binScript: path.join(realPackageRoot, "bin", "takt-marp.mjs"),
+    packageRoot: realPackageRoot,
   };
 }
 
