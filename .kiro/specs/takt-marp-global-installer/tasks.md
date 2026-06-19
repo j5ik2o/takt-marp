@@ -9,7 +9,7 @@
   - _Boundary:_ PackageMetadata
   - _Depends:_ none
 
-- [ ] 1.2 CLI entry の version guard と dispatcher 起動を確立する
+- [x] 1.2 CLI entry の version guard と dispatcher 起動を確立する
   - 未対応 Node.js runtime では workflow を開始せず、必要 version が分かる失敗情報を返す
   - 対応 runtime では global CLI entry から command dispatcher へ処理を委譲する
   - 完了条件: 対応外 runtime の失敗と対応 runtime の dispatcher 起動を、CLI entry 単体の検証で再現できる

@@ -24,6 +24,8 @@ import { runCli } from "./lib/takt-marp-cli.mjs";
 
 const checks = [];
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = path.dirname(SCRIPT_DIR);
+const BIN_ENTRY_SCRIPT = path.join(ROOT_DIR, "bin", "takt-marp.mjs");
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const VERIFY_DELIVERY_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-verify-delivery-artifacts.mjs");
 
@@ -37,6 +39,30 @@ async function main() {
     assert(parsed.frontMatter.items[0] === "a", "unquoted inline array item parse failed");
     assert(parsed.frontMatter.items[1] === "b", "quoted inline array item parse failed");
     assert(Array.isArray(parsed.frontMatter.empty), "empty array parse failed");
+  });
+
+  await check("CLI entry delegates supported runtime to dispatcher", async () => {
+    const result = spawnSync(process.execPath, [BIN_ENTRY_SCRIPT, "--help"], { encoding: "utf8" });
+    assert(result.status === 0, `CLI entry help failed: ${result.stderr}`);
+    assert(result.stdout.includes("Usage: takt-marp <command>"), `dispatcher usage missing: ${result.stdout}`);
+    assert(result.stdout.includes("Workflow options"), `dispatcher help was not reached: ${result.stdout}`);
+  });
+
+  await check("CLI entry rejects unsupported Node before dispatcher", async () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "data:text/javascript,Object.defineProperty(process.versions%2C%22node%22%2C%7Bvalue%3A%2220.0.0%22%7D)%3B",
+        BIN_ENTRY_SCRIPT,
+        "--help",
+      ],
+      { encoding: "utf8" },
+    );
+    assert(result.status === 1, `unsupported Node should exit 1, got ${result.status}`);
+    assert(result.stderr.includes("NODE_VERSION_UNSUPPORTED"), `missing unsupported code: ${result.stderr}`);
+    assert(result.stderr.includes("Node.js >= 24"), `missing required Node version: ${result.stderr}`);
+    assert(result.stdout === "", `dispatcher started despite unsupported Node: ${result.stdout}`);
   });
 
   await check("invalid target rejects markdown file", async () => {
