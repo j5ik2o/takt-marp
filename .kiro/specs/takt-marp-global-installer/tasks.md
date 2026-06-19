@@ -42,7 +42,7 @@
   - _Depends:_ 1.4
 
 - [ ] 2. コア: no-copy template selection と eject を実装する
-- [ ] 2.1 TemplateSourceResolver で bundled/ejected/partial state を判定する
+- [x] 2.1 TemplateSourceResolver で bundled/ejected/partial state を判定する
   - 対象 project に workflow/facet の両方がない場合は package bundled template を no-copy で選ぶ
   - 両方がある場合は ejected override として扱い、片方だけの場合は混在させず修復が必要な失敗にする
   - current working directory だけを対象 project として扱い、親 directory を暗黙探索しない

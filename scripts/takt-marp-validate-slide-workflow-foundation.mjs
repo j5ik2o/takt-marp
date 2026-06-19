@@ -11,7 +11,11 @@ import {
   runtimeExecutablePath,
 } from "./lib/takt-marp-runtime-context.mjs";
 import { initializeProject } from "./lib/takt-marp-project-init.mjs";
-import { listTemplateEntries } from "./lib/takt-marp-project-templates.mjs";
+import {
+  listTemplateEntries,
+  resolveTemplateSource,
+  workflowFilePath,
+} from "./lib/takt-marp-project-templates.mjs";
 import {
   archiveCommandArtifacts,
   assertTaktExecutableAvailable,
@@ -132,6 +136,80 @@ async function main() {
       );
     } finally {
       await rm(prohibitedTemplatePath, { force: true });
+    }
+  });
+
+  await check("template source resolver selects bundled source without creating project templates", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "template-source-none-"));
+    const source = resolveTemplateSource({ projectRoot: root });
+    assert(source.kind === "bundled", `expected bundled source, got: ${source.kind}`);
+    assert(source.rootDir === path.join(ROOT_DIR, "templates", "project"), `unexpected bundled root: ${source.rootDir}`);
+    assert(source.workflowsDir === path.join(source.rootDir, "workflows"), `unexpected bundled workflows dir: ${source.workflowsDir}`);
+    assert(source.facetsDir === path.join(source.rootDir, "facets"), `unexpected bundled facets dir: ${source.facetsDir}`);
+    assert(
+      workflowFilePath(source, "plan") === path.join(source.workflowsDir, "takt-marp-slide-plan.yaml"),
+      "workflow path should resolve under bundled workflows",
+    );
+    assert(!existsSync(path.join(root, ".takt")), "resolver created project-local .takt for bundled source");
+  });
+
+  await check("template source resolver selects ejected source when both domains exist", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "template-source-both-"));
+    await mkdir(path.join(root, ".takt", "workflows"), { recursive: true });
+    await mkdir(path.join(root, ".takt", "facets"), { recursive: true });
+    const source = resolveTemplateSource({ projectRoot: root });
+    assert(source.kind === "ejected", `expected ejected source, got: ${source.kind}`);
+    assert(source.rootDir === path.join(root, ".takt"), `unexpected ejected root: ${source.rootDir}`);
+    assert(source.workflowsDir === path.join(root, ".takt", "workflows"), `unexpected ejected workflows dir: ${source.workflowsDir}`);
+    assert(source.facetsDir === path.join(root, ".takt", "facets"), `unexpected ejected facets dir: ${source.facetsDir}`);
+    assert(
+      workflowFilePath(source, "compose") === path.join(root, ".takt", "workflows", "takt-marp-slide-compose.yaml"),
+      "workflow path should resolve under ejected workflows",
+    );
+  });
+
+  await check("template source resolver rejects partial project template state", async () => {
+    const workflowsOnlyRoot = await mkdtemp(path.join(os.tmpdir(), "template-source-workflows-only-"));
+    await mkdir(path.join(workflowsOnlyRoot, ".takt", "workflows"), { recursive: true });
+    let caught;
+    try {
+      resolveTemplateSource({ projectRoot: workflowsOnlyRoot });
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "PROJECT_TEMPLATE_STATE_INVALID", `expected PROJECT_TEMPLATE_STATE_INVALID, got: ${caught?.code ?? "success"}`);
+    assert(caught.message.includes(".takt/workflows exists without .takt/facets"), `missing workflows-only details: ${caught.message}`);
+    assert(!existsSync(path.join(workflowsOnlyRoot, ".takt", "facets")), "resolver created missing facets directory");
+
+    const facetsOnlyRoot = await mkdtemp(path.join(os.tmpdir(), "template-source-facets-only-"));
+    await mkdir(path.join(facetsOnlyRoot, ".takt", "facets"), { recursive: true });
+    caught = undefined;
+    try {
+      resolveTemplateSource({ projectRoot: facetsOnlyRoot });
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "PROJECT_TEMPLATE_STATE_INVALID", `expected PROJECT_TEMPLATE_STATE_INVALID, got: ${caught?.code ?? "success"}`);
+    assert(caught.message.includes(".takt/facets exists without .takt/workflows"), `missing facets-only details: ${caught.message}`);
+    assert(!existsSync(path.join(facetsOnlyRoot, ".takt", "workflows")), "resolver created missing workflows directory");
+  });
+
+  await check("template source resolver treats cwd as project root without parent discovery", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "template-source-parent-"));
+    const child = path.join(parent, "nested");
+    await mkdir(path.join(parent, ".takt", "workflows"), { recursive: true });
+    await mkdir(path.join(parent, ".takt", "facets"), { recursive: true });
+    await mkdir(child, { recursive: true });
+
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(child);
+      const source = resolveTemplateSource();
+      assert(source.kind === "bundled", `child cwd should resolve bundled despite parent .takt, got: ${source.kind}`);
+      assert(source.rootDir === path.join(ROOT_DIR, "templates", "project"), `unexpected child bundled root: ${source.rootDir}`);
+      assert(!existsSync(path.join(child, ".takt")), "resolver created child .takt while checking parent discovery");
+    } finally {
+      process.chdir(originalCwd);
     }
   });
 

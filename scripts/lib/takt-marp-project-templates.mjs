@@ -1,9 +1,11 @@
+import { statSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { resolveRuntimeContext } from "./takt-marp-runtime-context.mjs";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 
 export const TEMPLATE_DOMAINS = Object.freeze(["workflows", "facets"]);
+export const WORKFLOW_TEMPLATE_COMMANDS = Object.freeze(["plan", "compose", "polish", "deliver"]);
 
 export const PROHIBITED_TEMPLATE_PATTERNS = Object.freeze([
   /(^|\/)config\.yaml$/i,
@@ -21,6 +23,84 @@ export const PROHIBITED_TEMPLATE_PATTERNS = Object.freeze([
 
 export function templateRootPath() {
   return path.join(resolveRuntimeContext().packageRoot, "templates", "project");
+}
+
+function normalizeTemplateSourceOptions(projectRootOrOptions = {}) {
+  if (typeof projectRootOrOptions === "string") {
+    return {
+      projectRoot: path.resolve(projectRootOrOptions),
+      templateRoot: templateRootPath(),
+    };
+  }
+
+  const options = projectRootOrOptions ?? {};
+  const runtimeContext = resolveRuntimeContext();
+  return {
+    projectRoot: path.resolve(options.projectRoot ?? options.root ?? runtimeContext.projectRoot),
+    templateRoot: path.resolve(options.templateRoot ?? templateRootPath()),
+  };
+}
+
+function directoryExists(directoryPath) {
+  try {
+    return statSync(directoryPath).isDirectory();
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+function partialTemplateStateMessage(hasWorkflows, hasFacets) {
+  const present = hasWorkflows ? ".takt/workflows" : ".takt/facets";
+  const missing = hasWorkflows && !hasFacets ? ".takt/facets" : ".takt/workflows";
+  return (
+    `Project has partial template state: ${present} exists without ${missing}. ` +
+    `Repair the project-local template state by creating ${missing} or removing ${present} to use bundled templates.`
+  );
+}
+
+export function resolveTemplateSource(projectRootOrOptions = {}) {
+  const { projectRoot, templateRoot } = normalizeTemplateSourceOptions(projectRootOrOptions);
+  const ejectedRoot = path.join(projectRoot, ".takt");
+  const ejectedWorkflowsDir = path.join(ejectedRoot, "workflows");
+  const ejectedFacetsDir = path.join(ejectedRoot, "facets");
+  const hasWorkflows = directoryExists(ejectedWorkflowsDir);
+  const hasFacets = directoryExists(ejectedFacetsDir);
+
+  if (!hasWorkflows && !hasFacets) {
+    return Object.freeze({
+      kind: "bundled",
+      rootDir: templateRoot,
+      workflowsDir: path.join(templateRoot, "workflows"),
+      facetsDir: path.join(templateRoot, "facets"),
+    });
+  }
+
+  if (hasWorkflows && hasFacets) {
+    return Object.freeze({
+      kind: "ejected",
+      rootDir: ejectedRoot,
+      workflowsDir: ejectedWorkflowsDir,
+      facetsDir: ejectedFacetsDir,
+    });
+  }
+
+  throw new SlideWorkflowError(
+    partialTemplateStateMessage(hasWorkflows, hasFacets),
+    "PROJECT_TEMPLATE_STATE_INVALID",
+  );
+}
+
+export function workflowFilePath(source, command) {
+  if (!WORKFLOW_TEMPLATE_COMMANDS.includes(command)) {
+    throw new SlideWorkflowError(
+      `Unsupported workflow command '${command}'. Expected one of: ${WORKFLOW_TEMPLATE_COMMANDS.join(", ")}`,
+      "INVALID_COMMAND",
+    );
+  }
+  return path.join(source.workflowsDir, `takt-marp-slide-${command}.yaml`);
 }
 
 async function listDomainFiles(templateRoot, domain) {
