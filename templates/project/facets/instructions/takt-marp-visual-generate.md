@@ -3,7 +3,7 @@ planとSLIDES.mdに必要なvisual sourceを生成・接続してください。
 **生成所有権**: `svg:` / `inline-svg:` / `existing:` の作成・接続はこの generate_visuals step が所有します。`html:` visual は compose_sections が section source に直接書くため、この step では生成しません。
 
 **やること:**
-1. `plan.md`、`slide-blueprint.md`、`sections/*.md`、`SLIDES.md` の `Visual: html: ...`、`Visual: svg: ...`、`Visual: inline-svg: ...`、`Visual: existing: ...` をすべて確認してください。
+1. `plan.md` と `slide-blueprint.md` の `Visual: html: ...`、`Visual: svg: ...`、`Visual: inline-svg: ...`、`Visual: existing: ...` をすべて確認してください。`sections/*.md` と `SLIDES.md` では、`svg:` / `inline-svg:` / `existing:` の `<!-- Visual: ... -->` placeholderと、`html:` visualとして直接書かれたHTML/CSS構造を確認してください。
 2. `html:` visual は生成対象外です。該当スライドにHTML構造が存在し、placeholder のまま残っていないことだけ確認してください。不足している場合は `needs_input` ではなく、compose sourceの修正対象として Notes に記録してください。
 3. `svg: ...` は外部SVGファイルとして `images/*.svg` を作成または更新し、`sections/*.md` と `SLIDES.md` の placeholder を画像参照に置き換えてください。
 4. `inline-svg: ...` は `sections/*.md` と `SLIDES.md` の該当スライドの図版領域(placeholder 部分)だけを編集し、SVG markup を直接記述してください。front matter に `html: true` が未設定の場合は `SLIDES.md` に追加してください。

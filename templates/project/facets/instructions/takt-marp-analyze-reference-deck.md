@@ -22,11 +22,13 @@ brief.normalized.md と参照デッキ候補から、期待値分析を作成し
 - `brief.normalized.md` が読めず、参照デッキ候補の探索対象も判断できない場合だけ `needs_input` にしてください。
 
 **必須出力**
-## Reference Analysis Result
-- Status: analyzed / needs_input
-- Reference source:
-- Reference slide count:
-- Density profile:
-- Plan implications:
-- Files changed:
-- Blocking issues:
+# Reference Deck Analysis
+
+以下のcontract sectionを必ず含めてください。
+- Reference Source
+- Slide Count and Mode
+- Structure Map
+- Coverage Expectations
+- Visual and Layout Patterns
+- Reuse Boundary
+- Plan Implications
