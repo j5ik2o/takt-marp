@@ -159,7 +159,7 @@
   - _Boundary:_ GlobalInstallValidator
   - _Depends:_ 3.3, 4.3
 
-- [ ] 5.2 installer validation の CI 入口を更新する
+- [x] 5.2 installer validation の CI 入口を更新する
   - template drift、package boundary、foundation、global install、mock smoke の検証を CI から実行できる command 列に揃える
   - real provider smoke は CI 必須条件に含めず、明示実行時だけ失敗を表面化する
   - 完了条件: CI と同じ command 列をローカルで実行でき、template drift、package 境界、global install、mock smoke の失敗が無視されない

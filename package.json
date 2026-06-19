@@ -35,6 +35,8 @@
     "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx",
     "build:pdf": "node scripts/takt-marp-build-slide-artifact.mjs pdf",
     "preview": "node scripts/takt-marp-preview-slide.mjs takt-sdd",
+    "installer:ci": "npm run slide:validate-foundation && npm run installer:check-templates && npm run installer:check-package && npm run installer:validate && npm run slide:smoke -- --provider mock",
+    "installer:check-ci": "node scripts/takt-marp-validate-installer-ci-entrypoint.mjs",
     "installer:sync-templates": "node scripts/takt-marp-sync-project-templates.mjs --write",
     "installer:check-templates": "node scripts/takt-marp-sync-project-templates.mjs",
     "installer:check-package": "node scripts/takt-marp-validate-package-boundary.mjs",
