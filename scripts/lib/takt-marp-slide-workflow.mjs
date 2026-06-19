@@ -61,6 +61,14 @@ export const COMMAND_STATES = Object.freeze(
 export const APPROVAL_COMMANDS = Object.freeze(
   COMMAND_CONFIG_ENTRIES.filter((config) => config.approvalSupported).map((config) => config.name),
 );
+export const RESEARCH_ARTIFACT_FILES = Object.freeze({
+  brief: "research-brief.md",
+  report: "research-report.md",
+  sources: "research-sources.md",
+  claims: "research-claims.md",
+  openQuestions: "open-questions.md",
+  supervision: "research-supervision.md",
+});
 
 function commandConfig(config) {
   return Object.freeze({
@@ -143,6 +151,7 @@ export function resolveDeckTarget(target, options = {}) {
     target: normalized,
     deckPath,
     reviewPath: path.join(deckPath, "review"),
+    researchPath: path.join(deckPath, "research"),
   });
 }
 
@@ -257,8 +266,26 @@ export async function readFrontMatter(filePath) {
   return parseFrontMatter(await readFile(filePath, "utf8")).frontMatter;
 }
 
+export function artifactDomainPath(targetInfo, command) {
+  const config = configFor(command);
+  if (config.artifactDomain === "research") {
+    return targetInfo.researchPath ?? path.join(targetInfo.deckPath, "research");
+  }
+  if (config.artifactDomain === "review") {
+    return targetInfo.reviewPath ?? path.join(targetInfo.deckPath, "review");
+  }
+  throw new SlideWorkflowError(`Unsupported artifact domain '${config.artifactDomain}' for ${command}`, "INVALID_COMMAND");
+}
+
+export function researchArtifactPaths(targetInfo) {
+  const researchPath = targetInfo.researchPath ?? path.join(targetInfo.deckPath, "research");
+  return Object.freeze(
+    Object.fromEntries(Object.entries(RESEARCH_ARTIFACT_FILES).map(([key, fileName]) => [key, path.join(researchPath, fileName)])),
+  );
+}
+
 export function supervisionPath(targetInfo, command) {
-  return path.join(targetInfo.reviewPath, `${command}-supervision.md`);
+  return path.join(artifactDomainPath(targetInfo, command), `${command}-supervision.md`);
 }
 
 export function approvalPath(targetInfo, command) {

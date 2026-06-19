@@ -36,6 +36,7 @@ import {
   isSuccessfulCommandState,
   parseFrontMatter,
   parseRequiredState,
+  researchArtifactPaths,
   requireCommand,
   resolveDeckTarget,
   supervisionPath,
@@ -895,6 +896,78 @@ async function main() {
     }
 
     await assertCommandPrerequisites(targetInfo, "plan");
+  });
+
+  await check("research artifact domain resolves separately from review artifacts", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    const expectedResearchPath = path.join(targetInfo.deckPath, "research");
+    const briefBefore = await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8");
+
+    assert(targetInfo.researchPath === expectedResearchPath, `researchPath must resolve to deck research directory, got ${targetInfo.researchPath}`);
+    assert(supervisionPath(targetInfo, "research") === path.join(expectedResearchPath, "research-supervision.md"), "research supervision path used review domain");
+    assert(supervisionPath(targetInfo, "plan") === path.join(targetInfo.reviewPath, "plan-supervision.md"), "plan supervision path changed from review domain");
+
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    assert(researchArtifacts.brief === path.join(expectedResearchPath, "research-brief.md"), "research brief path was not shared from research domain");
+    assert(researchArtifacts.report === path.join(expectedResearchPath, "research-report.md"), "research report path was not shared from research domain");
+    assert(researchArtifacts.sources === path.join(expectedResearchPath, "research-sources.md"), "research sources path was not shared from research domain");
+    assert(researchArtifacts.claims === path.join(expectedResearchPath, "research-claims.md"), "research claims path was not shared from research domain");
+    assert(researchArtifacts.openQuestions === path.join(expectedResearchPath, "open-questions.md"), "open questions path was not shared from research domain");
+    assert(researchArtifacts.supervision === supervisionPath(targetInfo, "research"), "research supervision path was not shared with artifact manifest");
+
+    await mkdir(expectedResearchPath, { recursive: true });
+    await writeFile(
+      path.join(expectedResearchPath, "research-supervision.md"),
+      [
+        "---",
+        "command: research",
+        `target: ${targetInfo.target}`,
+        "generated_at: 2026-06-05T17:10:00+09:00",
+        "workflow_run_id: run-research-1",
+        "step: supervision",
+        "cycle: 1",
+        "state: researched",
+        "result: passed",
+        "blocking_findings: 0",
+        "major_findings: 0",
+        "minor_findings: 0",
+        "info_findings: 0",
+        "---",
+        "",
+        "# Research Supervision",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    assert(isSuccessfulCommandState(targetInfo, "research"), "research supervision in research domain was not detected");
+
+    await rm(path.join(expectedResearchPath, "research-supervision.md"));
+    await writeFile(
+      path.join(targetInfo.reviewPath, "research-supervision.md"),
+      [
+        "---",
+        "command: research",
+        `target: ${targetInfo.target}`,
+        "generated_at: 2026-06-05T17:10:00+09:00",
+        "workflow_run_id: stale-review-run",
+        "step: supervision",
+        "cycle: 1",
+        "state: researched",
+        "result: passed",
+        "blocking_findings: 0",
+        "major_findings: 0",
+        "minor_findings: 0",
+        "info_findings: 0",
+        "---",
+        "",
+        "# Stale Review Supervision",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    assert(!isSuccessfulCommandState(targetInfo, "research"), "stale review-domain research supervision satisfied research state");
+    assert((await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8")) === briefBefore, "brief.md was touched by research path resolution");
   });
 
   await check("missing approval fails approved state check", async () => {

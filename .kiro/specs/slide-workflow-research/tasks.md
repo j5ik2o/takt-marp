@@ -10,7 +10,7 @@
   - _Boundary:_ Command Config Registry
   - _Depends:_ none
 
-- [ ] 1.2 research artifact domain の path と supervision 読み取りを分離する
+- [x] 1.2 research artifact domain の path と supervision 読み取りを分離する
   - `slides/<deck>/research/` を research artifact の入出力先として扱い、既存 `review/` domain と混ぜない
   - `research-supervision.md` は research domain から読み、`state: researched` と既存 count fields を検証できるようにする
   - `research-brief.md`、`research-report.md`、`research-sources.md`、`research-claims.md`、`open-questions.md` の配置を runner/sync が共有できる状態にする
