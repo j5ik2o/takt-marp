@@ -37,6 +37,6 @@
 
 ## 制約
 
-- 参照デッキが `slides.md` / `_slides.md` / `SLIDES.md` として存在する場合も、期待値分析だけを行い、本文を直接コピーしないでください。
+- 参照デッキが `slides.md` / `_slides.md` として存在する場合も、期待値分析だけを行い、本文を直接コピーしないでください。assembled outputである `SLIDES.md` は参照デッキ候補にしてはいけません。
 - 参照デッキがない場合も `# Reference Deck Analysis` を出力し、Found: no と Plan Implications を明示してください。
 - Target slide count と参照デッキのslide countが矛盾する場合は、勝手に補正せず Plan Implications に finding 候補として残してください。

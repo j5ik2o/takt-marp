@@ -10,7 +10,7 @@ briefを後続workflowが読みやすい形に正規化してください。
 7. **固定アウトラインの保持(必須):** 固定アウトラインは章・節・leaf項目の順序と表記を変えずに `Fixed Outline` に保持してください。さらに、すべての leaf 項目を `Required Topics` にも漏れなく列挙してください。
 8. **禁止語の保持(必須):** 「使わない」「避ける」「戻さない」等の禁止・回避指示は `Avoid` に転記してください。禁止語だけでなく、避けるべき章名・言い換え・誤記も保持してください。
 9. **Fact Inventory の収集(必須):** 登壇者プロフィール(`Speaker Profile`)と事実インベントリ(`Fact Inventory`: version・数値実績・出典等の根拠)を `brief.md` および Source Materials から収集してください。セミナー日時、主催、形式、対象、講師所属が brief にある場合は必ず `Fact Inventory` に残してください。情報が提供されていない場合は「未指定」とするだけで `needs_input` にはしないでください。
-10. **slide count 契約の保持(必須):** `Target slide count` は原文値を保持してください。固定アウトライン、資料密度、6時間講義、講義テキスト兼用などの要求と矛盾する場合でも勝手に補正せず、`Deck Mode` と Non-blocking notes に「概要版か講義本体かの修正が必要」と明記してください。`Target slide count: 5` は5枚の概要版として扱い、講義本体を作るには100〜140または期待値相当(例:119)へ修正が必要です。
+10. **slide count 契約の保持(必須):** `Target slide count` は原文値を保持してください。`Deck Mode` は `overview` / `lecture-body` / `needs_correction` のいずれかだけを書いてください。固定アウトライン、資料密度、6時間講義、講義テキスト兼用などの要求と矛盾する場合でも勝手に補正せず、`Deck Mode: needs_correction` とし、Non-blocking notes に「概要版か講義本体かの修正が必要」と明記してください。`Target slide count: 5` は5枚の概要版として扱い、講義本体を作るには100〜140または期待値相当(例:119)へ修正が必要です。
 11. `brief.normalized.md`を書いてください。
 
 **artifact 出力:**

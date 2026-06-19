@@ -2,7 +2,7 @@ brief.normalized.md と参照デッキ候補から、期待値分析を作成し
 
 **やること:**
 1. `brief.normalized.md` を読んでください。deck-local `slides/<deck>/brief.normalized.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` を読んでください。
-2. deck directory に `_slides.md`、`slides.md`、`SLIDES.md`、または brief の Source Materials で明示された参照デッキがあるか確認してください。
+2. deck directory に `_slides.md`、`slides.md`、または brief の Source Materials で明示された参照デッキがあるか確認してください。assembled outputである `SLIDES.md` は参照デッキ候補にしてはいけません。
 3. 参照デッキが存在する場合は、本文をコピーせず、slide count、章/節の範囲、appendix比率、情報密度、speaker notes量、visual/layout pattern、coverage期待値だけを分析してください。
 4. 参照デッキが存在しない場合も `reference-analysis.md` を出力し、Found: no、分析できない理由、planへ伝搬すべき代替根拠を明示してください。
 5. `Target slide count` と参照デッキのslide countが矛盾する場合は、勝手に補正せず Plan Implications に finding 候補として記録してください。
