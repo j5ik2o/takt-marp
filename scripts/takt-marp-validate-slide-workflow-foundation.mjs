@@ -13,6 +13,7 @@ import {
 import { ejectProject } from "./lib/takt-marp-project-eject.mjs";
 import { initializeProject } from "./lib/takt-marp-project-init.mjs";
 import {
+  assertNoProhibitedEntries,
   diffTemplateTrees,
   formatTemplateDrift,
   listTemplateEntries,
@@ -35,6 +36,10 @@ import {
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
+import {
+  REQUIRED_PACK_FILES,
+  checkPackContents,
+} from "./takt-marp-validate-package-boundary.mjs";
 
 const checks = [];
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -578,6 +583,73 @@ async function main() {
     assert(output.includes("  - workflows/takt-marp-slide-plan.yaml"), `contentMismatch path omitted: ${output}`);
   });
 
+  await check("package boundary validator requires no-copy/eject runtime files without requiring init", async () => {
+    assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-project-eject.mjs"),
+      `required package files must include eject runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-errors.mjs"),
+      `required package files must include shared error runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      !REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-project-init.mjs"),
+      `init compatibility shim must not be mandatory package content: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+
+    const templateEntries = [
+      { relativePath: "workflows/takt-marp-slide-plan.yaml" },
+      { relativePath: "facets/instructions/takt-marp-compose-fix.md" },
+    ];
+    const validPackPaths = [
+      ...REQUIRED_PACK_FILES,
+      "fixtures/marp-slide-workflow/_workflow-smoke/brief.md",
+      "templates/project/workflows/takt-marp-slide-plan.yaml",
+      "templates/project/facets/instructions/takt-marp-compose-fix.md",
+    ].sort();
+
+    const validViolations = collectPackContentViolations(validPackPaths, templateEntries);
+    assert(validViolations.length === 0, `valid no-copy/eject pack paths reported violations: ${formatViolations(validViolations)}`);
+
+    for (const missingPath of ["scripts/lib/takt-marp-project-eject.mjs", "scripts/lib/takt-marp-errors.mjs"]) {
+      const violations = collectPackContentViolations(
+        validPackPaths.filter((packedPath) => packedPath !== missingPath),
+        templateEntries,
+      );
+      assert(
+        violations.some((violation) => violation.detail === `required file missing from pack: ${missingPath}`),
+        `missing required runtime ${missingPath} was not reported with path: ${formatViolations(violations)}`,
+      );
+    }
+
+    const prohibitedPath = "templates/project/workflows/config.yaml";
+    const prohibitedViolations = collectPackContentViolations([...validPackPaths, prohibitedPath], templateEntries);
+    assert(
+      prohibitedViolations.some((violation) => violation.detail.includes(prohibitedPath)),
+      `prohibited packed path was not reported with path: ${formatViolations(prohibitedViolations)}`,
+    );
+
+    const providerSettingsEntry = "facets/provider-settings.yaml";
+    let caught;
+    try {
+      assertNoProhibitedEntries([{ relativePath: providerSettingsEntry }]);
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "PACKAGE_BOUNDARY_VIOLATION", `expected provider settings template entry violation, got ${caught?.code ?? "success"}`);
+    assert(
+      caught.message.includes(providerSettingsEntry),
+      `provider settings template entry violation must include path ${providerSettingsEntry}: ${caught.message}`,
+    );
+
+    const providerSettingsPackPath = "templates/project/facets/provider-settings.yaml";
+    const providerSettingsViolations = collectPackContentViolations([...validPackPaths, providerSettingsPackPath], templateEntries);
+    assert(
+      providerSettingsViolations.some((violation) => violation.detail.includes(providerSettingsPackPath)),
+      `provider settings packed path was not reported with path: ${formatViolations(providerSettingsViolations)}`,
+    );
+  });
+
   await check("CLI entry delegates supported runtime to dispatcher", async () => {
     const result = spawnSync(process.execPath, [BIN_ENTRY_SCRIPT, "--help"], { encoding: "utf8" });
     assert(result.status === 0, `CLI entry help failed: ${result.stderr}`);
@@ -1010,6 +1082,16 @@ async function assertNoRuntimeOrProviderFiles(root) {
   for (const relativePath of forbidden) {
     assert(!existsSync(path.join(root, ...relativePath.split("/"))), `eject generated non-template path: ${relativePath}`);
   }
+}
+
+function collectPackContentViolations(paths, templateEntries) {
+  const violations = [];
+  checkPackContents(paths, templateEntries, (group, detail) => violations.push({ group, detail }));
+  return violations;
+}
+
+function formatViolations(violations) {
+  return violations.map((violation) => `${violation.group}: ${violation.detail}`).join("; ");
 }
 
 async function captureStdout(fn) {

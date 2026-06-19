@@ -69,7 +69,7 @@
   - _Boundary:_ TemplateSyncValidator
   - _Depends:_ 1.5
 
-- [ ] 2.4 (P) PackageBoundaryValidator を eject/no-copy 前提へ更新する
+- [x] 2.4 (P) PackageBoundaryValidator を eject/no-copy 前提へ更新する
   - package 内容が workflow/facet template、runtime 実行物、smoke fixture、utility 実行物の範囲に収まることを検証する
   - `init` 前提の必須 file や project-local template 必須化を除去し、禁止 pattern と include 境界の不一致を失敗にする
   - 完了条件: 正常 package は成功し、禁止 file 混入や include 境界の欠落は path または項目名付きで失敗する

@@ -14,6 +14,7 @@ export const TEMPLATE_DRIFT_KINDS = Object.freeze([
 
 export const PROHIBITED_TEMPLATE_PATTERNS = Object.freeze([
   /(^|\/)config\.yaml$/i,
+  /(^|\/)provider-settings\.ya?ml$/i,
   /(^|\/)runs(\/|$)/i,
   /(^|\/)render(\/|$)/i,
   /(^|\/)persona_sessions\.json$/i,
