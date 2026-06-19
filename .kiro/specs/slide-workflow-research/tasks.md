@@ -1,7 +1,7 @@
 # 実装計画
 
 - [ ] 1. 基盤: command/state と research domain の土台を作る
-- [ ] 1.1 Command Config Registry で research command を単一定義源に追加する
+- [x] 1.1 Command Config Registry で research command を単一定義源に追加する
   - `research / plan / compose / polish / deliver` の command metadata から既存 exports と validation が派生する状態にする
   - `research` は approval 非対応、successful state `researched`、artifact domain `research`、invalidation target `research` として扱う
   - `plan` の prerequisite は `brief.md` のまま維持し、`research` の state や approval を要求しない

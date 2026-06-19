@@ -21,15 +21,22 @@ import {
 } from "./lib/takt-marp-project-templates.mjs";
 import {
   archiveCommandArtifacts,
+  APPROVAL_COMMANDS,
+  assertCommandPrerequisites,
   assertTaktExecutableAvailable,
   assertWorkflowAvailable,
   checkRequiredState,
   cleanGeneratedOutputs,
+  COMMANDS,
+  COMMAND_STATES,
   commandSupervisionResult,
+  configFor,
+  downstreamCommands,
   formatError,
   isSuccessfulCommandState,
   parseFrontMatter,
   parseRequiredState,
+  requireCommand,
   resolveDeckTarget,
   supervisionPath,
   writeApproval,
@@ -841,6 +848,53 @@ async function main() {
     const root = await fixtureRoot();
     await makeDeck(root, "demo");
     await expectFailure(() => resolveDeckTarget("slides/demo/brief.md", { root }), "INVALID_TARGET");
+  });
+
+  await check("command config registry includes research without requiring it for plan", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    const researchConfig = configFor("research");
+    const planConfig = configFor("plan");
+
+    assert(requireCommand("research") === "research", "research command was not accepted");
+    assert(COMMANDS.includes("research"), `COMMANDS must include research: ${COMMANDS.join(", ")}`);
+    assert(COMMAND_STATES.research === "researched", `research state must be researched, got ${COMMAND_STATES.research}`);
+    assert(researchConfig.artifactDomain === "research", `research artifact domain must be research, got ${researchConfig.artifactDomain}`);
+    assert(
+      JSON.stringify(researchConfig.invalidationTargets) === JSON.stringify(["research"]),
+      `research invalidation targets must stay in research domain, got ${researchConfig.invalidationTargets.join(", ")}`,
+    );
+    assert(!APPROVAL_COMMANDS.includes("research"), `research must not support approval: ${APPROVAL_COMMANDS.join(", ")}`);
+    assert(
+      JSON.stringify(downstreamCommands("research")) === JSON.stringify(["research"]),
+      `research downstream must stay in research domain, got ${downstreamCommands("research").join(", ")}`,
+    );
+    assert(JSON.stringify(planConfig.sourceArtifacts) === JSON.stringify(["brief.md"]), `plan prerequisites changed: ${planConfig.sourceArtifacts.join(", ")}`);
+    assert(!planConfig.requiredState, `plan must not require a prior command state, got ${planConfig.requiredState}`);
+
+    let caught;
+    try {
+      requireCommand("not-a-command");
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "INVALID_COMMAND", `expected INVALID_COMMAND, got ${caught?.code ?? "success"}`);
+    assert(caught.message.includes("research"), `invalid command expected list must include research: ${caught.message}`);
+
+    for (const prototypeCommand of ["toString", "constructor", "hasOwnProperty", "__proto__"]) {
+      caught = undefined;
+      try {
+        configFor(prototypeCommand);
+      } catch (error) {
+        caught = error;
+      }
+      assert(
+        caught?.code === "INVALID_COMMAND",
+        `expected INVALID_COMMAND for prototype command ${prototypeCommand}, got ${caught?.code ?? "success"}`,
+      );
+    }
+
+    await assertCommandPrerequisites(targetInfo, "plan");
   });
 
   await check("missing approval fails approved state check", async () => {

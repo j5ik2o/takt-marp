@@ -7,14 +7,68 @@ import { runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
 
 export { SlideWorkflowError, formatError } from "./takt-marp-errors.mjs";
 
-export const COMMANDS = ["plan", "compose", "polish", "deliver"];
-export const COMMAND_STATES = {
-  plan: "planned",
-  compose: "composed",
-  polish: "polished",
-  deliver: "delivered",
-};
-export const APPROVAL_COMMANDS = ["plan", "compose"];
+const COMMAND_CONFIG_ENTRIES = Object.freeze([
+  commandConfig({
+    name: "research",
+    successfulState: "researched",
+    artifactDomain: "research",
+    approvalSupported: false,
+    invalidationTargets: ["research"],
+    sourceArtifacts: [],
+  }),
+  commandConfig({
+    name: "plan",
+    successfulState: "planned",
+    artifactDomain: "review",
+    approvalSupported: true,
+    invalidationTargets: ["plan", "compose", "polish", "deliver"],
+    sourceArtifacts: ["brief.md"],
+  }),
+  commandConfig({
+    name: "compose",
+    successfulState: "composed",
+    artifactDomain: "review",
+    approvalSupported: true,
+    invalidationTargets: ["compose", "polish", "deliver"],
+    sourceArtifacts: [],
+    requiredState: "plan:planned:approved",
+  }),
+  commandConfig({
+    name: "polish",
+    successfulState: "polished",
+    artifactDomain: "review",
+    approvalSupported: false,
+    invalidationTargets: ["polish", "deliver"],
+    sourceArtifacts: [],
+    requiredState: "compose:composed:approved",
+  }),
+  commandConfig({
+    name: "deliver",
+    successfulState: "delivered",
+    artifactDomain: "review",
+    approvalSupported: false,
+    invalidationTargets: ["deliver"],
+    sourceArtifacts: [],
+    requiredState: "polish:polished",
+  }),
+]);
+
+export const COMMAND_CONFIGS = Object.freeze(Object.fromEntries(COMMAND_CONFIG_ENTRIES.map((config) => [config.name, config])));
+export const COMMANDS = Object.freeze(COMMAND_CONFIG_ENTRIES.map((config) => config.name));
+export const COMMAND_STATES = Object.freeze(
+  Object.fromEntries(COMMAND_CONFIG_ENTRIES.map((config) => [config.name, config.successfulState])),
+);
+export const APPROVAL_COMMANDS = Object.freeze(
+  COMMAND_CONFIG_ENTRIES.filter((config) => config.approvalSupported).map((config) => config.name),
+);
+
+function commandConfig(config) {
+  return Object.freeze({
+    ...config,
+    invalidationTargets: Object.freeze([...config.invalidationTargets]),
+    sourceArtifacts: Object.freeze([...config.sourceArtifacts]),
+  });
+}
 
 export function parseArgs(argv) {
   const positional = [];
@@ -43,13 +97,18 @@ export function parseArgs(argv) {
 }
 
 export function requireCommand(command) {
-  if (!COMMANDS.includes(command)) {
+  return configFor(command).name;
+}
+
+export function configFor(command) {
+  if (!Object.hasOwn(COMMAND_CONFIGS, command)) {
     throw new SlideWorkflowError(
       `Unsupported command '${command}'. Expected one of: ${COMMANDS.join(", ")}`,
       "INVALID_COMMAND",
     );
   }
-  return command;
+  const config = COMMAND_CONFIGS[command];
+  return config;
 }
 
 export function resolveDeckTarget(target, options = {}) {
@@ -319,23 +378,15 @@ export async function checkRequiredState(targetInfo, requirement) {
 }
 
 export async function assertCommandPrerequisites(targetInfo, command) {
-  if (command === "plan") {
-    const briefPath = path.join(targetInfo.deckPath, "brief.md");
-    if (!existsSync(briefPath)) {
-      throw new SlideWorkflowError(`Missing brief.md: ${path.relative(process.cwd(), briefPath)}`, "PREREQUISITE_MISSING");
+  const config = configFor(command);
+  for (const artifactName of config.sourceArtifacts) {
+    const artifactPath = path.join(targetInfo.deckPath, artifactName);
+    if (!existsSync(artifactPath)) {
+      throw new SlideWorkflowError(`Missing ${artifactName}: ${path.relative(process.cwd(), artifactPath)}`, "PREREQUISITE_MISSING");
     }
-    return;
   }
-  if (command === "compose") {
-    await checkRequiredState(targetInfo, parseRequiredState("plan:planned:approved"));
-    return;
-  }
-  if (command === "polish") {
-    await checkRequiredState(targetInfo, parseRequiredState("compose:composed:approved"));
-    return;
-  }
-  if (command === "deliver") {
-    await checkRequiredState(targetInfo, parseRequiredState("polish:polished"));
+  if (config.requiredState) {
+    await checkRequiredState(targetInfo, parseRequiredState(config.requiredState));
   }
 }
 
@@ -433,8 +484,7 @@ export async function cleanGeneratedOutputs(targetInfo, options = {}) {
 }
 
 export function downstreamCommands(command) {
-  const index = COMMANDS.indexOf(command);
-  return COMMANDS.slice(index);
+  return [...configFor(command).invalidationTargets];
 }
 
 export function timestampForFile() {
