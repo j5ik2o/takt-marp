@@ -139,7 +139,7 @@
   - _Boundary:_ SmokeValidator
   - _Depends:_ 4.1
 
-- [ ] 4.3 smoke regression で mock 必須・real 任意の契約を固定する
+- [x] 4.3 smoke regression で mock 必須・real 任意の契約を固定する
   - `takt-marp smoke` は mock provider で完走することを必須検証にする
   - `--provider <name>` は指定 provider の結果を生成するが、CI 必須条件として real provider 成功を要求しない
   - provider 設定不足時に設定ファイルを生成しないこと、user cwd と temp project の no-copy 状態を検証する

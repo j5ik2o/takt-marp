@@ -44,6 +44,14 @@ const SMOKE_ORGANIZER = "サンプル研修ラボ株式会社";
 const SMOKE_EVENT_DATE = "2031年4月17日（木）10:00〜16:30";
 const SMOKE_VENUE = "ミラージュホール A";
 const SMOKE_COMMON_EXAMPLE = "備品購入申請・承認";
+const SMOKE_PROVIDER_SETTINGS_RELATIVE_PATHS = Object.freeze([
+  ".takt/config.yaml",
+  ".takt/provider-settings.yaml",
+  ".takt/provider.yaml",
+  ".takt/providers.yaml",
+  ".takt/credentials.env",
+  ".takt/credentials.json",
+]);
 const EXTERNAL_SOURCE_PATTERNS = Object.freeze([
   { pattern: /https?:\/\//i, label: "external URL" },
   { pattern: /\bgmail\b/i, label: "mail export reference" },
@@ -66,7 +74,10 @@ async function main() {
   let targetInfo;
   let templateContext;
   let templateAssetSnapshot;
+  let providerSettingsSnapshot;
   try {
+    currentCheckName = "smoke:provider-settings-snapshot";
+    providerSettingsSnapshot = await snapshotSmokeProviderSettings(ROOT);
     currentCheckName = "smoke:template-asset-snapshot";
     templateAssetSnapshot = await snapshotSmokeTemplateAssets(ROOT);
     currentCheckName = "smoke:selected-template-source";
@@ -126,7 +137,7 @@ async function main() {
     commands.push(...rejectedRerunChecks.commands);
     observedPaths.push(...rejectedRerunChecks.observedPaths);
   } catch (error) {
-    const reason = formatError(error);
+    const reason = formatSmokeFailure(error, options);
     failures.push(reason);
     checks.push(fail(currentCheckName, reason));
   }
@@ -139,6 +150,17 @@ async function main() {
       const reason = formatError(error);
       failures.push(reason);
       checks.push(fail("smoke:template-assets-no-copy", reason));
+    }
+  }
+
+  if (providerSettingsSnapshot) {
+    try {
+      const asserted = await assertSmokeProviderSettingsNotGenerated(ROOT, providerSettingsSnapshot);
+      checks.push(pass("smoke:provider-settings-no-write", `Provider settings and credentials were not generated or changed (${asserted.summary}).`));
+    } catch (error) {
+      const reason = formatError(error);
+      failures.push(reason);
+      checks.push(fail("smoke:provider-settings-no-write", reason));
     }
   }
 
@@ -485,6 +507,37 @@ export async function assertSmokeTemplateAssetsNotGenerated(projectRoot = ROOT, 
   return Object.freeze({
     snapshot: after,
     summary: presentDomains.length > 0 ? `pre-existing ${presentDomains.join("+")} unchanged` : "no workflow/facet template asset directories present",
+  });
+}
+
+export async function snapshotSmokeProviderSettings(projectRoot = ROOT) {
+  const root = path.resolve(projectRoot);
+  const snapshots = [];
+  for (const relativePath of SMOKE_PROVIDER_SETTINGS_RELATIVE_PATHS) {
+    const filePath = path.join(root, ...relativePath.split("/"));
+    const exists = existsSync(filePath);
+    snapshots.push(Object.freeze({
+      relativePath,
+      exists,
+      sha256: exists ? createHash("sha256").update(await readFile(filePath)).digest("hex") : null,
+    }));
+  }
+  return Object.freeze(snapshots);
+}
+
+export async function assertSmokeProviderSettingsNotGenerated(projectRoot = ROOT, before) {
+  assert(before, "smoke:provider-settings-no-write missing provider settings baseline snapshot");
+  const after = await snapshotSmokeProviderSettings(projectRoot);
+  const beforeJson = JSON.stringify(before);
+  const afterJson = JSON.stringify(after);
+  assert(
+    beforeJson === afterJson,
+    `smoke:provider-settings-no-write provider settings or credentials changed. before=${beforeJson} after=${afterJson}`,
+  );
+  const presentFiles = after.filter((item) => item.exists).map((item) => item.relativePath);
+  return Object.freeze({
+    snapshot: after,
+    summary: presentFiles.length > 0 ? `pre-existing ${presentFiles.join(", ")} unchanged` : "no provider settings or credentials present",
   });
 }
 
@@ -2526,6 +2579,14 @@ function smokeSummaryProviderReason(options) {
   return isMockProvider(options)
     ? "Smoke summary is marked as mock smoke validation evidence."
     : `Smoke summary is marked as real smoke validation evidence for provider '${options.provider}'.`;
+}
+
+function formatSmokeFailure(error, options) {
+  const reason = formatError(error);
+  if (isMockProvider(options)) {
+    return reason;
+  }
+  return `${reason} Check TAKT provider environment/configuration for '${options.provider}'. Real provider smoke is optional and is not required by CI; mock smoke remains the required deterministic validation.`;
 }
 
 function safeFileSegment(value) {

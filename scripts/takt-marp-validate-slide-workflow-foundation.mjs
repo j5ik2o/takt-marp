@@ -1023,6 +1023,30 @@ async function main() {
     await smoke.assertSmokeTemplateAssetsNotGenerated(ejectedRoot, ejectedSnapshot);
   });
 
+  await check("smoke validator preserves provider settings absence and user-owned config files", async () => {
+    const smokeSource = await readFile(path.join(SCRIPT_DIR, "takt-marp-validate-slide-workflow-smoke.mjs"), "utf8");
+    assert(smokeSource.includes("smoke:provider-settings-no-write"), "smoke validator must report provider settings no-write evidence");
+    assert(smokeSource.includes("Check TAKT provider environment/configuration"), "real provider smoke failures must guide environment/config checks");
+    assert(smokeSource.includes("Real provider smoke is optional"), "real provider smoke must remain optional guidance, not a CI requirement");
+
+    const smokeModuleUrl = pathToFileURL(path.join(SCRIPT_DIR, "takt-marp-validate-slide-workflow-smoke.mjs")).href;
+    const smoke = await import(`${smokeModuleUrl}?providerSettings=${Date.now()}`);
+    const missingRoot = await mkdtemp(path.join(os.tmpdir(), "smoke-provider-settings-missing-"));
+    const missingSnapshot = await smoke.snapshotSmokeProviderSettings(missingRoot);
+    await smoke.assertSmokeProviderSettingsNotGenerated(missingRoot, missingSnapshot);
+
+    const userOwnedRoot = await mkdtemp(path.join(os.tmpdir(), "smoke-provider-settings-owned-"));
+    await mkdir(path.join(userOwnedRoot, ".takt"), { recursive: true });
+    await writeFile(path.join(userOwnedRoot, ".takt", "provider-settings.yaml"), "provider: user-owned\n", "utf8");
+    await writeFile(path.join(userOwnedRoot, ".takt", "credentials.env"), "TAKT_API_KEY=user-owned\n", "utf8");
+    const userOwnedSnapshot = await smoke.snapshotSmokeProviderSettings(userOwnedRoot);
+    await smoke.assertSmokeProviderSettingsNotGenerated(userOwnedRoot, userOwnedSnapshot);
+    const providerSettings = await readFile(path.join(userOwnedRoot, ".takt", "provider-settings.yaml"), "utf8");
+    const credentials = await readFile(path.join(userOwnedRoot, ".takt", "credentials.env"), "utf8");
+    assert(providerSettings === "provider: user-owned\n", "smoke provider assertion changed provider-settings.yaml");
+    assert(credentials === "TAKT_API_KEY=user-owned\n", "smoke provider assertion changed credentials.env");
+  });
+
   await check("global CLI workflow command uses ejected workflow override", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-ejected-"));
     await makeDeck(root, "demo");
@@ -1434,6 +1458,8 @@ async function main() {
     for (const oldName of ["slide:draft", "slide:review-revise", "slide:build-qa"]) {
       assert(!scripts[oldName], `old package script remains: ${oldName}`);
     }
+    assert(scripts.test?.includes("npm run slide:smoke -- --provider mock"), "npm test must require deterministic mock smoke");
+    assert(!scripts.test?.match(/--provider (?!mock\b)[^ ]+/), `npm test must not require real provider smoke: ${scripts.test}`);
   });
 
   const failed = checks.filter((item) => item.status === "FAIL");
