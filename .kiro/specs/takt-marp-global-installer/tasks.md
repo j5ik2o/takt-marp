@@ -17,7 +17,7 @@
   - _Boundary:_ CliEntry
   - _Depends:_ 1.1
 
-- [ ] 1.3 package root と project root を分離した runtime 解決を固定する
+- [x] 1.3 package root と project root を分離した runtime 解決を固定する
   - global package 側の `takt`、Marp utility、内部実行 script を対象 project の `package.json` や `node_modules` に依存せず解決する
   - workflow 実行時の current working directory は対象 project として維持し、target project の `npm run` 経由へ戻らないようにする
   - 完了条件: `package.json` と `node_modules` がない対象 project でも、それらの不在だけを理由に workflow command が失敗しないことを検証できる

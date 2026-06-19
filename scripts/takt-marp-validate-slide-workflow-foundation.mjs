@@ -6,6 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  packageScriptPath,
+  resolveRuntimeContext,
+  runtimeExecutablePath,
+} from "./lib/takt-marp-runtime-context.mjs";
+import {
   archiveCommandArtifacts,
   assertTaktExecutableAvailable,
   assertWorkflowAvailable,
@@ -63,6 +68,34 @@ async function main() {
     assert(result.stderr.includes("NODE_VERSION_UNSUPPORTED"), `missing unsupported code: ${result.stderr}`);
     assert(result.stderr.includes("Node.js >= 24"), `missing required Node version: ${result.stderr}`);
     assert(result.stdout === "", `dispatcher started despite unsupported Node: ${result.stdout}`);
+  });
+
+  await check("runtime context separates package root from package-less project root", async () => {
+    const projectRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-package-less-project-"));
+    const originalCwd = process.cwd();
+    try {
+      process.chdir(projectRoot);
+      const expectedProjectRoot = process.cwd();
+      const expectedRuntimeBinDir = path.join(ROOT_DIR, "node_modules", ".bin");
+      const ctx = resolveRuntimeContext();
+      assert(!existsSync(path.join(expectedProjectRoot, "package.json")), "fixture unexpectedly has project package.json");
+      assert(!existsSync(path.join(expectedProjectRoot, "node_modules")), "fixture unexpectedly has project node_modules");
+      assert(ctx.projectRoot === expectedProjectRoot, `projectRoot should be current project cwd, got: ${ctx.projectRoot}`);
+      assert(ctx.packageRoot === ROOT_DIR, `packageRoot should remain package root, got: ${ctx.packageRoot}`);
+      assert(ctx.runtimeBinDir === expectedRuntimeBinDir, `runtimeBinDir should remain package-root based, got: ${ctx.runtimeBinDir}`);
+      assert(runtimeExecutablePath("takt") === path.join(expectedRuntimeBinDir, runtimeExecutableName("takt")), "takt executable should resolve from package root");
+      assert(runtimeExecutablePath("marp") === path.join(expectedRuntimeBinDir, runtimeExecutableName("marp")), "marp executable should resolve from package root");
+      assert(packageScriptPath("scripts/takt-marp-run-slide-workflow.mjs") === RUNNER_SCRIPT, "package script path should resolve from package root");
+
+      const fakePackage = await makeFakePackageRoot();
+      const expectedFakeRuntimeBinDir = path.join(fakePackage.packageRoot, "node_modules", ".bin");
+      assert(
+        runtimeExecutablePath("takt", { root: fakePackage.packageRoot }) === path.join(expectedFakeRuntimeBinDir, runtimeExecutableName("takt")),
+        "explicit runtimeExecutablePath root option compatibility changed",
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
   });
 
   await check("invalid target rejects markdown file", async () => {
@@ -475,6 +508,10 @@ async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {
   const executablePath = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "takt.cmd" : "takt");
   await mkdir(path.dirname(executablePath), { recursive: true });
   await writeFile(executablePath, script, { encoding: "utf8", mode: 0o755 });
+}
+
+function runtimeExecutableName(tool) {
+  return process.platform === "win32" ? `${tool}.cmd` : tool;
 }
 
 function fakeTaktScript(runNames, result) {
