@@ -23,6 +23,8 @@
 - 2枚目以降のslideは `---` delimiter で区切る
 - 各slideに `<!-- slide_id: SNNN -->` を含める
 - 各slideにspeaker notesを含める
+- `brief.normalized.md` の `Event Context` の `Name` が「未指定」以外の場合は、title slide相当のsection本文に含める
+- `brief.normalized.md` の `Speaker Profile` が「未指定」以外の場合は、自己紹介相当slideまたはtitle slideのspeaker contextに含める
 - `html:` visual はHTML/CSS構造を本文に含める
 - `svg:` / `inline-svg:` / `existing:` visual は `<!-- Visual: ... -->` placeholderを含める
 - `none` visual はplaceholderを含めない

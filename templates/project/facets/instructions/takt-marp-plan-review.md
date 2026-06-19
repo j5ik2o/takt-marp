@@ -15,8 +15,8 @@ plan command の成果物をレビューしてください。
 - `brief.normalized.md` の `Critical Constraints` / `Output Requirements` / `Fact Inventory` / `Event Context` から正式タイトル、講師名、講師所属、主催、日時、形式、対象、出力要件を抽出し、`plan.md` / `slide-blueprint.md` / title slide plan に完全一致で残っていることを確認してください。欠落・表記揺れ・誤置換は blocker または major です。
 - `brief.normalized.md` の固定アウトラインの章・節・leaf項目が順序と表記を保って coverage matrix に入っていること。欠落・順序変更・章名の言い換えは blocker または major です。
 - `brief.normalized.md` の `Avoid` にある禁止語・避けるべき表現が `plan.md` に保持され、`plan.md` / `slide-blueprint.md` の本文候補で使用されていないことを確認してください。禁止語の使用は blocker、禁止語リスト自体の欠落は major 以上です。
-- `brief.normalized.md` の `Design Requirements` / `Visual Policy` / `Information Density` / `Terminology Policy` が plan に残っていること。色、印刷、密度、用語統一、過剰装飾の禁止などの明示制約を落とした場合は major 以上です。
-- `brief.normalized.md` の `Example Policy` / `Common Example` にある共通題材が全章・コード例・演習で一貫していること。章ごとに題材を変えたり、brief で指定された語彙を別題材へ置換した場合は major 以上です。
+- `brief.normalized.md` の `Design Requirements` と `Terminology Policy` が plan に残っていること。色、印刷、情報密度、文字サイズ、図表方針、用語統一、過剰装飾の禁止など、各節に保持された明示制約を落とした場合は major 以上です。
+- `brief.normalized.md` の `Example Policy` にある共通題材・具体例方針が全章・コード例・演習で一貫していること。章ごとに題材を変えたり、brief で指定された語彙を別題材へ置換した場合は major 以上です。
 - `brief.normalized.md` のコード例方針と演習方針が coverage 対象になっていること。言語、Before/After、業務意味、フレームワーク依存可否、個人/グループ、模範回答、巻末資料などの明示制約を落とした場合は major 以上です。
 - Visual Strategy が各スライドに存在し、`render_owner: compose_sections` / `render_owner: generate_visuals` のどちらかを明示していること。
 - カード、2列比較、Before/After、表、短い手順、軽量タイムラインが `html:` ではなく `svg:` にされている場合は major finding として扱うこと。SVGを使うなら座標制御・複雑な矢印・再利用・単体レビューの理由が必要です。
