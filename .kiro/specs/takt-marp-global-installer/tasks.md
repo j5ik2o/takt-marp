@@ -33,7 +33,7 @@
   - _Boundary:_ TaktMarpErrors
   - _Depends:_ none
 
-- [ ] 1.5 bundled template の配布対象を workflow/facet だけに固定する
+- [x] 1.5 bundled template の配布対象を workflow/facet だけに固定する
   - bundled 実行と eject の対象を `.takt/workflows/**` と `.takt/facets/**` に限定し、provider 設定、runtime state、認証情報を除外する
   - template entry の列挙と禁止 pattern 検査を、eject、resolver、validator が同じ前提で使えるようにする
   - 完了条件: template 列挙が workflow/facet だけを返し、禁止対象を含む template は path 付きで検出される

@@ -70,6 +70,8 @@ export function assertNoProhibitedEntries(entries) {
 export async function diffTemplateTrees(templateRoot, devTaktRoot) {
   const templateEntries = await listTemplateEntries({ templateRoot });
   const devEntries = await listTemplateEntries({ templateRoot: devTaktRoot });
+  assertNoProhibitedEntries(templateEntries);
+  assertNoProhibitedEntries(devEntries);
   const templatePaths = new Map(templateEntries.map((entry) => [entry.relativePath, entry.sourcePath]));
   const devPaths = new Map(devEntries.map((entry) => [entry.relativePath, entry.sourcePath]));
 

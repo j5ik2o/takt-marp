@@ -1,6 +1,6 @@
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
-import { listTemplateEntries } from "./takt-marp-project-templates.mjs";
+import { assertNoProhibitedEntries, listTemplateEntries } from "./takt-marp-project-templates.mjs";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 
 const TAKT_DIR = ".takt";
@@ -49,6 +49,7 @@ export async function initializeProject(options) {
   await assertTargetDirectory(targetDir);
 
   const entries = await listTemplateEntries();
+  assertNoProhibitedEntries(entries);
   const plan = [];
   for (const entry of entries) {
     const destinationRelativePath = `${TAKT_DIR}/${entry.relativePath}`;

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cp, mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -10,6 +10,8 @@ import {
   resolveRuntimeContext,
   runtimeExecutablePath,
 } from "./lib/takt-marp-runtime-context.mjs";
+import { initializeProject } from "./lib/takt-marp-project-init.mjs";
+import { listTemplateEntries } from "./lib/takt-marp-project-templates.mjs";
 import {
   archiveCommandArtifacts,
   assertTaktExecutableAvailable,
@@ -93,6 +95,43 @@ async function main() {
       assert(error.name === "SlideWorkflowError", `${code} has unexpected error name: ${error.name}`);
       assert(error.code === code, `${code} was not stored on the error`);
       assert(errorModule.formatError(error) === `${code}: ${message}`, `${code} formatted unexpectedly: ${errorModule.formatError(error)}`);
+    }
+  });
+
+  await check("project template copy rejects prohibited workflow/facet entries before writing", async () => {
+    const prohibitedRelativePath = "workflows/config.yaml";
+    const prohibitedTemplatePath = path.join(ROOT_DIR, "templates", "project", ...prohibitedRelativePath.split("/"));
+    const targetDir = await mkdtemp(path.join(os.tmpdir(), "project-template-prohibited-"));
+    await mkdir(path.dirname(prohibitedTemplatePath), { recursive: true });
+    await writeFile(prohibitedTemplatePath, "provider: should-not-copy\n", "utf8");
+    try {
+      const entries = await listTemplateEntries();
+      assert(
+        entries.every((entry) => entry.relativePath.startsWith("workflows/") || entry.relativePath.startsWith("facets/")),
+        `template entries must be limited to workflows/facets: ${entries.map((entry) => entry.relativePath).join(", ")}`,
+      );
+      assert(
+        entries.some((entry) => entry.relativePath === prohibitedRelativePath),
+        `test setup did not expose prohibited template entry: ${prohibitedRelativePath}`,
+      );
+
+      let caught;
+      try {
+        await initializeProject({ targetDir, force: false });
+      } catch (error) {
+        caught = error;
+      }
+      assert(caught?.code === "PACKAGE_BOUNDARY_VIOLATION", `expected PACKAGE_BOUNDARY_VIOLATION, got ${caught?.code ?? "success"}`);
+      assert(
+        caught.message.includes(prohibitedRelativePath),
+        `prohibited template error must include path ${prohibitedRelativePath}: ${caught.message}`,
+      );
+      assert(
+        !existsSync(path.join(targetDir, ".takt", ...prohibitedRelativePath.split("/"))),
+        `prohibited template entry was copied: .takt/${prohibitedRelativePath}`,
+      );
+    } finally {
+      await rm(prohibitedTemplatePath, { force: true });
     }
   });
 
