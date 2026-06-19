@@ -35,6 +35,7 @@ const FORBIDDEN_PACK_PREFIXES = [
 // .git/info/exclude) are still picked up by `npm pack` because `files` lists the
 // directory. Only the canonical script naming is allowed in the pack.
 const EXPECTED_SCRIPT_PATTERNS = [/^scripts\/takt-marp-[^/]+\.mjs$/, /^scripts\/lib\/takt-marp-[^/]+\.mjs$/];
+export const FORBIDDEN_PACK_FILES = ["scripts/lib/takt-marp-project-init.mjs"];
 
 export const REQUIRED_PACK_FILES = [
   "bin/takt-marp.mjs",
@@ -177,6 +178,12 @@ export function checkPackContents(paths, templateEntries, addViolation) {
       addViolation(
         "pack contents",
         `unexpected scripts/ file (expected scripts/takt-marp-*.mjs or scripts/lib/takt-marp-*.mjs): ${packedPath}`,
+      );
+    }
+    if (FORBIDDEN_PACK_FILES.includes(packedPath)) {
+      addViolation(
+        "pack contents",
+        `stale init compatibility shim must not be packed: ${packedPath}`,
       );
     }
   }

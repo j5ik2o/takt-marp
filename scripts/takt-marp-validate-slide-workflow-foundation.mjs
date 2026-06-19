@@ -11,7 +11,6 @@ import {
   runtimeExecutablePath,
 } from "./lib/takt-marp-runtime-context.mjs";
 import { ejectProject } from "./lib/takt-marp-project-eject.mjs";
-import { initializeProject } from "./lib/takt-marp-project-init.mjs";
 import {
   assertNoProhibitedEntries,
   diffTemplateTrees,
@@ -37,6 +36,7 @@ import {
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
 import {
+  FORBIDDEN_PACK_FILES,
   REQUIRED_PACK_FILES,
   checkPackContents,
 } from "./takt-marp-validate-package-boundary.mjs";
@@ -65,7 +65,6 @@ async function main() {
     const slideWorkflowPath = path.join(SCRIPT_DIR, "lib", "takt-marp-slide-workflow.mjs");
     const templateModulePaths = [
       path.join(SCRIPT_DIR, "lib", "takt-marp-project-eject.mjs"),
-      path.join(SCRIPT_DIR, "lib", "takt-marp-project-init.mjs"),
       path.join(SCRIPT_DIR, "lib", "takt-marp-project-templates.mjs"),
     ];
 
@@ -130,7 +129,7 @@ async function main() {
 
       let caught;
       try {
-        await initializeProject({ targetDir, force: false });
+        await ejectProject({ targetDir, force: false });
       } catch (error) {
         caught = error;
       }
@@ -596,6 +595,14 @@ async function main() {
       !REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-project-init.mjs"),
       `init compatibility shim must not be mandatory package content: ${REQUIRED_PACK_FILES.join(", ")}`,
     );
+    assert(
+      FORBIDDEN_PACK_FILES.includes("scripts/lib/takt-marp-project-init.mjs"),
+      `init compatibility shim must be a forbidden pack file: ${FORBIDDEN_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      !existsSync(path.join(SCRIPT_DIR, "lib", "takt-marp-project-init.mjs")),
+      "stale init compatibility shim file must be removed from scripts/lib",
+    );
 
     const templateEntries = [
       { relativePath: "workflows/takt-marp-slide-plan.yaml" },
@@ -610,6 +617,15 @@ async function main() {
 
     const validViolations = collectPackContentViolations(validPackPaths, templateEntries);
     assert(validViolations.length === 0, `valid no-copy/eject pack paths reported violations: ${formatViolations(validViolations)}`);
+
+    const staleInitViolations = collectPackContentViolations(
+      [...validPackPaths, "scripts/lib/takt-marp-project-init.mjs"],
+      templateEntries,
+    );
+    assert(
+      staleInitViolations.some((violation) => violation.detail.includes("stale init compatibility shim")),
+      `stale init shim pack path was not rejected: ${formatViolations(staleInitViolations)}`,
+    );
 
     for (const missingPath of ["scripts/lib/takt-marp-project-eject.mjs", "scripts/lib/takt-marp-errors.mjs"]) {
       const violations = collectPackContentViolations(
@@ -1054,7 +1070,8 @@ async function main() {
     await mkdir(path.join(root, ".takt", "facets"), { recursive: true });
     const ejectedWorkflowPath = path.join(root, ".takt", "workflows", "takt-marp-slide-plan.yaml");
     const expectedEjectedWorkflowPath = path.join(await realpath(root), ".takt", "workflows", "takt-marp-slide-plan.yaml");
-    await writeFile(ejectedWorkflowPath, "name: ejected-plan\n", "utf8");
+    const ejectedWorkflowContent = "name: ejected-plan\n# user-owned ejected override\n";
+    await writeFile(ejectedWorkflowPath, ejectedWorkflowContent, "utf8");
     const fakePackage = await makeFakeCliPackageRoot();
     await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
     const argsPath = path.join(root, "takt-args.txt");
@@ -1069,6 +1086,8 @@ async function main() {
     const workflowArgIndex = args.indexOf("-w");
     assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
     assert(args[workflowArgIndex + 1] === expectedEjectedWorkflowPath, `TAKT did not receive ejected workflow path: ${args.join(" ")}`);
+    const afterPlanWorkflowContent = await readFile(ejectedWorkflowPath, "utf8");
+    assert(afterPlanWorkflowContent === ejectedWorkflowContent, "global CLI workflow command auto-replaced a user-owned ejected workflow file");
   });
 
   await check("global CLI partial template state fails before TAKT", async () => {

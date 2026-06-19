@@ -167,7 +167,7 @@
   - _Boundary:_ CI配線
   - _Depends:_ 2.3, 2.4, 5.1
 
-- [ ] 5.3 stale init 前提を検出して除去する
+- [x] 5.3 stale init 前提を検出して除去する
   - public command、validator、smoke、package boundary に残る `init` 有効化や project-local template 必須化の前提を失敗条件として扱う
   - ejected assets は upgrade で自動置換されないことを、validator と回帰検証の期待値に含める
   - 完了条件: `init` が有効 command として表示または実行される変更、ならびに ejected assets の暗黙更新は自動検証で失敗する

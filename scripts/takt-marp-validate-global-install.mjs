@@ -415,6 +415,9 @@ async function phasePartialTemplateState(ctx) {
   await prepareWorkflowProject(ejectedProjectDir);
   const ejected = await runTaktMarp(ctx, ["eject", "."], { cwd: ejectedProjectDir });
   check(ejected.code === 0, `precondition: takt-marp eject . must exit 0 for ejected override.\n${commandSummary(ejected)}`);
+  const ejectedWorkflowPath = path.join(ejectedProjectDir, ".takt", "workflows", "takt-marp-slide-plan.yaml");
+  const ejectedWorkflowContent = `${await readFile(ejectedWorkflowPath, "utf8")}\n# user-owned ejected override: ordinary workflow execution must not replace this file\n`;
+  await writeFile(ejectedWorkflowPath, ejectedWorkflowContent, "utf8");
   const plan = await runTaktMarp(ctx, ["plan", "slides/demo", "--provider", "mock"], {
     cwd: ejectedProjectDir,
     timeoutMs: WORKFLOW_TIMEOUT_MS,
@@ -424,7 +427,12 @@ async function phasePartialTemplateState(ctx) {
     ".takt/workflows/takt-marp-slide-plan.yaml",
     "ejected override plan",
   );
-  return "partial template state rejected before TAKT; full ejected override selected";
+  const afterPlanWorkflowContent = await readFile(ejectedWorkflowPath, "utf8");
+  check(
+    afterPlanWorkflowContent === ejectedWorkflowContent,
+    "ordinary workflow execution must not auto-replace or merge user-owned ejected workflow assets",
+  );
+  return "partial template state rejected before TAKT; full ejected override selected without replacing custom assets";
 }
 
 // Phase 5 (3.1, 3.3, 3.4, 3.5, 8.4): eject generates exactly workflows/** and
