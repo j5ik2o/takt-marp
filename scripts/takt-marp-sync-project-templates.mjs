@@ -5,18 +5,14 @@ import path from "node:path";
 import {
   TEMPLATE_DOMAINS,
   assertNoProhibitedEntries,
+  countTemplateDriftPaths,
   diffTemplateTrees,
+  formatTemplateDrift,
   listTemplateEntries,
   templateRootPath,
 } from "./lib/takt-marp-project-templates.mjs";
 import { resolveRuntimeContext } from "./lib/takt-marp-runtime-context.mjs";
 import { SlideWorkflowError, formatError } from "./lib/takt-marp-slide-workflow.mjs";
-
-const DRIFT_KINDS = [
-  { key: "missingInTemplate", label: "missing in template (exists only in dev .takt)" },
-  { key: "missingInDev", label: "missing in dev .takt (exists only in template)" },
-  { key: "contentMismatch", label: "content mismatch" },
-];
 
 function usage() {
   return [
@@ -64,17 +60,10 @@ async function main() {
   }
 
   const drift = await diffTemplateTrees(templateRoot, devTaktRoot);
-  const driftCount = DRIFT_KINDS.reduce((total, kind) => total + drift[kind.key].length, 0);
+  const driftCount = countTemplateDriftPaths(drift);
   if (driftCount > 0) {
-    for (const kind of DRIFT_KINDS) {
-      const relativePaths = drift[kind.key];
-      if (relativePaths.length === 0) {
-        continue;
-      }
-      console.error(`${kind.label} (${relativePaths.length}):`);
-      for (const relativePath of relativePaths) {
-        console.error(`  - ${relativePath}`);
-      }
+    for (const line of formatTemplateDrift(drift)) {
+      console.error(line);
     }
     throw new SlideWorkflowError(
       `templates/project drifted from dev .takt in ${driftCount} path(s). Run \`npm run installer:sync-templates\` to sync.`,

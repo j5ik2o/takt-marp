@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   PROHIBITED_TEMPLATE_PATTERNS,
   TEMPLATE_DOMAINS,
@@ -11,7 +12,7 @@ import {
   templateRootPath,
 } from "./lib/takt-marp-project-templates.mjs";
 import { resolveRuntimeContext } from "./lib/takt-marp-runtime-context.mjs";
-import { SlideWorkflowError, formatError } from "./lib/takt-marp-slide-workflow.mjs";
+import { SlideWorkflowError, formatError } from "./lib/takt-marp-errors.mjs";
 
 const GROUPS = ["template tree", "pack contents", "metadata"];
 
@@ -34,14 +35,16 @@ const FORBIDDEN_PACK_PREFIXES = [
 // .git/info/exclude) are still picked up by `npm pack` because `files` lists the
 // directory. Only the canonical script naming is allowed in the pack.
 const EXPECTED_SCRIPT_PATTERNS = [/^scripts\/takt-marp-[^/]+\.mjs$/, /^scripts\/lib\/takt-marp-[^/]+\.mjs$/];
+export const FORBIDDEN_PACK_FILES = ["scripts/lib/takt-marp-project-init.mjs"];
 
-const REQUIRED_PACK_FILES = [
+export const REQUIRED_PACK_FILES = [
   "bin/takt-marp.mjs",
   "marp.config.mjs",
   "scripts/takt-marp-run-slide-workflow.mjs",
   "scripts/takt-marp-validate-slide-workflow-smoke.mjs",
   "scripts/lib/takt-marp-cli.mjs",
-  "scripts/lib/takt-marp-project-init.mjs",
+  "scripts/lib/takt-marp-errors.mjs",
+  "scripts/lib/takt-marp-project-eject.mjs",
   "scripts/lib/takt-marp-project-templates.mjs",
   "scripts/lib/takt-marp-runtime-context.mjs",
   "scripts/lib/takt-marp-slide-workflow.mjs",
@@ -155,7 +158,7 @@ function isAllowedPackPath(packedPath) {
   );
 }
 
-function checkPackContents(paths, templateEntries, addViolation) {
+export function checkPackContents(paths, templateEntries, addViolation) {
   const packed = new Set(paths);
 
   for (const packedPath of paths) {
@@ -175,6 +178,12 @@ function checkPackContents(paths, templateEntries, addViolation) {
       addViolation(
         "pack contents",
         `unexpected scripts/ file (expected scripts/takt-marp-*.mjs or scripts/lib/takt-marp-*.mjs): ${packedPath}`,
+      );
+    }
+    if (FORBIDDEN_PACK_FILES.includes(packedPath)) {
+      addViolation(
+        "pack contents",
+        `stale init compatibility shim must not be packed: ${packedPath}`,
       );
     }
   }
@@ -270,7 +279,9 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(formatError(error));
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  main().catch((error) => {
+    console.error(formatError(error));
+    process.exit(1);
+  });
+}

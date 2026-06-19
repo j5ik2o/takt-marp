@@ -6,6 +6,7 @@ const RUNTIME_TOOLS = ["takt", "marp"];
 
 export function resolveRuntimeContext() {
   return {
+    projectRoot: process.cwd(),
     packageRoot: PACKAGE_ROOT,
     runtimeBinDir: path.join(PACKAGE_ROOT, "node_modules", ".bin"),
   };

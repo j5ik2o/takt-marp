@@ -2,7 +2,10 @@ import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 import { runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
+
+export { SlideWorkflowError, formatError } from "./takt-marp-errors.mjs";
 
 export const COMMANDS = ["plan", "compose", "polish", "deliver"];
 export const COMMAND_STATES = {
@@ -12,14 +15,6 @@ export const COMMAND_STATES = {
   deliver: "delivered",
 };
 export const APPROVAL_COMMANDS = ["plan", "compose"];
-
-export class SlideWorkflowError extends Error {
-  constructor(message, code = "SLIDE_WORKFLOW_ERROR") {
-    super(message);
-    this.name = "SlideWorkflowError";
-    this.code = code;
-  }
-}
 
 export function parseArgs(argv) {
   const positional = [];
@@ -45,10 +40,6 @@ export function parseArgs(argv) {
   }
 
   return { positional, flags };
-}
-
-export function formatError(error) {
-  return error instanceof SlideWorkflowError ? `${error.code}: ${error.message}` : String(error?.stack ?? error);
 }
 
 export function requireCommand(command) {
@@ -98,6 +89,9 @@ export function resolveDeckTarget(target, options = {}) {
 
 export function workflowPath(command, options = {}) {
   requireCommand(command);
+  if (options.workflowFilePath) {
+    return path.resolve(options.root ?? process.cwd(), options.workflowFilePath);
+  }
   const root = options.root ?? process.cwd();
   return path.join(root, ".takt", "workflows", `takt-marp-slide-${command}.yaml`);
 }

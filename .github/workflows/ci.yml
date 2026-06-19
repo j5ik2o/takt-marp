@@ -22,17 +22,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate foundation
-        run: npm test
+      - name: Check installer CI entrypoint
+        run: npm run installer:check-ci
 
-      - name: Run mock smoke
-        run: npm run slide:smoke
-
-      - name: Check template drift
-        run: npm run installer:check-templates
-
-      - name: Check package boundary
-        run: npm run installer:check-package
-
-      - name: Validate global install
-        run: npm run installer:validate
+      - name: Validate installer
+        run: npm run installer:ci
