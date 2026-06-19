@@ -1,17 +1,35 @@
 plan command の成果物をレビューしてください。
 
 **やること:**
-1. `brief.md`、`brief.normalized.md`、`plan.md`、`review/plan-work.md` を読んでください。deck-local `brief.normalized.md` / `plan.md` / `review/plan-work.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` / `Report Directory/plan.md` / `Report Directory/plan-work.md` を読んでください。
-2. 発表目的、聴衆、中心メッセージ、slide count、各スライドの Message/Layout/Content/Visual/Source が矛盾していないか確認してください。
+1. `brief.md`、`brief.normalized.md`、`reference-analysis.md`、`plan.md`、`slide-blueprint.md`、`review/plan-work.md` を読んでください。deck-local `brief.normalized.md` / `reference-analysis.md` / `plan.md` / `slide-blueprint.md` / `review/plan-work.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` / `Report Directory/reference-analysis.md` / `Report Directory/plan.md` / `Report Directory/slide-blueprint.md` / `Report Directory/plan-work.md` を読んでください。
+2. 発表目的、聴衆、中心メッセージ、slide count、各スライドの Message/Layout/Content/Visual/Visual Strategy/Source が矛盾していないか確認してください。
 3. `plan.md` の requested deliverables が `brief.md` / `brief.normalized.md` の Output Requirements と矛盾していないか確認してください。
-4. 修正が必要な finding だけを stable `finding_id` 付きで記録してください。
-5. `review/plan-review.md` を書いてください。
+4. `slide-blueprint.md` の slide count、slide ID、section assembly manifest、Visual Strategy、Coverage Trace が `plan.md` と矛盾していないか確認してください。
+5. `brief.md` / `brief.normalized.md` の重要情報が `plan.md` と `slide-blueprint.md` に残っているか completeness gate として検査してください。単なる矛盾チェックで終わらせないでください。
+6. `plan.md` の `Coverage Matrix` を検査し、固定アウトラインの章・節・leaf項目、章別要素、コード例、演習、巻末資料、品質チェック項目、Visual Rendering Coverage が slide ID または plan finding に対応していることを確認してください。
+7. `Target slide count` と固定アウトライン・情報密度・講義本体要件の矛盾を検査してください。`Target slide count: 5` なのに期待値 `slides.md` 相当の講義本体を求めている場合は、target を100〜140または期待値相当(例:119)へ修正する必要がある、という blocker または major finding にしてください。勝手に119枚へ拡張した plan も、勝手に5枚へ圧縮した plan も finding 対象です。
+8. 修正が必要な finding だけを stable `finding_id` 付きで記録してください。
+9. `review/plan-review.md` を書いてください。
+
+**completeness gate の必須検査:**
+- 正式タイトルが完全一致していること: `ドメイン駆動設計の基礎と仕様変更に強いドメインモデリングの実践ポイント`
+- 講師所属が `IDEO PLUS合同会社` として保持されていること。`IDE PLUS合同会社` は blocker です。
+- 固定アウトラインの章・節・leaf項目が順序と表記を保って coverage matrix に入っていること。欠落・順序変更・章名の言い換えは blocker または major です。
+- 禁止語・避けるべき表現が保持されていること。特に `ドメインドリブン` / `ドメインドリブン設計`、`戦略編` / `戦術編`、`IDE PLUS合同会社` は使用禁止として扱ってください。
+- デザイン方針が「白基調だが白黒ではない」「カラー印刷前提」「濃色ベタ塗りを避ける」として plan に残っていること。
+- 共通題材が `経費申請・承認` で一貫していること。章ごとに題材を変えたり、申請・承認の語彙を別題材へ置換した場合は major 以上です。
+- セミナー日時、主催、形式、対象、講師名、講師所属が Fact Inventory / Deck Summary / title slide plan に残っていること。
+- コード例方針(Java、Before/After、業務意味を表す、フレームワーク非依存)と演習方針(短時間個人演習、模範回答を巻末)が coverage 対象になっていること。
+- Visual Strategy が各スライドに存在し、`render_owner: compose_sections` / `render_owner: generate_visuals` のどちらかを明示していること。
+- カード、2列比較、Before/After、表、短い手順、軽量タイムラインが `html:` ではなく `svg:` にされている場合は major finding として扱うこと。SVGを使うなら座標制御・複雑な矢印・再利用・単体レビューの理由が必要です。
+- `slide-blueprint.md` の `Slide Blueprint Table` に全slide IDが存在し、`Section Assembly Manifest` が section file名、slide ID範囲、想定slide countを持つこと。欠落は major 以上です。
 
 **判定基準:**
 - 修正不要なら `approved` としてください。
 - plan source artifact の修正で解消できる問題がある場合は `needs_fix` としてください。
 - 入力不足で判断不能な場合だけ `blocked` としてください。
 - deck-local に artifact がまだ同期されていないことだけを `blocked` 理由にしないでください。TAKT run 内では `Report Directory` の source artifact を正本として扱います。
+- Coverage Matrix の欠落や brief 重要情報の欠落は入力不足ではありません。`needs_fix` の finding として扱ってください。
 
 **report file format:**
 - `review/plan-review.md` は YAML front matter で開始し、`command: plan`、`target: slides/<deck>`、`generated_at`、`workflow_run_id`、`step: review`、`cycle`、`state: reviewed`、`result`、`finding_count`、`blocking_finding_count` を含めてください。

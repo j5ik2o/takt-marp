@@ -31,7 +31,7 @@ personas:
 policies:
   takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
   takt-marp-slide-quality: ../facets/policies/takt-marp-slide-quality.md
-  takt-marp-svg-first-visual: ../facets/policies/takt-marp-svg-first-visual.md
+  takt-marp-visual-composition: ../facets/policies/takt-marp-visual-composition.md
   takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
 instructions:
   takt-marp-render-evidence: ../facets/instructions/takt-marp-render-evidence.md
@@ -60,7 +60,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     instruction: takt-marp-render-evidence
@@ -96,7 +96,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
@@ -120,7 +120,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
@@ -142,7 +142,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false

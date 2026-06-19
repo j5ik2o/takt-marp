@@ -3,8 +3,8 @@
 polish inspection の finding を精査し、visual/layout/render/design-token 関連の修正だけを反映してください。
 
 **やること:**
-1. `review/polish-inspect.md` の finding を読み、`design-system.md`、`SLIDES.md`、`images/*.svg` に照らして妥当性を判断してください。
-2. 妥当な finding は `design-system.md`、`SLIDES.md`、`images/*.svg` の範囲で修正してください。
+1. `review/polish-inspect.md` の finding を読み、`design-system.md`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` に照らして妥当性を判断してください。
+2. 妥当な finding は `design-system.md`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` の範囲で修正してください。
 3. plan-level content、中心メッセージ、deliverables、official delivery artifact に関する finding は反映せず理由を記録してください。
 4. `review/polish-fix.md` に finding ごとの対応結果を書いてください。
 

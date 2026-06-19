@@ -1,7 +1,7 @@
 render evidence と compose source artifacts を照合し、visual/layout/render finding を記録してください。
 
 **やること:**
-1. `.takt/render/<deck>/cycle-1/metadata.json`、`design-system.md`、`SLIDES.md`、`images/*.svg` を読んでください。
+1. `.takt/render/<deck>/cycle-1/metadata.json`、`design-system.md`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` を読んでください。
 2. HTML/PDF/PDF raster の status と degraded reason を確認してください。
 3. visual、layout、render、design-token 関連の問題だけを finding として記録してください。
 4. plan-level content、中心メッセージ、delivery artifact の要否は scope 外として扱ってください。

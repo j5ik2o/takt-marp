@@ -1,12 +1,12 @@
 name: takt-marp-slide-compose
-description: 承認済みplanからdesign-system、SLIDES.md、SVG sourceを作成し、review/fix/supervisionを閉じるcompose command。
+description: 承認済みplanからdesign-system、SLIDES.md、visual sourceを作成し、review/fix/supervisionを閉じるcompose command。
 workflow_config:
   provider_options:
     codex:
       network_access: false
     opencode:
       network_access: false
-max_steps: 30
+max_steps: 34
 initial_step: design_system
 loop_monitors:
   - cycle:
@@ -31,11 +31,12 @@ personas:
 policies:
   takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
   takt-marp-slide-quality: ../facets/policies/takt-marp-slide-quality.md
-  takt-marp-svg-first-visual: ../facets/policies/takt-marp-svg-first-visual.md
+  takt-marp-visual-composition: ../facets/policies/takt-marp-visual-composition.md
   takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
 instructions:
   takt-marp-design-system: ../facets/instructions/takt-marp-design-system.md
-  takt-marp-compose-slides: ../facets/instructions/takt-marp-compose-slides.md
+  takt-marp-compose-sections: ../facets/instructions/takt-marp-compose-sections.md
+  takt-marp-assemble-slides: ../facets/instructions/takt-marp-assemble-slides.md
   takt-marp-visual-generate: ../facets/instructions/takt-marp-visual-generate.md
   takt-marp-compose-work-summary: ../facets/instructions/takt-marp-compose-work-summary.md
   takt-marp-compose-review: ../facets/instructions/takt-marp-compose-review.md
@@ -57,32 +58,50 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     instruction: takt-marp-design-system
     rules:
       - condition: deck design systemを作成した
-        next: compose_slides
+        next: compose_sections
       - condition: design system作成に必要な情報が不足
         next: ABORT
 
-  - name: compose_slides
+  - name: compose_sections
     edit: true
     required_permission_mode: edit
     persona: takt-marp-slide-writer
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
-    instruction: takt-marp-compose-slides
+    instruction: takt-marp-compose-sections
     rules:
-      - condition: SLIDES.mdをcomposeした
-        next: generate_visuals
+      - condition: section sourceをcomposeした
+        next: assemble_slides
       - condition: composeに必要な情報が不足
+        next: ABORT
+
+  - name: assemble_slides
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-writer
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-visual-composition
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-assemble-slides
+    rules:
+      - condition: SLIDES.mdをassembleした
+        next: generate_visuals
+      - condition: assembleに必要な情報が不足
         next: ABORT
 
   - name: generate_visuals
@@ -92,15 +111,15 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
     instruction: takt-marp-visual-generate
     rules:
-      - condition: SVG sourceを作成した
+      - condition: visual sourceを作成または確認した
         next: summarize_compose_work
-      - condition: SVG生成に必要な情報が不足
+      - condition: visual source生成に必要な情報が不足
         next: ABORT
 
   - name: summarize_compose_work
@@ -110,7 +129,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
@@ -147,7 +166,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
@@ -171,7 +190,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
@@ -193,7 +212,7 @@ steps:
     policy:
       - takt-marp-general-slide-quality
       - takt-marp-slide-quality
-      - takt-marp-svg-first-visual
+      - takt-marp-visual-composition
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false

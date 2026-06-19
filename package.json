@@ -29,7 +29,7 @@
     "slide:render-evidence": "node scripts/takt-marp-render-slide-workflow-evidence.mjs",
     "slide:validate-foundation": "node scripts/takt-marp-validate-slide-workflow-foundation.mjs",
     "slide:smoke": "node scripts/takt-marp-validate-slide-workflow-smoke.mjs",
-    "test": "npm run slide:validate-foundation",
+    "test": "npm run slide:validate-foundation && npm run slide:smoke -- --provider mock",
     "build": "npm run build:html && npm run build:pdf",
     "build:html": "node scripts/takt-marp-build-slide-artifact.mjs html",
     "build:pptx": "node scripts/takt-marp-build-slide-artifact.mjs pptx",
