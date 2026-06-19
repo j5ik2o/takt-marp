@@ -149,7 +149,7 @@
   - _Depends:_ 4.2
 
 - [ ] 5. 検証: global install 経路と stale init 前提を固定する
-- [ ] 5.1 GlobalInstallValidator を no-copy/eject 契約へ更新する
+- [x] 5.1 GlobalInstallValidator を no-copy/eject 契約へ更新する
   - tarball を global install 相当の環境へ導入し、PATH 経由の `takt-marp` command を検証する
   - help surface は `init` を含まず、eject、workflow、approve、smoke、retained utility command を含むことを検証する
   - no-copy workflow は未初期化エラーで停止せず、target project へ workflow/facet template をコピーしないことを検証する
