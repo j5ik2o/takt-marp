@@ -6,7 +6,7 @@ workflow_config:
       network_access: false
     opencode:
       network_access: false
-max_steps: 30
+max_steps: 34
 initial_step: intake
 loop_monitors:
   - cycle:
@@ -35,6 +35,7 @@ policies:
 instructions:
   takt-marp-intake: ../facets/instructions/takt-marp-intake.md
   takt-marp-normalize-brief: ../facets/instructions/takt-marp-normalize-brief.md
+  takt-marp-analyze-reference-deck: ../facets/instructions/takt-marp-analyze-reference-deck.md
   takt-marp-plan: ../facets/instructions/takt-marp-plan.md
   takt-marp-plan-work-summary: ../facets/instructions/takt-marp-plan-work-summary.md
   takt-marp-plan-review: ../facets/instructions/takt-marp-plan-review.md
@@ -44,7 +45,9 @@ knowledge:
   takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
 report_formats:
   takt-marp-normalized-brief: ../facets/output-contracts/takt-marp-normalized-brief.md
+  takt-marp-reference-analysis: ../facets/output-contracts/takt-marp-reference-analysis.md
   takt-marp-slide-plan: ../facets/output-contracts/takt-marp-slide-plan.md
+  takt-marp-slide-blueprint: ../facets/output-contracts/takt-marp-slide-blueprint.md
   takt-marp-command-work: ../facets/output-contracts/takt-marp-command-work.md
   takt-marp-command-review: ../facets/output-contracts/takt-marp-command-review.md
   takt-marp-command-fix: ../facets/output-contracts/takt-marp-command-fix.md
@@ -85,10 +88,33 @@ steps:
           format: takt-marp-normalized-brief
     rules:
       - condition: 任意確認事項を残してbriefを正規化した
-        next: plan_deck
+        next: analyze_reference_deck
       - condition: briefを正規化した
-        next: plan_deck
+        next: analyze_reference_deck
       - condition: 必須入力が不足して正規化できない
+        next: ABORT
+
+  - name: analyze_reference_deck
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-analyze-reference-deck
+    output_contracts:
+      report:
+        - name: reference-analysis.md
+          format: takt-marp-reference-analysis
+    rules:
+      - condition: reference analysisを作成した
+        next: plan_deck
+      - condition: 参照デッキなしとしてreference analysisを作成した
+        next: plan_deck
+      - condition: reference analysis作成に必要な情報が不足
         next: ABORT
 
   - name: plan_deck
@@ -105,6 +131,8 @@ steps:
       report:
         - name: plan.md
           format: takt-marp-slide-plan
+        - name: slide-blueprint.md
+          format: takt-marp-slide-blueprint
     rules:
       - condition: planを作成した
         next: summarize_plan_work

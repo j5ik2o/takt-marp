@@ -7,9 +7,9 @@ AI antipattern review の finding を、current command 境界内で安全に直
 2. `review/<command>-ai-antipattern-review.md` を読み、同じ `target`、`command`、`workflow_run_id` の current review report であることを確認してください。deck-local report が存在しない場合は、現在の `Report Directory` にある `ai-antipattern-review.md`、または同じ subworkflow reports directory の review report を読んでください。
 3. AI Findings の全 finding を扱い、各 finding について current command 境界内で安全に修正できるか判断してください。
 4. 修正できる finding だけを command-local source artifact に反映してください。
-   - `plan`: `plan.md`、`brief.normalized.md` など plan source artifact の範囲。deck-local が未同期の場合は、現在の `Report Directory` から親 command reports directory を特定し、そこにある `plan.md` / `brief.normalized.md` を正本として修正してください。`Report Directory` が `.../reports/subworkflows/...` の場合、`subworkflows` より前の `.../reports` が親 command reports directory です。
-   - `compose`: `SLIDES.md` と compose に必要な deck-local source artifact の範囲
-   - `polish`: `design-system.md`、`SLIDES.md`、`images/*.svg` など visual / layout / render / design-token 修正の範囲
+   - `plan`: `plan.md`、`slide-blueprint.md`、`reference-analysis.md`、`brief.normalized.md` など plan source artifact の範囲。deck-local が未同期の場合は、現在の `Report Directory` から親 command reports directory を特定し、そこにある `plan.md` / `slide-blueprint.md` / `reference-analysis.md` / `brief.normalized.md` を正本として修正してください。`Report Directory` が `.../reports/subworkflows/...` の場合、`subworkflows` より前の `.../reports` が親 command reports directory です。
+   - `compose`: `design-system.md`、`sections/*`、`SLIDES.md` と compose に必要な deck-local source artifact の範囲
+   - `polish`: `design-system.md`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` など visual / layout / render / design-token 修正の範囲
    - `deliver`: delivery artifact の存在、path、readability、unrequested artifact、必要な clean / rebuild の範囲
 5. current command 境界内で安全に直せない finding は `NEED_REPLAN` とし、必要な owning command と理由を Remaining Context に記録してください。
 6. 必要情報が足りず判断または修正できない finding は `BLOCKED` とし、不足 context と evidence を Remaining Context に記録してください。

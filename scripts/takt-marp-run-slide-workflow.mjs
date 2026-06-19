@@ -187,7 +187,7 @@ async function commandSourceArtifactCopies(reportsDir, command, targetInfo) {
 
 function commandSourceArtifactNames(command) {
   if (command === "plan") {
-    return ["brief.normalized.md", "plan.md"];
+    return ["brief.normalized.md", "reference-analysis.md", "plan.md", "slide-blueprint.md"];
   }
   return [];
 }

@@ -14,7 +14,7 @@
 
 **このポリシーが扱わないこと:**
 - Marp Markdown、front matter、deck local artifact の具体制約
-- SVG の viewBox、図形内テキスト、Marp 配置制約
+- HTML/CSS visual とSVGの使い分け、SVG viewBox、図形内テキスト、Marp 配置制約
 - TAKT worker の git 操作禁止、approval 生成禁止、オーケストレーション禁止
 
 ## 原則

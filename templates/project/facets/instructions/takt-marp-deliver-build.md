@@ -14,7 +14,7 @@ official delivery artifact を build してください。
 
 **禁止事項**
 - visual/layout inspection を行わないでください。
-- `design-system.md`、`SLIDES.md`、`images/*.svg` の visual polish を広げないでください。
+- `design-system.md`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` の visual polish を広げないでください。
 - `brief.md` の自由記述から deliverable 種別を追加しないでください。
 
 **report file format:**

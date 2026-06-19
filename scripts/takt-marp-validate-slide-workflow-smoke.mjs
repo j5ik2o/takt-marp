@@ -35,6 +35,16 @@ const WORKFLOW_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
 const NODE_CHECK_TIMEOUT_MS = 2 * 60 * 1000;
 const CAPTURE_MAX_BUFFER = 64 * 1024 * 1024;
 const MOCK_GENERATED_AT = "2026-06-06T00:00:00.000Z";
+const SMOKE_OFFICIAL_TITLE = "変更に強いドメインモデリングの実践ワークショップ";
+const SMOKE_SPEAKER_AFFILIATION = "サンプルデザイン合同会社";
+const SMOKE_ORGANIZER = "サンプル研修ラボ株式会社";
+const SMOKE_EVENT_DATE = "2031年4月17日（木）10:00〜16:30";
+const SMOKE_VENUE = "ミラージュホール A";
+const SMOKE_COMMON_EXAMPLE = "備品購入申請・承認";
+const EXTERNAL_SOURCE_PATTERNS = Object.freeze([
+  { pattern: /https?:\/\//i, label: "external URL" },
+  { pattern: /\bgmail\b/i, label: "mail export reference" },
+]);
 
 async function main() {
   const options = parseSmokeArgs(process.argv.slice(2));
@@ -56,7 +66,9 @@ async function main() {
     const setup = await setupSmokeDeck(options.target);
     targetInfo = setup.targetInfo;
     observedPaths.push(...setup.observedPaths);
+    await assertSmokeFixtureContracts(targetInfo);
     checks.push(pass("setup:fixture-to-target", "Fixture source files copied into a clean smoke target."));
+    checks.push(pass("setup:fixture-contracts", "Smoke fixture contains synthetic fixed outline, facts, visual policy, and no external source references."));
     checks.push(pass("setup:generated-output-cleanup", "Generated output roots were cleaned before validation."));
     currentCheckName = "failure-path:invalid-target";
     const invalidTargetChecks = runInvalidTargetChecks(targetInfo);
@@ -227,6 +239,162 @@ async function runApprovalPreflightChecks(targetInfo) {
   }
 
   return Object.freeze({ checks: Object.freeze(checks), commands: Object.freeze(commands) });
+}
+
+async function assertSmokeFixtureContracts(targetInfo) {
+  const briefPath = path.join(targetInfo.deckPath, "brief.md");
+  const brief = await readFile(briefPath, "utf8");
+  assertNoExternalSourceReferences(brief, briefPath);
+  for (const phrase of [
+    SMOKE_OFFICIAL_TITLE,
+    SMOKE_SPEAKER_AFFILIATION,
+    SMOKE_ORGANIZER,
+    SMOKE_EVENT_DATE,
+    SMOKE_VENUE,
+    SMOKE_COMMON_EXAMPLE,
+    "### Fixed Outline",
+    "Required Topics",
+    "Avoid",
+    "Fact Inventory",
+    "Target slide count: 5",
+    "Deck Mode: overview",
+    "Slide Count Consistency Scenario",
+    "100〜140",
+    "html:",
+    "inline-svg:",
+    "coverage matrix",
+    "slide-blueprint.md",
+    "sections/*.md",
+    "build:html / build:pdf",
+  ]) {
+    assert(brief.includes(phrase), `setup:fixture-contracts missing '${phrase}' in ${relativePath(briefPath)}`);
+  }
+
+  const outline = parseSmokeFixedOutline(brief);
+  assert(outline.leaves.length === 12, `setup:fixture-contracts expected 12 fixed outline leaf items, got ${outline.leaves.length}`);
+  for (const item of outline.leaves) {
+    assert(brief.includes(item.label), `setup:fixture-contracts missing required topic leaf '${item.label}'`);
+  }
+}
+
+async function assertPlanSourceArtifacts(targetInfo) {
+  const artifactPaths = [
+    path.join(targetInfo.deckPath, "brief.normalized.md"),
+    path.join(targetInfo.deckPath, "reference-analysis.md"),
+    path.join(targetInfo.deckPath, "plan.md"),
+    path.join(targetInfo.deckPath, "slide-blueprint.md"),
+  ];
+  for (const artifactPath of artifactPaths) {
+    await assertReadableFile(artifactPath, "sequence:plan-source-artifacts");
+  }
+
+  const normalized = await readFile(artifactPaths[0], "utf8");
+  const referenceAnalysis = await readFile(artifactPaths[1], "utf8");
+  const plan = await readFile(artifactPaths[2], "utf8");
+  const blueprint = await readFile(artifactPaths[3], "utf8");
+  for (const [label, source, artifactPath] of [
+    ["normalized", normalized, artifactPaths[0]],
+    ["plan", plan, artifactPaths[2]],
+    ["blueprint", blueprint, artifactPaths[3]],
+  ]) {
+    assertNoExternalSourceReferences(source, artifactPath);
+    assert(source.includes(SMOKE_OFFICIAL_TITLE), `sequence:plan-source-artifacts ${label} missing official title`);
+    assert(source.includes(SMOKE_SPEAKER_AFFILIATION), `sequence:plan-source-artifacts ${label} missing speaker affiliation`);
+    assert(source.includes(SMOKE_COMMON_EXAMPLE), `sequence:plan-source-artifacts ${label} missing common example`);
+  }
+  assertNoExternalSourceReferences(referenceAnalysis, artifactPaths[1]);
+  for (const phrase of [
+    "Fixed Outline",
+    "Required Topics",
+    "Avoid",
+    "Fact Inventory",
+    SMOKE_ORGANIZER,
+    SMOKE_EVENT_DATE,
+    SMOKE_VENUE,
+  ]) {
+    assert(normalized.includes(phrase), `sequence:plan-source-artifacts normalized missing '${phrase}'`);
+  }
+  for (const phrase of [
+    "# Reference Deck Analysis",
+    "Found: no",
+    "analysis only; do not copy reference slides",
+    "Plan Implications",
+  ]) {
+    assert(referenceAnalysis.includes(phrase), `sequence:plan-source-artifacts reference-analysis missing '${phrase}'`);
+  }
+  for (const phrase of [
+    "# Slide Plan",
+    "Coverage Matrix",
+    "Fixed Outline Coverage",
+    "Visual Rendering Coverage",
+    "Plan Findings",
+    "Target slide count: 5",
+    "100〜140",
+    "render_owner: compose_sections",
+    "html: cards/comparison/table/light-flow",
+  ]) {
+    assert(plan.includes(phrase), `sequence:plan-source-artifacts plan missing '${phrase}'`);
+  }
+  for (const phrase of [
+    "# Slide Blueprint",
+    "Slide Blueprint Table",
+    "Section Assembly Manifest",
+    "sections/01-intro.md",
+    "sections/02-body.md",
+    "render_owner: compose_sections",
+  ]) {
+    assert(blueprint.includes(phrase), `sequence:plan-source-artifacts blueprint missing '${phrase}'`);
+  }
+  const outline = parseSmokeFixedOutline(await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8"));
+  for (const item of outline.leaves) {
+    assert(plan.includes(item.label), `sequence:plan-source-artifacts plan coverage missing fixed outline leaf '${item.label}'`);
+  }
+  return Object.freeze(artifactPaths);
+}
+
+function assertNoExternalSourceReferences(source, filePath) {
+  for (const item of EXTERNAL_SOURCE_PATTERNS) {
+    assert(!item.pattern.test(source), `${item.label} must not appear in ${relativePath(filePath)}`);
+  }
+}
+
+function parseSmokeFixedOutline(brief) {
+  const block = extractBetween(brief, "### Fixed Outline", "## Core Message");
+  const leaves = [];
+  let currentChapter = "";
+  let currentSection = "";
+  for (const rawLine of block.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const chapter = line.match(/^(\d+)\.\s*(.+)$/);
+    if (chapter) {
+      currentChapter = `${chapter[1]}. ${chapter[2]}`;
+      currentSection = "";
+      continue;
+    }
+    const section = line.match(/^（(\d+)）(.+)$/);
+    if (section) {
+      currentSection = `（${section[1]}）${section[2]}`;
+      continue;
+    }
+    const leaf = line.match(/^([a-z])\.\s*(.+)$/);
+    if (leaf) {
+      leaves.push({
+        label: `${leaf[1]}. ${leaf[2]}`,
+        chapter: currentChapter,
+        section: currentSection,
+      });
+    }
+  }
+  return Object.freeze({ leaves: Object.freeze(leaves) });
+}
+
+function extractBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert(start !== -1, `missing marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert(end !== -1, `missing marker after ${startMarker}: ${endMarker}`);
+  return source.slice(start + startMarker.length, end);
 }
 
 async function runApprovalCommandNegativeChecks(targetInfo) {
@@ -461,11 +629,14 @@ async function runPlanSequenceChecks(targetInfo, options) {
 
   const planCommand = await runWorkflowCommand("sequence:plan-command", "plan", targetInfo, options);
   commands.push(planCommand);
+  const planArtifactPaths = await assertPlanSourceArtifacts(targetInfo);
+  observedPaths.push(...planArtifactPaths.map(relativePath));
   const supervision = await readSupervision(targetInfo, "plan");
   assert(supervision.data.state === "planned", `sequence:plan-supervision-state expected planned, got ${supervision.data.state}`);
   assert(supervision.data.result === "passed", `sequence:plan-supervision-result expected passed, got ${supervision.data.result}`);
   observedPaths.push(relativePath(supervision.filePath));
   checks.push(pass("sequence:plan-command", "slide:plan completed for the smoke deck."));
+  checks.push(pass("sequence:plan-source-artifacts", "plan source artifacts preserve fixed outline, facts, coverage matrix, visual strategy, and slide blueprint."));
   checks.push(pass("sequence:plan-supervision", "plan-supervision.md exists with state planned and result passed."));
 
   assertApprovalFileAbsent(targetInfo, "plan", "approval-command:workflow-only-non-generation");
@@ -483,7 +654,7 @@ async function runPlanSequenceChecks(targetInfo, options) {
   const composeArtifactPaths = await assertComposeSourceArtifacts(targetInfo);
   observedPaths.push(...composeArtifactPaths.map(relativePath));
   checks.push(pass("sequence:compose-command", "slide:compose completed for the smoke deck after plan approval."));
-  checks.push(pass("sequence:compose-source-artifacts", "compose source artifacts exist: design-system.md, SLIDES.md, and images/*.svg."));
+  checks.push(pass("sequence:compose-source-artifacts", "compose source artifacts exist: design-system.md, SLIDES.md, and declared visual sources."));
 
   const composeSupervision = await readSupervision(targetInfo, "compose");
   assert(composeSupervision.data.state === "composed", `sequence:compose-supervision-state expected composed, got ${composeSupervision.data.state}`);
@@ -772,10 +943,12 @@ async function runForceInvalidationChecks(targetInfo, options) {
   const sourceArtifactPaths = [
     path.join(targetInfo.deckPath, "brief.md"),
     path.join(targetInfo.deckPath, "brief.normalized.md"),
+    path.join(targetInfo.deckPath, "reference-analysis.md"),
     path.join(targetInfo.deckPath, "plan.md"),
+    path.join(targetInfo.deckPath, "slide-blueprint.md"),
     path.join(targetInfo.deckPath, "design-system.md"),
+    path.join(targetInfo.deckPath, "sections", "manifest.md"),
     path.join(targetInfo.deckPath, "SLIDES.md"),
-    path.join(targetInfo.deckPath, "images", "workflow-overview.svg"),
   ];
   await assertSourceArtifactsPresent("failure-path:force-source-retention-before", sourceArtifactPaths);
   const expectedArchivedBasenames = [
@@ -834,7 +1007,7 @@ async function runForceInvalidationChecks(targetInfo, options) {
   checks.push(pass("failure-path:force-command", "slide:plan --force completed after archiving command state."));
   checks.push(pass("failure-path:force-archive", "force archived plan and downstream supervision/approval files to review/history."));
   checks.push(pass("failure-path:force-generated-cleanup", "force cleaned stale dist and render generated output roots."));
-  checks.push(pass("failure-path:force-source-retention", "force retained deck source artifacts such as brief, plan, design-system, SLIDES.md, and SVG."));
+  checks.push(pass("failure-path:force-source-retention", "force retained deck source artifacts such as brief, plan, blueprint, sections, design-system, and SLIDES.md."));
   checks.push(pass("failure-path:force-new-plan-supervision", "force rerun generated a new passed canonical plan supervision report."));
 
   return Object.freeze({
@@ -1054,20 +1227,176 @@ async function writeReportCopies(reviewPath, reportsPath, reportName, content) {
 }
 
 async function writeMockPlanArtifacts(targetInfo) {
-  await writeFile(path.join(targetInfo.deckPath, "brief.normalized.md"), "# Normalized Brief\n\nMock smoke normalized brief.\n", "utf8");
+  const brief = await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8");
+  const outline = parseSmokeFixedOutline(brief);
+  const coverageRows = outline.leaves.map((item, index) => {
+    const slideId = `S${String(Math.min(index + 1, 5)).padStart(3, "0")}`;
+    return `| ${item.chapter} | ${item.section} | ${item.label} | ${slideId} | covered |`;
+  });
+  await writeFile(
+    path.join(targetInfo.deckPath, "brief.normalized.md"),
+    [
+      "# Normalized Brief",
+      "",
+      "## Goal",
+      "Synthetic smoke deck for validating the Marp slide workflow.",
+      "",
+      "## Critical Constraints",
+      `- Official Title: ${SMOKE_OFFICIAL_TITLE}`,
+      "- Speaker Name: 山田 サンプル",
+      `- Speaker Affiliation: ${SMOKE_SPEAKER_AFFILIATION}`,
+      "- Fixed Outline: preserve chapter, section, and leaf labels.",
+      "",
+      "## Fixed Outline",
+      ...outline.leaves.map((item) => `- ${item.chapter} > ${item.section} > ${item.label}`),
+      "",
+      "## Event Context",
+      "- Name: 架空研修ラボ ドメインモデリング講座",
+      `- Date: ${SMOKE_EVENT_DATE}`,
+      "- Duration: 360",
+      `- Venue: ${SMOKE_VENUE}`,
+      "",
+      "## Speaker Profile",
+      "- 山田 サンプル",
+      `- ${SMOKE_SPEAKER_AFFILIATION}`,
+      "- ワークフロー検証用の架空プロフィール",
+      "",
+      "## Required Topics",
+      ...outline.leaves.map((item) => `- ${item.chapter} > ${item.section} > ${item.label}`),
+      "",
+      "## Avoid",
+      "- Web画像の自動取得",
+      "- 他deck画像の自動流用",
+      "- SVG-firstという方針に戻すこと",
+      "- htmlで十分なカード、比較、表、軽量フローをSVG化すること",
+      "",
+      "## Fact Inventory",
+      `- 主催: ${SMOKE_ORGANIZER}`,
+      "- 形式: ミラージュホール A / サンプル配信スタジオ",
+      `- 日時: ${SMOKE_EVENT_DATE}`,
+      "- 対象: メンテナとワークフロー検証者",
+      `- 場所: ${SMOKE_VENUE}`,
+      `- 講師所属: ${SMOKE_SPEAKER_AFFILIATION}`,
+      "",
+      "## Output Requirements",
+      "- Target slide count: 5",
+      "- Deck Mode: overview",
+      "- Deliverables: html, pdf",
+      "- Lecture-body requires 100〜140 or an equivalent corrected target.",
+      "",
+      "## Design Requirements",
+      "- 白基調だが白黒ではない。",
+      "",
+      "## Example Policy",
+      `- 共通題材: ${SMOKE_COMMON_EXAMPLE}`,
+      "",
+      "## Code Example Policy",
+      "- Java風の疑似コード / Before / After / 業務意味を表す。",
+      "",
+      "## Exercise Policy",
+      "- 短時間個人演習 / 模範回答。",
+      "",
+      "## Quality Checklist",
+      "- coverage matrixに全leaf項目がある",
+      "- html: visual と svg:/inline-svg: visual の責務が分かれている",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(targetInfo.deckPath, "reference-analysis.md"),
+    [
+      "# Reference Deck Analysis",
+      "",
+      "## Reference Source",
+      "- Found: no",
+      "- Copy policy: analysis only; do not copy reference slides",
+      "",
+      "## Synthetic Constraints",
+      `- Official Title: ${SMOKE_OFFICIAL_TITLE}`,
+      `- Speaker Affiliation: ${SMOKE_SPEAKER_AFFILIATION}`,
+      `- Common example: ${SMOKE_COMMON_EXAMPLE}`,
+      "",
+      "## Plan Implications",
+      "- Use brief.normalized.md as source of truth for the smoke deck.",
+      "- Treat Target slide count: 5 as overview mode; lecture-body would require 100〜140.",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
   await writeFile(
     path.join(targetInfo.deckPath, "plan.md"),
     [
       "# Slide Plan",
       "",
+      "## Deck Summary",
+      `- Title: ${SMOKE_OFFICIAL_TITLE}`,
+      "- Event Name: 架空研修ラボ ドメインモデリング講座",
+      "- Speaker Name: 山田 サンプル",
+      `- Speaker Affiliation: ${SMOKE_SPEAKER_AFFILIATION}`,
+      `- Common example: ${SMOKE_COMMON_EXAMPLE}`,
+      "- Target slide count: 5",
+      "- Planned slide count: 5",
+      "- Deck mode: overview",
       "deliverables: [html, pdf]",
       "",
       "## Slides",
-      "- Title",
-      "- Workflow overview",
-      "- Input discipline",
-      "- Review discipline",
-      "- Delivery QA",
+      "- S001: Title | Visual: none | Visual Strategy: render_owner: compose_sections; text only",
+      "- S002: Workflow overview | Visual: html: cards | Visual Strategy: render_owner: compose_sections; lightweight cards",
+      "- S003: Input discipline | Visual: none | Visual Strategy: render_owner: compose_sections; text only",
+      "- S004: Review discipline | Visual: none | Visual Strategy: render_owner: compose_sections; text only",
+      "- S005: Delivery QA | Visual: none | Visual Strategy: render_owner: compose_sections; text only",
+      "",
+      "## Coverage Matrix",
+      "",
+      "### Fixed Outline Coverage",
+      "| Chapter | Section | Leaf item | Slide(s) | Status |",
+      "| --- | --- | --- | --- | --- |",
+      ...coverageRows,
+      "",
+      "### Visual Rendering Coverage",
+      "| Visual kind | Slide(s) | Render owner | Status |",
+      "| --- | --- | --- | --- |",
+      "| html: cards/comparison/table/light-flow | S002 | compose_sections | covered |",
+      "| inline-svg: slide-specific-coordinate-diagram | not required for overview smoke | generate_visuals | not required |",
+      "",
+      "## Plan Findings",
+      "- PF-SLIDE-COUNT-001: Target slide count: 5 is valid only for overview mode; lecture-body would require 100〜140.",
+      "",
+      "## Requested Deliverables",
+      "- deliverables: [html, pdf]",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(targetInfo.deckPath, "slide-blueprint.md"),
+    [
+      "# Slide Blueprint",
+      "",
+      "## Blueprint Summary",
+      `- Title: ${SMOKE_OFFICIAL_TITLE}`,
+      `- Speaker Affiliation: ${SMOKE_SPEAKER_AFFILIATION}`,
+      `- Common example: ${SMOKE_COMMON_EXAMPLE}`,
+      "- Planned slide count: 5",
+      "",
+      "## Slide Blueprint Table",
+      "| Slide ID | Section | Message | Content atoms | Visual | Visual Strategy | Speaker note intent | Source | Coverage IDs |",
+      "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+      "| S001 | intro | Title | Workflow smoke test | none | render_owner: compose_sections | opening | brief.normalized.md | title |",
+      `| S002 | intro | Workflow overview | Plan / Compose / Deliver / ${SMOKE_COMMON_EXAMPLE} | html: cards/comparison/table/light-flow | render_owner: compose_sections | overview | plan.md | visual |`,
+      "| S003 | body | Input discipline | Input discipline | none | render_owner: compose_sections | input | plan.md | body |",
+      "| S004 | body | Review discipline | Review discipline | none | render_owner: compose_sections | review | plan.md | body |",
+      "| S005 | body | Delivery QA | Delivery QA | none | render_owner: compose_sections | delivery | plan.md | body |",
+      "",
+      "## Section Assembly Manifest",
+      "| File | Slide IDs | Slide count |",
+      "| --- | --- | --- |",
+      "| sections/01-intro.md | S001-S002 | 2 |",
+      "| sections/02-body.md | S003-S005 | 3 |",
+      "",
+      "## Coverage Trace",
+      "- visual: S002",
       "",
     ].join("\n"),
     "utf8",
@@ -1075,44 +1404,191 @@ async function writeMockPlanArtifacts(targetInfo) {
 }
 
 async function writeMockComposeArtifacts(targetInfo) {
-  await mkdir(path.join(targetInfo.deckPath, "images"), { recursive: true });
-  await writeFile(path.join(targetInfo.deckPath, "design-system.md"), "# Design System\n\nMock smoke design system.\n", "utf8");
+  const sectionsPath = path.join(targetInfo.deckPath, "sections");
+  await mkdir(sectionsPath, { recursive: true });
   await writeFile(
-    path.join(targetInfo.deckPath, "SLIDES.md"),
+    path.join(targetInfo.deckPath, "design-system.md"),
     [
-      "---",
-      "marp: true",
-      "title: Workflow smoke test",
-      "---",
+      "# Design System",
       "",
-      "# Workflow smoke test",
+      "Mock smoke design system.",
       "",
-      "---",
-      "",
-      "![workflow overview](images/workflow-overview.svg)",
-      "",
-      "---",
-      "",
-      "Input discipline",
-      "",
-      "---",
-      "",
-      "Review discipline",
-      "",
-      "---",
-      "",
-      "Delivery QA",
+      "## Visual Components",
+      "- `.visual-grid`: HTML/CSS visual container for lightweight workflow cards.",
+      "- `.visual-card`: card item used by compose_sections for `html:` visuals.",
       "",
     ].join("\n"),
     "utf8",
   );
   await writeFile(
-    path.join(targetInfo.deckPath, "images", "workflow-overview.svg"),
+    path.join(sectionsPath, "manifest.md"),
     [
-      '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">',
-      '<rect width="640" height="360" fill="#f7f7f7"/>',
-      '<text x="40" y="180" font-family="sans-serif" font-size="32" fill="#222">Mock workflow overview</text>',
-      "</svg>",
+      "# Section Manifest",
+      "",
+      "## Section order",
+      "- sections/01-intro.md: S001-S002 (2)",
+      "- sections/02-body.md: S003-S005 (3)",
+      "",
+      "## Assembly checks",
+      "- planned slide count: 5",
+      "- actual section slide count: 5",
+      "- missing slide IDs: none",
+      "- duplicate slide IDs: none",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(sectionsPath, "01-intro.md"),
+    [
+      "<!-- slide_id: S001 -->",
+      "",
+      "# Workflow smoke test",
+      "",
+      "架空研修ラボ ドメインモデリング講座",
+      "",
+      "山田 サンプル / サンプルデザイン合同会社",
+      "",
+      "<!--",
+      "【30分 / 累計 30:00】",
+      "note: opening",
+      "強調点: workflow smoke deckの前提とイベント文脈を最初に共有する。",
+      "-->",
+      "",
+      "---",
+      "<!-- slide_id: S002 -->",
+      "",
+      '<div class="visual-grid">',
+      '  <div class="visual-card">Plan</div>',
+      '  <div class="visual-card">Compose</div>',
+      '  <div class="visual-card">Deliver</div>',
+      "</div>",
+      "",
+      "<!--",
+      "【90分 / 累計 120:00】",
+      "note: overview",
+      "強調点: plan、compose、deliverの責務分離が品質を安定させる。",
+      "-->",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(sectionsPath, "02-body.md"),
+    [
+      "<!-- slide_id: S003 -->",
+      "",
+      "Input discipline",
+      "",
+      "<!--",
+      "【80分 / 累計 200:00】",
+      "note: input",
+      "強調点: normalized briefへ重要情報を落とさず渡す。",
+      "-->",
+      "",
+      "---",
+      "<!-- slide_id: S004 -->",
+      "",
+      "Review discipline",
+      "",
+      "<!--",
+      "【80分 / 累計 280:00】",
+      "note: review",
+      "強調点: coverageと契約の欠落をreviewで止める。",
+      "-->",
+      "",
+      "---",
+      "<!-- slide_id: S005 -->",
+      "",
+      "Delivery QA",
+      "",
+      "<!--",
+      "【80分 / 累計 360:00】",
+      "note: delivery",
+      "強調点: build可能なMarp artifactまで検証する。",
+      "-->",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  await writeFile(
+    path.join(targetInfo.deckPath, "SLIDES.md"),
+    [
+      "---",
+      "marp: true",
+      "html: true",
+      "title: Workflow smoke test",
+      "style: |",
+      "  section { font-family: \"Noto Sans JP\", \"Hiragino Sans\", \"Yu Gothic\", sans-serif; }",
+      "  .visual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }",
+      "  .visual-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; background: #f8fafc; }",
+      "---",
+      "",
+      "<!-- slide_id: S001 -->",
+      "",
+      "# Workflow smoke test",
+      "",
+      "架空研修ラボ ドメインモデリング講座",
+      "",
+      "山田 サンプル / サンプルデザイン合同会社",
+      "",
+      "<!--",
+      "【30分 / 累計 30:00】",
+      "note: opening",
+      "強調点: workflow smoke deckの前提とイベント文脈を最初に共有する。",
+      "-->",
+      "",
+      "---",
+      "",
+      "<!-- slide_id: S002 -->",
+      "",
+      '<div class="visual-grid">',
+      '  <div class="visual-card">Plan</div>',
+      '  <div class="visual-card">Compose</div>',
+      '  <div class="visual-card">Deliver</div>',
+      "</div>",
+      "",
+      "<!--",
+      "【90分 / 累計 120:00】",
+      "note: overview",
+      "強調点: plan、compose、deliverの責務分離が品質を安定させる。",
+      "-->",
+      "",
+      "---",
+      "",
+      "<!-- slide_id: S003 -->",
+      "",
+      "Input discipline",
+      "",
+      "<!--",
+      "【80分 / 累計 200:00】",
+      "note: input",
+      "強調点: normalized briefへ重要情報を落とさず渡す。",
+      "-->",
+      "",
+      "---",
+      "",
+      "<!-- slide_id: S004 -->",
+      "",
+      "Review discipline",
+      "",
+      "<!--",
+      "【80分 / 累計 280:00】",
+      "note: review",
+      "強調点: coverageと契約の欠落をreviewで止める。",
+      "-->",
+      "",
+      "---",
+      "",
+      "<!-- slide_id: S005 -->",
+      "",
+      "Delivery QA",
+      "",
+      "<!--",
+      "【80分 / 累計 360:00】",
+      "note: delivery",
+      "強調点: build可能なMarp artifactまで検証する。",
+      "-->",
       "",
     ].join("\n"),
     "utf8",
@@ -1350,19 +1826,38 @@ function assertApprovalFileAbsent(targetInfo, command, name) {
 
 async function assertComposeSourceArtifacts(targetInfo) {
   const designSystemPath = path.join(targetInfo.deckPath, "design-system.md");
+  const sectionManifestPath = path.join(targetInfo.deckPath, "sections", "manifest.md");
   const slidesPath = path.join(targetInfo.deckPath, "SLIDES.md");
   const imagesPath = path.join(targetInfo.deckPath, "images");
   await assertReadableFile(designSystemPath, "sequence:compose-source-artifacts");
+  await assertReadableFile(sectionManifestPath, "sequence:compose-source-artifacts");
   await assertReadableFile(slidesPath, "sequence:compose-source-artifacts");
-  const entries = await readdir(imagesPath, { withFileTypes: true });
+  const sectionsPath = path.join(targetInfo.deckPath, "sections");
+  const sectionEntries = await readdir(sectionsPath, { withFileTypes: true });
+  const sectionPaths = sectionEntries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "manifest.md")
+    .map((entry) => path.join(sectionsPath, entry.name));
+  assert(sectionPaths.length > 0, `sequence:compose-source-artifacts expected at least one section file in ${relativePath(sectionsPath)}`);
+  let sectionSource = "";
+  for (const sectionPath of sectionPaths) {
+    await assertReadableFile(sectionPath, "sequence:compose-source-artifacts");
+    sectionSource += await readFile(sectionPath, "utf8");
+  }
+  const slidesSource = await readFile(slidesPath, "utf8");
+  for (const marker of ["【30分 / 累計 30:00】", "【90分 / 累計 120:00】", "【80分 / 累計 200:00】", "【80分 / 累計 280:00】", "【80分 / 累計 360:00】"]) {
+    assert(sectionSource.includes(marker), `sequence:compose-source-artifacts section source missing duration marker '${marker}'`);
+    assert(slidesSource.includes(marker), `sequence:compose-source-artifacts SLIDES.md missing duration marker '${marker}'`);
+  }
+  const htmlVisualPresent = /<div\s+class=["'][^"']*visual/.test(slidesSource);
+  const entries = existsSync(imagesPath) ? await readdir(imagesPath, { withFileTypes: true }) : [];
   const svgPaths = entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".svg"))
     .map((entry) => path.join(imagesPath, entry.name));
-  assert(svgPaths.length > 0, `sequence:compose-source-artifacts expected at least one SVG in ${relativePath(imagesPath)}`);
+  assert(htmlVisualPresent || svgPaths.length > 0, "sequence:compose-source-artifacts expected an HTML visual in SLIDES.md or at least one SVG asset");
   for (const svgPath of svgPaths) {
     await assertReadableFile(svgPath, "sequence:compose-source-artifacts");
   }
-  return Object.freeze([designSystemPath, slidesPath, ...svgPaths]);
+  return Object.freeze([designSystemPath, sectionManifestPath, ...sectionPaths, slidesPath, ...svgPaths]);
 }
 
 async function setupSyntheticRenderEvidenceDeck(targetPath) {
