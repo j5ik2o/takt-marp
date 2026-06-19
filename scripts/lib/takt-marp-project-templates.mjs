@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { resolveRuntimeContext } from "./takt-marp-runtime-context.mjs";
-import { SlideWorkflowError } from "./takt-marp-slide-workflow.mjs";
+import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 
 export const TEMPLATE_DOMAINS = Object.freeze(["workflows", "facets"]);
 

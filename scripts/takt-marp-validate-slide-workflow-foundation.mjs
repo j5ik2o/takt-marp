@@ -46,6 +46,56 @@ async function main() {
     assert(Array.isArray(parsed.frontMatter.empty), "empty array parse failed");
   });
 
+  await check("shared error boundary formats major codes and isolates template imports", async () => {
+    const errorModulePath = path.join(SCRIPT_DIR, "lib", "takt-marp-errors.mjs");
+    const slideWorkflowPath = path.join(SCRIPT_DIR, "lib", "takt-marp-slide-workflow.mjs");
+    const templateModulePaths = [
+      path.join(SCRIPT_DIR, "lib", "takt-marp-project-init.mjs"),
+      path.join(SCRIPT_DIR, "lib", "takt-marp-project-templates.mjs"),
+    ];
+
+    const templateImports = [];
+    for (const modulePath of templateModulePaths) {
+      const source = await readFile(modulePath, "utf8");
+      if (source.includes("./takt-marp-slide-workflow.mjs")) {
+        templateImports.push(path.relative(ROOT_DIR, modulePath));
+      }
+    }
+    assert(
+      templateImports.length === 0,
+      `template modules must import errors from takt-marp-errors.mjs, not takt-marp-slide-workflow.mjs: ${templateImports.join(", ")}`,
+    );
+    assert(existsSync(errorModulePath), `shared error module missing: ${path.relative(ROOT_DIR, errorModulePath)}`);
+
+    const [errorModule, errorSource, slideWorkflowSource] = await Promise.all([
+      import("./lib/takt-marp-errors.mjs"),
+      readFile(errorModulePath, "utf8"),
+      readFile(slideWorkflowPath, "utf8"),
+    ]);
+    assert(
+      !/from\s+["']\.\/takt-marp-|import\(\s*["']\.\/takt-marp-/.test(errorSource),
+      "takt-marp-errors.mjs must remain a leaf module",
+    );
+    assert(
+      slideWorkflowSource.includes("from \"./takt-marp-errors.mjs\""),
+      "slide workflow must import the shared error boundary",
+    );
+
+    const cases = [
+      ["COMMAND_REMOVED", "`init` has been removed. Use `takt-marp eject .` to copy template assets."],
+      ["PROJECT_TEMPLATE_STATE_INVALID", "Project has partial template state: .takt/workflows exists without .takt/facets."],
+      ["EJECT_CONFLICT", "Eject conflict: existing template files would be overwritten."],
+      ["INVALID_TARGET", "Invalid target 'deck'. Expected target: slides/<deck>"],
+      ["WORKFLOW_NOT_IMPLEMENTED", "Workflow YAML is not implemented: .takt/workflows/takt-marp-slide-plan.yaml."],
+    ];
+    for (const [code, message] of cases) {
+      const error = new errorModule.SlideWorkflowError(message, code);
+      assert(error.name === "SlideWorkflowError", `${code} has unexpected error name: ${error.name}`);
+      assert(error.code === code, `${code} was not stored on the error`);
+      assert(errorModule.formatError(error) === `${code}: ${message}`, `${code} formatted unexpectedly: ${errorModule.formatError(error)}`);
+    }
+  });
+
   await check("CLI entry delegates supported runtime to dispatcher", async () => {
     const result = spawnSync(process.execPath, [BIN_ENTRY_SCRIPT, "--help"], { encoding: "utf8" });
     assert(result.status === 0, `CLI entry help failed: ${result.stderr}`);
@@ -491,6 +541,7 @@ async function makeFakePackageRoot() {
   // Copy (not symlink) so ESM realpath resolution derives packageRoot from the fake package, not the repo.
   for (const relative of [
     "takt-marp-run-slide-workflow.mjs",
+    path.join("lib", "takt-marp-errors.mjs"),
     path.join("lib", "takt-marp-slide-workflow.mjs"),
     path.join("lib", "takt-marp-runtime-context.mjs"),
   ]) {

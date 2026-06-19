@@ -25,7 +25,7 @@
   - _Boundary:_ RuntimeContext
   - _Depends:_ 1.1
 
-- [ ] 1.4 workflow と template が共有する error 境界を独立させる
+- [x] 1.4 workflow と template が共有する error 境界を独立させる
   - `init` 廃止、partial template state、eject conflict、target error、workflow file 欠落を一貫した error code と表示形式で扱う
   - template 判定側と slide workflow 側が相互 import せず、共通 error 境界だけを参照する構造にする
   - 完了条件: 主要 error code の表示形式が単体検証で固定され、template と workflow の import 循環が発生しない

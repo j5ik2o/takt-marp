@@ -1,7 +1,7 @@
 import { copyFile, mkdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { listTemplateEntries } from "./takt-marp-project-templates.mjs";
-import { SlideWorkflowError } from "./takt-marp-slide-workflow.mjs";
+import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 
 const TAKT_DIR = ".takt";
 
