@@ -1251,20 +1251,21 @@ async function main() {
     assert(output.includes("Usage: takt-marp approve"), `approve help missing usage: ${output}`);
   });
 
-  await check("approve command requires initialized project", async () => {
-    const root = await fixtureRoot();
-    const originalCwd = process.cwd();
-    try {
-      process.chdir(root);
-      const code = await runCli(["approve", "slides/demo", "plan", "--by", "foundation-test"]);
-      assert(code !== 0, "approve unexpectedly succeeded in uninitialized project");
-    } finally {
-      process.chdir(originalCwd);
-    }
+  await check("approve command without supervision fails by approval contract, not template preflight", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-approve-no-template-missing-supervision-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const result = spawnSync(
+      process.execPath,
+      [BIN_ENTRY_SCRIPT, "approve", targetInfo.target, "plan", "--by", "foundation-test"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "approve unexpectedly succeeded without supervision");
+    assert(result.stderr.includes("FILE_MISSING:"), `expected missing supervision from approval contract, got: ${result.stderr}`);
+    assert(!result.stderr.includes("PROJECT_NOT_INITIALIZED"), `template preflight masked approval contract: ${result.stderr}`);
   });
 
-  await check("approve command writes approval file", async () => {
-    const root = await initializedFixtureRoot();
+  await check("approve command writes approval file without workflow or facet templates", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-approve-no-template-"));
     const targetInfo = await makeDeck(root, "demo");
     await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
     const originalCwd = process.cwd();
@@ -1275,6 +1276,8 @@ async function main() {
     } finally {
       process.chdir(originalCwd);
     }
+    assert(!existsSync(path.join(root, ".takt", "workflows")), "approve created or required workflow templates");
+    assert(!existsSync(path.join(root, ".takt", "facets")), "approve created or required facet templates");
     const approval = await readFile(path.join(targetInfo.reviewPath, "plan-approval.md"), "utf8");
     assert(approval.includes("approved_by: foundation-test"), `approval file missing approver: ${approval}`);
   });

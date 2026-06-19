@@ -104,7 +104,7 @@
   - _Boundary:_ WorkflowRunner
   - _Depends:_ 2.1, 3.2
 
-- [ ] 3.4 approve command から template asset preflight を外す
+- [x] 3.4 approve command から template asset preflight を外す
   - `approve` は approval file の読み書きに必要な既存 contract だけを使い、workflow/facet template の存在を要求しない
   - command dispatch は approve を workflow command と混同せず、template source selection を不要なまま維持する
   - 完了条件: workflow/facet template がない対象 project でも、approval contract の成否だけで `approve` の結果が決まる

@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { statSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -27,7 +26,6 @@ const APPROVE_SCRIPT = "scripts/takt-marp-approve-slide-workflow-state.mjs";
 const SMOKE_SCRIPT = "scripts/takt-marp-validate-slide-workflow-smoke.mjs";
 const BUILD_SCRIPT = "scripts/takt-marp-build-slide-artifact.mjs";
 const PREVIEW_SCRIPT = "scripts/takt-marp-preview-slide.mjs";
-const REQUIRED_PROJECT_DIRS = [".takt/workflows", ".takt/facets"];
 const FORWARDED_SIGNALS = new Set(["SIGINT", "SIGTERM"]);
 
 function usage() {
@@ -69,24 +67,6 @@ function ejectUsage() {
     "  --overwrite  Alias of --force",
     "  --help       Show this message",
   ].join("\n");
-}
-
-function isDirectory(candidatePath) {
-  const stats = statSync(candidatePath, { throwIfNoEntry: false });
-  return stats !== undefined && stats.isDirectory();
-}
-
-function assertProjectInitialized() {
-  const cwd = process.cwd();
-  const missing = REQUIRED_PROJECT_DIRS.filter(
-    (relative) => !isDirectory(path.join(cwd, ...relative.split("/"))),
-  );
-  if (missing.length > 0) {
-    throw new SlideWorkflowError(
-      `Target project does not have ejected templates: missing ${missing.join(" and ")} in ${cwd}. Run 'takt-marp eject .' to copy template assets.`,
-      "PROJECT_NOT_INITIALIZED",
-    );
-  }
 }
 
 function runPackageScript(relativeScriptPath, args, options = {}) {
@@ -268,7 +248,6 @@ async function runApprove(args) {
     console.log(approveUsage());
     return 0;
   }
-  assertProjectInitialized();
   if (parsed.positionals.length !== 2) {
     throw new SlideWorkflowError(
       `Expected <slides/deck> and <command>. Run 'takt-marp approve --help' for usage.`,
