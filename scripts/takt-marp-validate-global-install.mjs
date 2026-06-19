@@ -15,11 +15,11 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { assertNoProhibitedEntries, listTemplateEntries } from "./lib/takt-marp-project-templates.mjs";
-import { resolveRuntimeContext } from "./lib/takt-marp-runtime-context.mjs";
+import { resolveRuntimeContext, runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 import { SlideWorkflowError, formatError } from "./lib/takt-marp-slide-workflow.mjs";
 
 const CLI_COMMANDS = [
@@ -60,6 +60,7 @@ const PREPLACED_NOTES_CONTENT = "unrelated project file: takt-marp eject must le
 const PREPLACED_LOCAL_CONTENT = "user-owned .takt note: not template-managed, must survive eject and --force\n";
 const USER_PROVIDER_CONFIG_CONTENT = "provider: user-owned\n";
 const USER_RUNTIME_STATE_CONTENT = "runtime state owned by the project\n";
+const DETERMINISTIC_TAKT_RUN_NAME = "global-install-plan-success";
 
 function check(condition, detail) {
   if (!condition) {
@@ -116,6 +117,80 @@ function runTaktMarp(ctx, args, options = {}) {
     env: { ...process.env, PATH: `${ctx.prefixBin}${path.delimiter}${process.env.PATH ?? ""}` },
     timeoutMs: options.timeoutMs ?? CLI_TIMEOUT_MS,
   });
+}
+
+function installedPackageRoot(prefixDir) {
+  return process.platform === "win32"
+    ? path.join(prefixDir, "node_modules", "takt-marp")
+    : path.join(prefixDir, "lib", "node_modules", "takt-marp");
+}
+
+async function withDeterministicTaktExecutable(ctx, callback) {
+  const packageRoot = ctx.installedPackageRoot;
+  const executableDir = path.join(packageRoot, "node_modules", ".bin");
+  await mkdir(executableDir, { recursive: true });
+  const scriptPath = runtimeExecutablePath("takt", { root: packageRoot });
+  const backupPath = path.join(ctx.workDir, `real-takt-bin-${process.pid}-${Date.now()}`);
+  await rm(backupPath, { recursive: true, force: true });
+  await rename(scriptPath, backupPath);
+  await writeFile(scriptPath, deterministicTaktNodeScript(), { encoding: "utf8", mode: 0o755 });
+  try {
+    return await callback();
+  } finally {
+    await rm(scriptPath, { force: true });
+    await rename(backupPath, scriptPath);
+  }
+}
+
+function deterministicTaktNodeScript() {
+  return `#!/usr/bin/env node
+const { mkdirSync, writeFileSync } = require("node:fs");
+const path = require("node:path");
+
+const RUN_NAME = ${JSON.stringify(DETERMINISTIC_TAKT_RUN_NAME)};
+let workflow = "";
+let target = "";
+const args = process.argv.slice(2);
+for (let index = 0; index < args.length; index += 1) {
+  const arg = args[index];
+  if (arg === "-w" || arg === "--workflow") {
+    workflow = args[index + 1] ?? "";
+    index += 1;
+  } else if (arg === "-t" || arg === "--target") {
+    target = args[index + 1] ?? "";
+    index += 1;
+  }
+}
+
+console.log(\`[INFO] Running workflow: \${workflow}\`);
+const reportsDir = path.join(process.cwd(), ".takt", "runs", RUN_NAME, "reports");
+mkdirSync(reportsDir, { recursive: true });
+const writeReport = (name, content) => writeFileSync(path.join(reportsDir, name), content, "utf8");
+
+writeReport("brief.normalized.md", "# Normalized Brief\\n\\nGlobal install validator normalized brief.\\n");
+writeReport("reference-analysis.md", "# Reference Deck Analysis\\n\\nGlobal install validator reference analysis.\\n");
+writeReport("plan.md", "# Slide Plan\\n\\ndeliverables: [html, pdf]\\n\\nGlobal install validator plan.\\n");
+writeReport("slide-blueprint.md", "# Slide Blueprint\\n\\nGlobal install validator blueprint.\\n");
+writeReport("plan-supervision.md", [
+  "---",
+  "command: plan",
+  \`target: \${target}\`,
+  "generated_at: 2026-06-05T17:10:00+09:00",
+  \`workflow_run_id: \${RUN_NAME}\`,
+  "step: supervision",
+  "cycle: 1",
+  "state: planned",
+  "result: passed",
+  "blocking_findings: 0",
+  "major_findings: 0",
+  "minor_findings: 0",
+  "info_findings: 0",
+  "---",
+  "",
+  "# Supervision",
+  "",
+].join("\\n"));
+`;
 }
 
 async function listFilesRecursive(rootDir) {
@@ -217,6 +292,10 @@ async function assertNonEmptyFile(filePath, label) {
 
 function assertWorkflowReachedSelectedPath(result, expectedPathFragment, label) {
   check(
+    result.code === 0,
+    `${label}: workflow command must exit 0 after running the selected workflow.\n${commandSummary(result)}`,
+  );
+  check(
     result.output.includes("[INFO] Running workflow:"),
     `${label}: workflow command must reach TAKT workflow startup.\n${commandSummary(result)}`,
   );
@@ -266,6 +345,7 @@ async function phasePackInstall(ctx) {
   check(install.code === 0, `npm install -g --prefix failed.\n${commandSummary(install)}`);
 
   ctx.prefixBin = process.platform === "win32" ? prefixDir : path.join(prefixDir, "bin");
+  ctx.installedPackageRoot = installedPackageRoot(prefixDir);
   const binPath = path.join(ctx.prefixBin, process.platform === "win32" ? "takt-marp.cmd" : "takt-marp");
   check(existsSync(binPath), `installed takt-marp binary not found at ${binPath}`);
   return `tarball ${tarballs[0]} installed into temp prefix`;
@@ -363,17 +443,19 @@ async function phaseWorkflowCommandNoCopy(ctx) {
   check(!existsSync(path.join(projectDir, "node_modules")), "precondition: target project must not have node_modules");
   assertTemplateAssetsAbsent(projectDir, "precondition");
 
-  const plan = await runTaktMarp(ctx, ["plan", "slides/demo", "--provider", "mock"], {
-    cwd: projectDir,
-    timeoutMs: WORKFLOW_TIMEOUT_MS,
-  });
+  const plan = await withDeterministicTaktExecutable(ctx, () =>
+    runTaktMarp(ctx, ["plan", "slides/demo", "--provider", "mock"], {
+      cwd: projectDir,
+      timeoutMs: WORKFLOW_TIMEOUT_MS,
+    }),
+  );
   assertWorkflowReachedSelectedPath(
     plan,
     "templates/project/workflows/takt-marp-slide-plan.yaml",
     "no-copy plan",
   );
   assertTemplateAssetsAbsent(projectDir, "after no-copy plan");
-  return "plan reached bundled workflow path without copying .takt/workflows or .takt/facets";
+  return "plan completed through bundled workflow path without copying .takt/workflows or .takt/facets";
 }
 
 // Phase 4 (2.3, 2.4): both template domains are accepted as an ejected override,
@@ -418,10 +500,12 @@ async function phasePartialTemplateState(ctx) {
   const ejectedWorkflowPath = path.join(ejectedProjectDir, ".takt", "workflows", "takt-marp-slide-plan.yaml");
   const ejectedWorkflowContent = `${await readFile(ejectedWorkflowPath, "utf8")}\n# user-owned ejected override: ordinary workflow execution must not replace this file\n`;
   await writeFile(ejectedWorkflowPath, ejectedWorkflowContent, "utf8");
-  const plan = await runTaktMarp(ctx, ["plan", "slides/demo", "--provider", "mock"], {
-    cwd: ejectedProjectDir,
-    timeoutMs: WORKFLOW_TIMEOUT_MS,
-  });
+  const plan = await withDeterministicTaktExecutable(ctx, () =>
+    runTaktMarp(ctx, ["plan", "slides/demo", "--provider", "mock"], {
+      cwd: ejectedProjectDir,
+      timeoutMs: WORKFLOW_TIMEOUT_MS,
+    }),
+  );
   assertWorkflowReachedSelectedPath(
     plan,
     ".takt/workflows/takt-marp-slide-plan.yaml",
@@ -432,7 +516,7 @@ async function phasePartialTemplateState(ctx) {
     afterPlanWorkflowContent === ejectedWorkflowContent,
     "ordinary workflow execution must not auto-replace or merge user-owned ejected workflow assets",
   );
-  return "partial template state rejected before TAKT; full ejected override selected without replacing custom assets";
+  return "partial template state rejected before TAKT; full ejected override completed without replacing custom assets";
 }
 
 // Phase 5 (3.1, 3.3, 3.4, 3.5, 8.4): eject generates exactly workflows/** and
