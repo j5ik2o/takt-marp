@@ -130,7 +130,7 @@
   - _Boundary:_ SmokeEntry
   - _Depends:_ 3.3
 
-- [ ] 4.2 SmokeValidator が selected template source を検査に使うようにする
+- [x] 4.2 SmokeValidator が selected template source を検査に使うようにする
   - workflow inspection と workflow doctor は global CLI と同じ TemplateSourceResolver 規則で選ばれた template source を参照する
   - mock summary は mock 用、real summary は provider 名付き real 用として区別できる検証結果にする
   - smoke temp project に workflow/facet template が生成されていないことを assertion として固定する

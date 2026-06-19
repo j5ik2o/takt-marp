@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   SlideWorkflowError,
   approvalPath,
@@ -19,6 +21,7 @@ import {
   supervisionPath,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
+import { resolveTemplateSource, workflowFilePath } from "./lib/takt-marp-project-templates.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(SCRIPT_DIR, "..");
@@ -61,7 +64,15 @@ async function main() {
   let currentCheckName = "setup:fixture-to-target";
 
   let targetInfo;
+  let templateContext;
+  let templateAssetSnapshot;
   try {
+    currentCheckName = "smoke:template-asset-snapshot";
+    templateAssetSnapshot = await snapshotSmokeTemplateAssets(ROOT);
+    currentCheckName = "smoke:selected-template-source";
+    templateContext = resolveSmokeTemplateContext(ROOT);
+    checks.push(pass("smoke:selected-template-source", `Selected ${templateContext.source.kind} template source: ${relativePath(templateContext.source.rootDir)}.`));
+    observedPaths.push(...selectedTemplateObservedPaths(templateContext).map(relativePath));
     currentCheckName = "setup:fixture-to-target";
     const setup = await setupSmokeDeck(options.target);
     targetInfo = setup.targetInfo;
@@ -86,7 +97,7 @@ async function main() {
     const composeStateValidationChecks = await runComposeStateValidationNegativeChecks();
     checks.push(...composeStateValidationChecks.checks);
     currentCheckName = "failure-path:convergence-routing";
-    const convergenceChecks = await runConvergenceRouteChecks();
+    const convergenceChecks = await runConvergenceRouteChecks(templateContext);
     checks.push(...convergenceChecks.checks);
     observedPaths.push(...convergenceChecks.observedPaths);
     currentCheckName = "failure-path:render-evidence-boundary";
@@ -95,22 +106,22 @@ async function main() {
     commands.push(...renderEvidenceBoundaryChecks.commands);
     observedPaths.push(...renderEvidenceBoundaryChecks.observedPaths);
     currentCheckName = "sequence:workflow";
-    const planSequenceChecks = await runPlanSequenceChecks(targetInfo, { provider: options.provider });
+    const planSequenceChecks = await runPlanSequenceChecks(targetInfo, { provider: options.provider, templateContext });
     checks.push(...planSequenceChecks.checks);
     commands.push(...planSequenceChecks.commands);
     observedPaths.push(...planSequenceChecks.observedPaths);
     currentCheckName = "failure-path:force-invalidation";
-    const forceChecks = await runForceInvalidationChecks(targetInfo, { provider: options.provider });
+    const forceChecks = await runForceInvalidationChecks(targetInfo, { provider: options.provider, templateContext });
     checks.push(...forceChecks.checks);
     commands.push(...forceChecks.commands);
     observedPaths.push(...forceChecks.observedPaths);
     currentCheckName = "failure-path:successful-rerun-rejection";
-    const rerunChecks = await runSuccessfulRerunRejectionChecks(targetInfo);
+    const rerunChecks = await runSuccessfulRerunRejectionChecks(targetInfo, { templateContext });
     checks.push(...rerunChecks.checks);
     commands.push(...rerunChecks.commands);
     observedPaths.push(...rerunChecks.observedPaths);
     currentCheckName = "failure-path:rejected-rerun-archive";
-    const rejectedRerunChecks = await runRejectedRerunArchiveChecks(targetInfo, { provider: options.provider });
+    const rejectedRerunChecks = await runRejectedRerunArchiveChecks(targetInfo, { provider: options.provider, templateContext });
     checks.push(...rejectedRerunChecks.checks);
     commands.push(...rejectedRerunChecks.commands);
     observedPaths.push(...rejectedRerunChecks.observedPaths);
@@ -120,17 +131,32 @@ async function main() {
     checks.push(fail(currentCheckName, reason));
   }
 
+  if (templateAssetSnapshot) {
+    try {
+      const asserted = await assertSmokeTemplateAssetsNotGenerated(ROOT, templateAssetSnapshot);
+      checks.push(pass("smoke:template-assets-no-copy", `Workflow/facet template assets were not generated or changed (${asserted.summary}).`));
+    } catch (error) {
+      const reason = formatError(error);
+      failures.push(reason);
+      checks.push(fail("smoke:template-assets-no-copy", reason));
+    }
+  }
+
   if (targetInfo) {
     const summaryPath = path.join(targetInfo.reviewPath, smokeSummaryFileName(options));
     observedPaths.push(relativePath(summaryPath));
     const summaryChecks = [
       ...checks,
+      pass("summary:provider-kind", smokeSummaryProviderReason(options)),
       pass("summary:write-smoke-summary", "Smoke summary written."),
     ];
     await writeSummary(summaryPath, {
       target: targetInfo.target,
       provider: options.provider,
       smokeMode: smokeMode(options),
+      summaryKind: smokeSummaryKind(options),
+      realProvider: realSummaryProvider(options),
+      templateSource: templateContext?.source,
       result: failures.length === 0 ? "passed" : "failed",
       commands,
       checks: summaryChecks,
@@ -397,6 +423,71 @@ function extractBetween(source, startMarker, endMarker) {
   return source.slice(start + startMarker.length, end);
 }
 
+export function resolveSmokeTemplateContext(projectRoot = ROOT) {
+  const source = resolveTemplateSource({ projectRoot });
+  const workflowFiles = Object.fromEntries(
+    WORKFLOW_COMMANDS.map((command) => [command, workflowFilePath(source, command)]),
+  );
+  return Object.freeze({
+    projectRoot: path.resolve(projectRoot),
+    source,
+    workflowFiles: Object.freeze(workflowFiles),
+    aiGateWorkflowFile: path.join(source.workflowsDir, "takt-marp-slide-ai-quality-gate.yaml"),
+  });
+}
+
+function selectedTemplateObservedPaths(templateContext) {
+  return Object.freeze([
+    templateContext.source.rootDir,
+    templateContext.source.workflowsDir,
+    templateContext.source.facetsDir,
+    ...Object.values(templateContext.workflowFiles),
+    templateContext.aiGateWorkflowFile,
+  ]);
+}
+
+export async function snapshotSmokeTemplateAssets(projectRoot = ROOT) {
+  const root = path.resolve(projectRoot);
+  const snapshot = {};
+  for (const domain of ["workflows", "facets"]) {
+    const domainRoot = path.join(root, ".takt", domain);
+    if (!existsSync(domainRoot)) {
+      snapshot[domain] = Object.freeze({ exists: false, files: Object.freeze([]) });
+      continue;
+    }
+    const files = [];
+    const entries = await readdir(domainRoot, { recursive: true, withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const filePath = path.join(entry.parentPath, entry.name);
+      const content = await readFile(filePath);
+      files.push({
+        path: path.relative(path.join(root, ".takt"), filePath).split(path.sep).join("/"),
+        sha256: createHash("sha256").update(content).digest("hex"),
+      });
+    }
+    files.sort((left, right) => left.path.localeCompare(right.path));
+    snapshot[domain] = Object.freeze({ exists: true, files: Object.freeze(files.map((item) => Object.freeze(item))) });
+  }
+  return Object.freeze(snapshot);
+}
+
+export async function assertSmokeTemplateAssetsNotGenerated(projectRoot = ROOT, before) {
+  assert(before, "smoke:template-assets-no-copy missing template asset baseline snapshot");
+  const after = await snapshotSmokeTemplateAssets(projectRoot);
+  const beforeJson = JSON.stringify(before);
+  const afterJson = JSON.stringify(after);
+  assert(
+    beforeJson === afterJson,
+    `smoke:template-assets-no-copy workflow/facet template assets changed. before=${beforeJson} after=${afterJson}`,
+  );
+  const presentDomains = Object.entries(after).filter(([, value]) => value.exists).map(([domain]) => domain);
+  return Object.freeze({
+    snapshot: after,
+    summary: presentDomains.length > 0 ? `pre-existing ${presentDomains.join("+")} unchanged` : "no workflow/facet template asset directories present",
+  });
+}
+
 async function runApprovalCommandNegativeChecks(targetInfo) {
   const checks = [];
   const commands = [];
@@ -505,7 +596,7 @@ async function runComposeStateValidationNegativeChecks() {
   return Object.freeze({ checks: Object.freeze(checks) });
 }
 
-async function runConvergenceRouteChecks() {
+async function runConvergenceRouteChecks(templateContext) {
   const checks = [];
   const observedPaths = [];
 
@@ -553,15 +644,16 @@ async function runConvergenceRouteChecks() {
   };
 
   for (const command of WORKFLOW_COMMANDS) {
-    assertWorkflowLoopMonitor(command, expectations[command]);
-    assertAiGateWorkflowRoute(command, expectations[command]);
+    assertWorkflowLoopMonitor(templateContext, command, expectations[command]);
+    assertAiGateWorkflowRoute(templateContext, command, expectations[command]);
   }
-  assertAiGateCallableWorkflowRules();
-  assertWorkflowDoctorPasses();
-  assertNoDeckLocalLoopMonitorFacets();
-  assertNoUnsupportedWorkflowCommandGateObjects();
+  assertAiGateCallableWorkflowRules(templateContext);
+  await assertWorkflowDoctorPasses(templateContext);
+  assertNoDeckLocalLoopMonitorFacets(templateContext);
+  assertNoUnsupportedWorkflowCommandGateObjects(templateContext);
   observedPaths.push(
-    ...WORKFLOW_COMMANDS.map((command) => relativePath(path.join(ROOT, ".takt", "workflows", `takt-marp-slide-${command}.yaml`))),
+    ...Object.values(templateContext.workflowFiles).map(relativePath),
+    relativePath(templateContext.aiGateWorkflowFile),
     relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-verify-render-evidence-metadata.mjs")),
     relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-verify-delivery-artifacts.mjs")),
     relativePath(path.join(PACKAGE_ROOT, "scripts", "takt-marp-render-slide-workflow-evidence.mjs")),
@@ -899,14 +991,15 @@ function reportStepFromName(command, reportName) {
   return reportName.slice(prefix.length, -".md".length);
 }
 
-async function runSuccessfulRerunRejectionChecks(targetInfo) {
+async function runSuccessfulRerunRejectionChecks(targetInfo, options) {
   const checks = [];
   const commands = [];
   const protectedPaths = [supervisionPath(targetInfo, "plan"), approvalPath(targetInfo, "plan")];
   const snapshots = await snapshotFiles(protectedPaths);
   const historyBefore = await listHistoryFiles(targetInfo);
-  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs plan ${JSON.stringify(targetInfo.target)}`;
-  const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", targetInfo.target], {
+  const runnerArgs = ["plan", ...workflowCommandArgs("plan", targetInfo.target, options)];
+  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs ${runnerArgs.map((arg) => JSON.stringify(arg)).join(" ")}`;
+  const result = spawnSync(process.execPath, [RUNNER_SCRIPT, ...runnerArgs], {
     cwd: ROOT,
     encoding: "utf8",
     timeout: NODE_CHECK_TIMEOUT_MS,
@@ -1036,15 +1129,15 @@ async function runRejectedRerunArchiveChecks(targetInfo, options) {
   });
 
   const rejectedSnapshot = await readFile(supervisionPath(targetInfo, "plan"), "utf8");
-  const providerArgs = providerFlagArgs(options);
-  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs plan ${[JSON.stringify(targetInfo.target), ...providerArgs.map((arg) => JSON.stringify(arg))].join(" ")}`;
+  const runnerArgs = ["plan", ...workflowCommandArgs("plan", targetInfo.target, options)];
+  const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs ${runnerArgs.map((arg) => JSON.stringify(arg)).join(" ")}`;
   commands.push(commandLine);
 
   if (isMockProvider(options)) {
     await archiveCommandArtifacts(targetInfo, ["plan"], "rejected-rerun");
     await writeMockCommandResult(targetInfo, "plan");
   } else {
-    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, "plan", targetInfo.target, ...providerArgs], {
+    const result = spawnSync(process.execPath, [RUNNER_SCRIPT, ...runnerArgs], {
       cwd: ROOT,
       encoding: "utf8",
       timeout: WORKFLOW_COMMAND_TIMEOUT_MS,
@@ -1180,7 +1273,7 @@ function assertApprovalCommandFailure(name, target, command, args, expectedOutpu
 }
 
 async function runWorkflowCommand(name, command, targetInfo, options, extraArgs = []) {
-  const args = workflowCommandArgs(targetInfo.target, options, extraArgs);
+  const args = workflowCommandArgs(command, targetInfo.target, options, extraArgs);
   const runnerArgs = [command, ...args];
   const commandLine = `node scripts/takt-marp-run-slide-workflow.mjs ${runnerArgs.map((arg) => JSON.stringify(arg)).join(" ")}`;
   if (!isMockProvider(options)) {
@@ -1742,8 +1835,10 @@ function mockCommandState(command) {
   }[command];
 }
 
-function workflowCommandArgs(target, options, extraArgs = []) {
-  return [target, ...providerFlagArgs(options), ...extraArgs];
+function workflowCommandArgs(command, target, options, extraArgs = []) {
+  const selectedWorkflowFile = options?.templateContext?.workflowFiles?.[command];
+  const workflowFileArgs = selectedWorkflowFile ? ["--workflow-file", selectedWorkflowFile] : [];
+  return [target, ...workflowFileArgs, ...providerFlagArgs(options), ...extraArgs];
 }
 
 function providerFlagArgs(options) {
@@ -2060,8 +2155,8 @@ async function assertReadableFile(filePath, name) {
   assert(content.trim().length > 0, `${name} expected non-empty file: ${relativePath(filePath)}`);
 }
 
-function assertWorkflowLoopMonitor(command, expected) {
-  const workflowFile = path.join(ROOT, ".takt", "workflows", `takt-marp-slide-${command}.yaml`);
+function assertWorkflowLoopMonitor(templateContext, command, expected) {
+  const workflowFile = templateContext.workflowFiles[command];
   const source = readFileSyncUtf8(workflowFile);
   const loopMonitorsIndex = source.indexOf("loop_monitors:");
   const stepsIndex = source.indexOf("\nsteps:");
@@ -2081,8 +2176,8 @@ function assertWorkflowLoopMonitor(command, expected) {
   assertRouteNext(source, "approved", expected.approvedNext);
 }
 
-function assertAiGateWorkflowRoute(command, expected) {
-  const workflowFile = path.join(ROOT, ".takt", "workflows", `takt-marp-slide-${command}.yaml`);
+function assertAiGateWorkflowRoute(templateContext, command, expected) {
+  const workflowFile = templateContext.workflowFiles[command];
   const source = readFileSyncUtf8(workflowFile);
   const workStepBlock = workflowStepBlock(source, expected.workStep);
   const gateStepBlock = workflowStepBlock(source, expected.gateStep);
@@ -2099,8 +2194,8 @@ function assertAiGateWorkflowRoute(command, expected) {
   );
 }
 
-function assertAiGateCallableWorkflowRules() {
-  const workflowFile = path.join(ROOT, ".takt", "workflows", "takt-marp-slide-ai-quality-gate.yaml");
+function assertAiGateCallableWorkflowRules(templateContext) {
+  const workflowFile = templateContext.aiGateWorkflowFile;
   const source = readFileSyncUtf8(workflowFile);
   const reviewStepBlock = workflowStepBlock(source, "ai-antipattern-review-1st");
   assertRouteNext(reviewStepBlock, "result approved and blocking_finding_count is 0", "COMPLETE");
@@ -2117,29 +2212,37 @@ function workflowStepBlock(source, stepName) {
   return nextStepStart === -1 ? source.slice(stepStart) : source.slice(stepStart, nextStepStart);
 }
 
-function assertNoDeckLocalLoopMonitorFacets() {
+function assertNoDeckLocalLoopMonitorFacets(templateContext) {
   for (const filePath of [
-    path.join(ROOT, ".takt", "facets", "instructions", "takt-marp-loop-monitor.md"),
-    path.join(ROOT, ".takt", "facets", "personas", "takt-marp-slide-loop-monitor.md"),
-    path.join(ROOT, ".takt", "facets", "output-contracts", "takt-marp-loop-monitor.md"),
+    path.join(templateContext.source.facetsDir, "instructions", "takt-marp-loop-monitor.md"),
+    path.join(templateContext.source.facetsDir, "personas", "takt-marp-slide-loop-monitor.md"),
+    path.join(templateContext.source.facetsDir, "output-contracts", "takt-marp-loop-monitor.md"),
   ]) {
     assert(!existsSync(filePath), `deck-local loop monitor facet still exists: ${relativePath(filePath)}`);
   }
 }
 
-function assertWorkflowDoctorPasses() {
+async function assertWorkflowDoctorPasses(templateContext) {
+  const doctorRoot = await mkdtemp(path.join(os.tmpdir(), "takt-marp-smoke-doctor-"));
   const workflowPaths = [
     ...WORKFLOW_COMMANDS.map((command) => path.join(".takt", "workflows", `takt-marp-slide-${command}.yaml`)),
     path.join(".takt", "workflows", "takt-marp-slide-ai-quality-gate.yaml"),
   ];
-  const result = spawnSync(runtimeExecutablePath("takt"), ["workflow", "doctor", ...workflowPaths], {
-    cwd: ROOT,
-    encoding: "utf8",
-    timeout: NODE_CHECK_TIMEOUT_MS,
-    maxBuffer: CAPTURE_MAX_BUFFER,
-  });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-  assert(result.status === 0, `workflow doctor failed for AI gate workflow set: ${output}`);
+  try {
+    await mkdir(path.join(doctorRoot, ".takt"), { recursive: true });
+    await symlink(templateContext.source.workflowsDir, path.join(doctorRoot, ".takt", "workflows"), "dir");
+    await symlink(templateContext.source.facetsDir, path.join(doctorRoot, ".takt", "facets"), "dir");
+    const result = spawnSync(runtimeExecutablePath("takt"), ["workflow", "doctor", ...workflowPaths], {
+      cwd: doctorRoot,
+      encoding: "utf8",
+      timeout: NODE_CHECK_TIMEOUT_MS,
+      maxBuffer: CAPTURE_MAX_BUFFER,
+    });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    assert(result.status === 0, `workflow doctor failed for AI gate workflow set: ${output}`);
+  } finally {
+    await rm(doctorRoot, { recursive: true, force: true });
+  }
 }
 
 function assertTextSequence(source, snippets, name) {
@@ -2151,10 +2254,10 @@ function assertTextSequence(source, snippets, name) {
   }
 }
 
-function assertNoUnsupportedWorkflowCommandGateObjects() {
+function assertNoUnsupportedWorkflowCommandGateObjects(templateContext) {
   const workflowFiles = [
-    ...WORKFLOW_COMMANDS.map((command) => path.join(ROOT, ".takt", "workflows", `takt-marp-slide-${command}.yaml`)),
-    path.join(ROOT, ".takt", "workflows", "takt-marp-slide-ai-quality-gate.yaml"),
+    ...WORKFLOW_COMMANDS.map((command) => templateContext.workflowFiles[command]),
+    templateContext.aiGateWorkflowFile,
   ];
   for (const workflowFile of workflowFiles) {
     const source = readFileSyncUtf8(workflowFile);
@@ -2343,6 +2446,10 @@ async function writeSummary(summaryPath, data) {
     `target: ${data.target}`,
     `provider: ${data.provider}`,
     `smoke_mode: ${data.smokeMode}`,
+    `summary_kind: ${data.summaryKind}`,
+    `real_provider: ${data.realProvider}`,
+    `selected_template_source: ${data.templateSource?.kind ?? "unknown"}`,
+    `selected_template_root: ${data.templateSource ? data.templateSource.rootDir : "unknown"}`,
     `generated_at: ${new Date().toISOString()}`,
     `result: ${data.result}`,
     `commands_run: [${data.commands.map((command) => JSON.stringify(command)).join(", ")}]`,
@@ -2351,6 +2458,19 @@ async function writeSummary(summaryPath, data) {
     "---",
     "",
     "# Smoke Summary",
+    "",
+    "## Provider Evidence",
+    "",
+    `- Summary kind: ${data.summaryKind}`,
+    `- Provider: ${data.provider}`,
+    `- Real provider: ${data.realProvider}`,
+    "",
+    "## Selected Template Source",
+    "",
+    `- Kind: ${data.templateSource?.kind ?? "unknown"}`,
+    `- Root: ${data.templateSource?.rootDir ?? "unknown"}`,
+    `- Workflows: ${data.templateSource?.workflowsDir ?? "unknown"}`,
+    `- Facets: ${data.templateSource?.facetsDir ?? "unknown"}`,
     "",
     "## Executed Commands",
     "",
@@ -2394,6 +2514,20 @@ function smokeMode(options) {
   return isMockProvider(options) ? "mock" : "real";
 }
 
+function smokeSummaryKind(options) {
+  return isMockProvider(options) ? "mock-smoke-validation" : "real-smoke-validation";
+}
+
+function realSummaryProvider(options) {
+  return isMockProvider(options) ? "n/a" : options.provider;
+}
+
+function smokeSummaryProviderReason(options) {
+  return isMockProvider(options)
+    ? "Smoke summary is marked as mock smoke validation evidence."
+    : `Smoke summary is marked as real smoke validation evidence for provider '${options.provider}'.`;
+}
+
 function safeFileSegment(value) {
   return String(value).replace(/[^A-Za-z0-9._-]+/g, "-");
 }
@@ -2424,7 +2558,9 @@ function relativePath(filePath) {
   return path.relative(ROOT, filePath).replaceAll(path.sep, "/");
 }
 
-main().catch((error) => {
-  console.error(formatError(error));
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(formatError(error));
+    process.exit(1);
+  });
+}

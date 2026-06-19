@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   packageScriptPath,
   resolveRuntimeContext,
@@ -981,6 +981,46 @@ async function main() {
     assert(providerRecords[1].cwd !== userRoot, "provider smoke script ran in the user cwd instead of an isolated temp project");
     await assertNoSmokeTemplateProviderOrRuntimeFiles(userRoot);
     await assertNoSmokeTemplateProviderOrRuntimeFiles(providerRecords[1].cwd);
+  });
+
+  await check("smoke validator uses selected template source for inspection, summary, and no-copy evidence", async () => {
+    const source = await readFile(path.join(SCRIPT_DIR, "takt-marp-validate-slide-workflow-smoke.mjs"), "utf8");
+    assert(source.includes("resolveTemplateSource"), "smoke validator must use TemplateSourceResolver rules");
+    assert(source.includes("workflowFilePath"), "smoke validator must derive command workflow paths from the selected template source");
+    assert(!source.includes('path.join(ROOT, ".takt", "workflows"'), "smoke validator still reads project-local .takt/workflows directly");
+    assert(source.includes("summary_kind:"), "smoke summary must distinguish mock and real validation result kinds");
+    assert(source.includes("real_provider:"), "real smoke summary must record the provider name as real provider evidence");
+    assert(source.includes("smoke:selected-template-source"), "smoke validator must record the selected template source");
+    assert(source.includes("smoke:template-assets-no-copy"), "smoke validator must assert workflow/facet templates were not generated");
+  });
+
+  await check("smoke validator selected source helpers cover bundled and ejected no-copy states", async () => {
+    const smokeModuleUrl = pathToFileURL(path.join(SCRIPT_DIR, "takt-marp-validate-slide-workflow-smoke.mjs")).href;
+    const smoke = await import(`${smokeModuleUrl}?foundation=${Date.now()}`);
+
+    const bundledRoot = await mkdtemp(path.join(os.tmpdir(), "smoke-validator-bundled-"));
+    const bundledSnapshot = await smoke.snapshotSmokeTemplateAssets(bundledRoot);
+    const bundledContext = smoke.resolveSmokeTemplateContext(bundledRoot);
+    assert(bundledContext.source.kind === "bundled", `expected bundled smoke template source, got ${bundledContext.source.kind}`);
+    assert(
+      bundledContext.workflowFiles.plan === path.join(ROOT_DIR, "templates", "project", "workflows", "takt-marp-slide-plan.yaml"),
+      `bundled smoke inspection path did not use package template: ${bundledContext.workflowFiles.plan}`,
+    );
+    await smoke.assertSmokeTemplateAssetsNotGenerated(bundledRoot, bundledSnapshot);
+    assert(!existsSync(path.join(bundledRoot, ".takt", "workflows")), "bundled smoke helper generated workflow templates");
+    assert(!existsSync(path.join(bundledRoot, ".takt", "facets")), "bundled smoke helper generated facet templates");
+
+    const ejectedRoot = await mkdtemp(path.join(os.tmpdir(), "smoke-validator-ejected-"));
+    await mkdir(path.join(ejectedRoot, ".takt", "workflows"), { recursive: true });
+    await mkdir(path.join(ejectedRoot, ".takt", "facets", "instructions"), { recursive: true });
+    const ejectedWorkflow = path.join(ejectedRoot, ".takt", "workflows", "takt-marp-slide-plan.yaml");
+    await writeFile(ejectedWorkflow, "name: ejected-plan\n", "utf8");
+    await writeFile(path.join(ejectedRoot, ".takt", "facets", "instructions", "custom.md"), "# Custom\n", "utf8");
+    const ejectedSnapshot = await smoke.snapshotSmokeTemplateAssets(ejectedRoot);
+    const ejectedContext = smoke.resolveSmokeTemplateContext(ejectedRoot);
+    assert(ejectedContext.source.kind === "ejected", `expected ejected smoke template source, got ${ejectedContext.source.kind}`);
+    assert(ejectedContext.workflowFiles.plan === ejectedWorkflow, `ejected smoke inspection path did not use project override: ${ejectedContext.workflowFiles.plan}`);
+    await smoke.assertSmokeTemplateAssetsNotGenerated(ejectedRoot, ejectedSnapshot);
   });
 
   await check("global CLI workflow command uses ejected workflow override", async () => {
