@@ -10,7 +10,7 @@ Marpスライド内の図解は、まず section source と assembled `SLIDES.md
 |------|------|
 | HTML/CSS-first | カード、比較、表、簡単なフロー、タイムライン、チェックリスト、コード対比は `SLIDES.md` 内のHTML/CSSで作る |
 | SVG-limited | 座標指定、複雑な矢印、関係マップ、トポロジ、再利用図版、単体差分レビューが必要なものだけSVGにする |
-| render owner明示 | planの `Visual:` には visual種別と `render_owner` を明示し、compose/generate の責務を分ける |
+| render owner明示 | planの `Visual:` には visual種別を、各slideの `Visual Strategy` には `render_owner` と理由を明示し、compose/generate の責務を分ける |
 | 1 visual 1 message | 1つの図解に複数の主張を詰め込まない |
 | token駆動 | 個別styleではなく `design-system.md` のclassとCSS変数で制御する |
 | 可読性優先 | 印刷配布と投影の両方で読める文字量・余白・コントラストにする |
