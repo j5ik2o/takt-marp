@@ -175,7 +175,7 @@
   - _Boundary:_ IntegrationCleanup
   - _Depends:_ 5.2
 
-- [ ] 5.4 全経路の回帰を実行して実装可能状態を確認する
+- [x] 5.4 全経路の回帰を実行して実装可能状態を確認する
   - foundation、template drift、package boundary、global install、mock smoke、workflow no-copy、eject conflict の検証を一通り実行する
   - 失敗が出た場合は該当境界のタスクへ戻して修正し、検証タスク側で回避策を入れない
   - 完了条件: no-copy workflow と eject-only template copy の主要 command がすべて exit 0 で完走したログが揃う
