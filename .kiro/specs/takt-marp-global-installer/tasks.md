@@ -87,7 +87,7 @@
   - _Boundary:_ CommandDispatcher
   - _Depends:_ 2.1, 2.2
 
-- [ ] 3.2 SlideWorkflowLib を selected template source で動く薄い契約層にする
+- [x] 3.2 SlideWorkflowLib を selected template source で動く薄い契約層にする
   - selected template source の workflow path を使い、target contract、prerequisite、rerun blocking、force invalidation、report freshness、approval ownership を再定義せず維持する
   - 無効 target は TAKT workflow 開始前に既存 slide workflow と同等の target error として返す
   - 完了条件: invalid target、既存成功状態、force 指定、provider 指定の既存契約が global CLI 経由でも同じ判定になる

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -786,6 +786,122 @@ async function main() {
     await expectFailure(() => assertWorkflowAvailable("compose", { root }), "WORKFLOW_NOT_IMPLEMENTED");
   });
 
+  await check("workflow availability accepts selected bundled template source", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-bundled-"));
+    const source = resolveTemplateSource({ projectRoot: root });
+    const selectedWorkflowPath = workflowFilePath(source, "plan");
+
+    assert(source.kind === "bundled", `expected bundled source for project without .takt, got: ${source.kind}`);
+    assert(
+      assertWorkflowAvailable("plan", { root, workflowFilePath: selectedWorkflowPath }) === selectedWorkflowPath,
+      "selected bundled workflow file path was not used by workflow availability",
+    );
+    assert(!existsSync(path.join(root, ".takt")), "selected bundled workflow availability created project-local .takt");
+  });
+
+  await check("workflow availability accepts selected ejected template source", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-ejected-"));
+    await mkdir(path.join(root, ".takt", "workflows"), { recursive: true });
+    await mkdir(path.join(root, ".takt", "facets"), { recursive: true });
+    const source = resolveTemplateSource({ projectRoot: root });
+    const selectedWorkflowPath = workflowFilePath(source, "compose");
+    await writeFile(selectedWorkflowPath, "name: takt-marp-slide-compose\n", "utf8");
+
+    assert(source.kind === "ejected", `expected ejected source, got: ${source.kind}`);
+    assert(
+      assertWorkflowAvailable("compose", { root: path.join(root, "other-root"), workflowFilePath: selectedWorkflowPath }) === selectedWorkflowPath,
+      "selected ejected workflow file path was not used by workflow availability",
+    );
+  });
+
+  await check("workflow availability keeps project-local .takt default", async () => {
+    const root = await fixtureRoot();
+    const expected = path.join(root, ".takt", "workflows", "takt-marp-slide-plan.yaml");
+    assert(
+      assertWorkflowAvailable("plan", { root }) === expected,
+      "default workflow availability no longer resolves project-local .takt workflow",
+    );
+  });
+
+  await check("runner rejects invalid target before workflow or TAKT checks", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-invalid-target-order-"));
+    const fakePackage = await makeFakePackageRoot();
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "deck"], { cwd: root, encoding: "utf8" });
+    assert(result.status !== 0, "runner unexpectedly accepted invalid target");
+    assert(result.stderr.includes("INVALID_TARGET:"), `invalid target did not surface INVALID_TARGET: ${result.stderr}`);
+    assert(!result.stderr.includes("WORKFLOW_NOT_IMPLEMENTED"), `workflow availability ran before invalid target: ${result.stderr}`);
+    assert(!result.stderr.includes("TAKT_EXECUTABLE_MISSING"), `TAKT check ran before invalid target: ${result.stderr}`);
+  });
+
+  await check("runner uses selected workflow file path and preserves provider argument", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-runner-"));
+    await makeDeck(root, "demo");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `runner failed with selected workflow file path: ${result.stderr}`);
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(args[workflowArgIndex + 1] === selectedWorkflowPath, `TAKT did not receive selected workflow file path: ${args.join(" ")}`);
+    const providerArgIndex = args.indexOf("--provider");
+    assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
+    assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
+    assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
+  });
+
+  await check("runner with selected workflow file path preserves rerun blocking", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-rerun-"));
+    const targetInfo = await makeDeck(root, "demo");
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-old");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "runner unexpectedly allowed selected-source successful rerun");
+    assert(result.stderr.includes("RERUN_BLOCKED:"), `selected-source rerun did not report RERUN_BLOCKED: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT started despite selected-source rerun blocking");
+  });
+
+  await check("runner with selected workflow file path preserves force invalidation", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-force-"));
+    const targetInfo = await makeDeck(root, "demo");
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-old");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    await mkdir(path.join(root, "dist", "demo"), { recursive: true });
+    await writeFile(path.join(root, "dist", "demo", "old.pdf"), "stale pdf", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--force"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `selected-source force rerun failed: ${result.stderr}`);
+    const synced = await readFile(supervisionPath(targetInfo, "plan"), "utf8");
+    assert(synced.includes("workflow_run_id: run-current"), `force rerun did not sync current supervision: ${synced}`);
+    const historyFiles = await readdir(path.join(targetInfo.reviewPath, "history"));
+    assert(historyFiles.some((name) => name.endsWith("force-plan-supervision.md")), `force did not archive supervision: ${historyFiles.join(", ")}`);
+    assert(historyFiles.some((name) => name.endsWith("force-plan-approval.md")), `force did not archive approval: ${historyFiles.join(", ")}`);
+    assert(!existsSync(path.join(root, "dist", "demo", "old.pdf")), "force did not clean generated output");
+    assert(!existsSync(path.join(root, ".takt", "workflows")), "selected-source force created project-local workflow templates");
+  });
+
   await check("runner checks prerequisites before workflow availability", async () => {
     const root = await fixtureRoot();
     await makeDeck(root, "demo");
@@ -1215,6 +1331,14 @@ async function makeDeck(root, deckName) {
   return resolveDeckTarget(`slides/${deckName}`, { root });
 }
 
+async function makeSelectedWorkflowFile(command) {
+  const selectedSourceRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-source-"));
+  const selectedWorkflowPath = path.join(selectedSourceRoot, "workflows", `takt-marp-slide-${command}.yaml`);
+  await mkdir(path.dirname(selectedWorkflowPath), { recursive: true });
+  await writeFile(selectedWorkflowPath, `name: selected-${command}\n`, "utf8");
+  return selectedWorkflowPath;
+}
+
 async function makeFakePackageRoot() {
   const packageRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-package-"));
   // Copy (not symlink) so ESM realpath resolution derives packageRoot from the fake package, not the repo.
@@ -1247,6 +1371,9 @@ function runtimeExecutableName(tool) {
 function fakeTaktScript(runNames, result) {
   const lines = [
     "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
     "target=\"\"",
     "while [ \"$#\" -gt 0 ]; do",
     "  if [ \"$1\" = \"-t\" ]; then",

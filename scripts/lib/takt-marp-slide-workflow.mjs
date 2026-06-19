@@ -89,6 +89,9 @@ export function resolveDeckTarget(target, options = {}) {
 
 export function workflowPath(command, options = {}) {
   requireCommand(command);
+  if (options.workflowFilePath) {
+    return path.resolve(options.root ?? process.cwd(), options.workflowFilePath);
+  }
   const root = options.root ?? process.cwd();
   return path.join(root, ".takt", "workflows", `takt-marp-slide-${command}.yaml`);
 }

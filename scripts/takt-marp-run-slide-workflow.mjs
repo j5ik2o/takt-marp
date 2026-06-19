@@ -44,9 +44,10 @@ async function main() {
   const [commandArg, target] = positional;
   const command = requireCommand(commandArg);
   const targetInfo = resolveDeckTarget(target);
+  const selectedWorkflowFilePath = flags["workflow-file"];
 
   await assertCommandPrerequisites(targetInfo, command);
-  assertWorkflowAvailable(command);
+  const availableWorkflowPath = assertWorkflowAvailable(command, { workflowFilePath: selectedWorkflowFilePath });
   // Keep executable availability in preflight so failed setup cannot invalidate current artifacts.
   assertTaktExecutableAvailable();
 
@@ -64,7 +65,10 @@ async function main() {
 
   await writeCurrentWorkflowTarget(command, targetInfo);
   const runSnapshotBefore = await snapshotTaktRuns(command);
-  const code = await runTakt(command, targetInfo.target, { provider: flags.provider });
+  const code = await runTakt(command, targetInfo.target, {
+    provider: flags.provider,
+    workflowFilePath: selectedWorkflowFilePath ? availableWorkflowPath : undefined,
+  });
   if (code !== 0) {
     process.exitCode = code;
     return;
@@ -92,7 +96,8 @@ async function writeCurrentWorkflowTarget(command, targetInfo) {
 }
 
 async function runTakt(command, target, options = {}) {
-  const args = ["--pipeline", "--skip-git", "-w", `takt-marp-slide-${command}`, "-t", target];
+  const workflow = options.workflowFilePath ?? `takt-marp-slide-${command}`;
+  const args = ["--pipeline", "--skip-git", "-w", workflow, "-t", target];
   if (options.provider) {
     args.push("--provider", options.provider);
   }
