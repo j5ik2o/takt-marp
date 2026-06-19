@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { initializeProject } from "./takt-marp-project-init.mjs";
+import { ejectProject } from "./takt-marp-project-eject.mjs";
 import { packageScriptPath } from "./takt-marp-runtime-context.mjs";
 import {
   APPROVAL_COMMANDS,
@@ -19,7 +20,7 @@ const BUILD_COMMANDS = Object.freeze({
   "build:pptx": "pptx",
 });
 const UTILITY_COMMANDS = [...Object.keys(BUILD_COMMANDS), "preview"];
-const VALID_COMMANDS = ["init", ...WORKFLOW_COMMANDS, ...UTILITY_COMMANDS, "approve", "smoke"];
+const VALID_COMMANDS = ["eject", ...WORKFLOW_COMMANDS, "approve", "smoke", ...UTILITY_COMMANDS];
 const RUNNER_SCRIPT = "scripts/takt-marp-run-slide-workflow.mjs";
 const APPROVE_SCRIPT = "scripts/takt-marp-approve-slide-workflow-state.mjs";
 const SMOKE_SCRIPT = "scripts/takt-marp-validate-slide-workflow-smoke.mjs";
@@ -33,11 +34,14 @@ function usage() {
     "Usage: takt-marp <command> [arguments]",
     "",
     "Commands:",
-    "  init [dir] [--force|--overwrite]  Install .takt/workflows and .takt/facets templates into <dir> (default: .)",
+    "  eject [dir] [--force|--overwrite] Copy .takt/workflows and .takt/facets templates into <dir> (default: .)",
     "  plan <slides/deck> [options]      Run the plan workflow for a deck in the current project",
     "  compose <slides/deck> [options]   Run the compose workflow for a deck in the current project",
     "  polish <slides/deck> [options]    Run the polish workflow for a deck in the current project",
     "  deliver <slides/deck> [options]   Run the deliver workflow for a deck in the current project",
+    "  approve <slides/deck> <command> --by <name> [--force]",
+    "                                    Approve a workflow state (command: plan or compose)",
+    "  smoke [--provider <name>]         Run smoke validation in a temporary project (default provider: mock)",
     "  build:html [deck|slides/<deck>|slides/<deck>/SLIDES.md]",
     "                                    Build HTML artifact without changing workflow state",
     "  build:pdf [deck|slides/<deck>|slides/<deck>/SLIDES.md]",
@@ -46,9 +50,6 @@ function usage() {
     "                                    Build PPTX artifact without changing workflow state",
     "  preview <deck|slides/<deck>|slides/<deck>/SLIDES.md>",
     "                                    Start Marp server mode without changing workflow state",
-    "  approve <slides/deck> <command> --by <name> [--force]",
-    "                                    Approve a workflow state (command: plan or compose)",
-    "  smoke [--provider <name>]         Run smoke validation in a temporary project (default provider: mock)",
     "",
     "Workflow options (passed through to the workflow runner unchanged):",
     "  --force            Invalidate an already-successful state and rerun",
@@ -56,11 +57,11 @@ function usage() {
   ].join("\n");
 }
 
-function initUsage() {
+function ejectUsage() {
   return [
-    "Usage: takt-marp init [dir] [--force|--overwrite]",
+    "Usage: takt-marp eject [dir] [--force|--overwrite]",
     "",
-    "Installs .takt/workflows/** and .takt/facets/** templates into <dir> (default: current directory).",
+    "Copies .takt/workflows/** and .takt/facets/** templates into <dir> (default: current directory).",
     "",
     "Options:",
     "  --force      Overwrite existing template-owned files",
@@ -81,7 +82,7 @@ function assertProjectInitialized() {
   );
   if (missing.length > 0) {
     throw new SlideWorkflowError(
-      `Target project is not initialized: missing ${missing.join(" and ")} in ${cwd}. Run 'takt-marp init .' first.`,
+      `Target project does not have ejected templates: missing ${missing.join(" and ")} in ${cwd}. Run 'takt-marp eject .' to copy template assets.`,
       "PROJECT_NOT_INITIALIZED",
     );
   }
@@ -140,7 +141,7 @@ async function runPreview(args) {
   return runPackageScript(PREVIEW_SCRIPT, args, { successOnSignal: true });
 }
 
-async function runInit(args) {
+async function runEject(args) {
   let parsed;
   try {
     parsed = parseArgs({
@@ -154,26 +155,26 @@ async function runInit(args) {
     });
   } catch (error) {
     throw new SlideWorkflowError(
-      `Invalid init arguments: ${error.message}. Run 'takt-marp init --help' for usage.`,
+      `Invalid eject arguments: ${error.message}. Run 'takt-marp eject --help' for usage.`,
       "INVALID_ARGS",
     );
   }
   if (parsed.values.help) {
-    console.log(initUsage());
+    console.log(ejectUsage());
     return 0;
   }
   if (parsed.positionals.length > 1) {
     throw new SlideWorkflowError(
-      `Unexpected extra init arguments: ${parsed.positionals.slice(1).join(" ")}. Run 'takt-marp init --help' for usage.`,
+      `Unexpected extra eject arguments: ${parsed.positionals.slice(1).join(" ")}. Run 'takt-marp eject --help' for usage.`,
       "INVALID_ARGS",
     );
   }
 
   const targetDir = path.resolve(process.cwd(), parsed.positionals[0] ?? ".");
   const force = parsed.values.force || parsed.values.overwrite;
-  const { created, overwritten } = await initializeProject({ targetDir, force });
+  const { created, overwritten } = await ejectProject({ targetDir, force });
 
-  const lines = [`Initialized takt-marp templates in ${targetDir}`];
+  const lines = [`Ejected takt-marp templates in ${targetDir}`];
   lines.push(`Created ${created.length} file(s)${created.length > 0 ? ":" : "."}`);
   for (const relativePath of created) {
     lines.push(`  ${relativePath}`);
@@ -189,7 +190,7 @@ async function runInit(args) {
     "Next steps:",
     "  - Provider configuration stays under your ownership: takt-marp does not create or modify",
     "    TAKT provider settings, API keys, or credentials.",
-    "  - Configure your TAKT provider before running workflows.",
+    "  - Edit ejected workflow/facet templates only when you need project-local customization.",
     `  - Run a workflow from the project root, e.g.: takt-marp plan slides/<deck>`,
   );
   console.log(lines.join("\n"));
@@ -294,14 +295,20 @@ export async function runCli(argv) {
   }
 
   try {
+    if (command === "init") {
+      throw new SlideWorkflowError(
+        "`init` has been removed. Use `takt-marp eject .` to copy template assets.",
+        "COMMAND_REMOVED",
+      );
+    }
     if (!VALID_COMMANDS.includes(command)) {
       throw new SlideWorkflowError(
         `'${command}' is not a takt-marp command. Valid commands: ${VALID_COMMANDS.join(", ")}. Run 'takt-marp --help' for usage.`,
         "UNKNOWN_COMMAND",
       );
     }
-    if (command === "init") {
-      return await runInit(rest);
+    if (command === "eject") {
+      return await runEject(rest);
     }
     if (command === "approve") {
       return await runApprove(rest);

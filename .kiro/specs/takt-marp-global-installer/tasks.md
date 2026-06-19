@@ -78,7 +78,7 @@
   - _Depends:_ 1.1, 1.5
 
 - [ ] 3. 統合: CLI command surface と workflow 実行を接続する
-- [ ] 3.1 CommandDispatcher の public command surface を置き換える
+- [x] 3.1 CommandDispatcher の public command surface を置き換える
   - help に `eject`、`plan`、`compose`、`polish`、`deliver`、`approve`、`smoke`、`build:html`、`build:pdf`、`build:pptx`、`preview` を表示する
   - `slide:*` は global CLI の有効 command として扱わず、`init` は廃止済みとして `eject` guidance を返す
   - `eject` の対象 directory と `--force` / `--overwrite` を ProjectEjector へ渡す

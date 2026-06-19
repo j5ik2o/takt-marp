@@ -674,6 +674,66 @@ async function main() {
     assert(result.stdout === "", `dispatcher started despite unsupported Node: ${result.stdout}`);
   });
 
+  await check("CLI public surface exposes eject and retained commands without init", async () => {
+    const { stdout } = await captureOutput(() => runCli(["--help"]));
+    for (const command of ["eject", "plan", "compose", "polish", "deliver", "approve", "smoke", "build:html", "build:pdf", "build:pptx", "preview"]) {
+      assert(new RegExp(`^  ${command}\\b`, "m").test(stdout), `help missing public command '${command}': ${stdout}`);
+    }
+    assert(!/^  init\b/m.test(stdout), `help must not expose retired init command: ${stdout}`);
+  });
+
+  await check("CLI rejects unknown commands and slide:* commands as invalid global commands", async () => {
+    const unknown = await captureOutput(() => runCli(["not-a-command"]));
+    assert(unknown.result === 1, `unknown command should exit 1, got ${unknown.result}`);
+    assert(unknown.stderr.includes("UNKNOWN_COMMAND"), `unknown command must use UNKNOWN_COMMAND: ${unknown.stderr}`);
+    assert(!unknown.stderr.includes("init"), `unknown command valid-command guidance must not mention init: ${unknown.stderr}`);
+
+    const slideCommand = await captureOutput(() => runCli(["slide:plan"]));
+    assert(slideCommand.result === 1, `slide:plan should exit 1, got ${slideCommand.result}`);
+    assert(slideCommand.stderr.includes("UNKNOWN_COMMAND"), `slide:* command must be rejected with UNKNOWN_COMMAND: ${slideCommand.stderr}`);
+    assert(slideCommand.stderr.includes("'slide:plan' is not a takt-marp command"), `slide:* rejection should name the invalid command: ${slideCommand.stderr}`);
+  });
+
+  await check("CLI init is removed with eject guidance", async () => {
+    const removed = await captureOutput(() => runCli(["init"]));
+    assert(removed.result === 1, `retired init should exit 1, got ${removed.result}`);
+    assert(removed.stderr.includes("COMMAND_REMOVED"), `init removal must use COMMAND_REMOVED: ${removed.stderr}`);
+    assert(removed.stderr.includes("takt-marp eject ."), `init removal must guide to eject: ${removed.stderr}`);
+  });
+
+  await check("CLI eject delegates target directory and overwrite aliases to ProjectEjector", async () => {
+    const parent = await mkdtemp(path.join(os.tmpdir(), "cli-eject-parent-"));
+    const targetDir = path.join(parent, "custom-project");
+    await mkdir(targetDir, { recursive: true });
+    const entries = await listTemplateEntries();
+    const workflowEntry = entries.find((entry) => entry.relativePath.startsWith("workflows/"));
+    assert(workflowEntry, "test requires at least one workflow template entry");
+
+    const first = await captureOutput(() => runCli(["eject", targetDir]));
+    assert(first.result === 0, `eject should exit 0, got ${first.result}\n${first.stderr}`);
+    assert(first.stdout.includes(`Ejected takt-marp templates in ${targetDir}`), `eject output must name target dir: ${first.stdout}`);
+    assert(first.stdout.includes(`Created ${entries.length} file(s)`), `eject output must summarize created files: ${first.stdout}`);
+    for (const entry of entries) {
+      assert(
+        existsSync(path.join(targetDir, ".takt", ...entry.relativePath.split("/"))),
+        `CLI eject did not create template entry: .takt/${entry.relativePath}`,
+      );
+    }
+
+    const conflict = await captureOutput(() => runCli(["eject", targetDir]));
+    assert(conflict.result === 1, `second eject without force should fail, got ${conflict.result}`);
+    assert(conflict.stderr.includes("EJECT_CONFLICT"), `second eject must surface ProjectEjector conflict: ${conflict.stderr}`);
+
+    const mutatedPath = path.join(targetDir, ".takt", ...workflowEntry.relativePath.split("/"));
+    await writeFile(mutatedPath, "mutated template\n", "utf8");
+    const overwrite = await captureOutput(() => runCli(["eject", targetDir, "--overwrite"]));
+    assert(overwrite.result === 0, `eject --overwrite should exit 0, got ${overwrite.result}\n${overwrite.stderr}`);
+    assert(overwrite.stdout.includes("Overwrote"), `eject --overwrite output must summarize overwritten files: ${overwrite.stdout}`);
+    const restored = await readFile(mutatedPath, "utf8");
+    const expected = await readFile(workflowEntry.sourcePath, "utf8");
+    assert(restored === expected, "--overwrite did not restore the template file from ProjectEjector");
+  });
+
   await check("runtime context separates package root from package-less project root", async () => {
     const projectRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-package-less-project-"));
     const originalCwd = process.cwd();
@@ -1112,6 +1172,40 @@ async function captureStdout(fn) {
     process.stdout.write = originalWrite;
   }
   return chunks.join("");
+}
+
+async function captureOutput(fn) {
+  const originalStdoutWrite = process.stdout.write.bind(process.stdout);
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  process.stdout.write = (chunk, encoding, callback) => {
+    stdoutChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+    if (typeof encoding === "function") {
+      encoding();
+    } else if (typeof callback === "function") {
+      callback();
+    }
+    return true;
+  };
+  process.stderr.write = (chunk, encoding, callback) => {
+    stderrChunks.push(typeof chunk === "string" ? chunk : chunk.toString());
+    if (typeof encoding === "function") {
+      encoding();
+    } else if (typeof callback === "function") {
+      callback();
+    }
+    return true;
+  };
+  try {
+    const result = await fn();
+    const stdout = stdoutChunks.join("");
+    const stderr = stderrChunks.join("");
+    return { result, stdout, stderr, output: `${stdout}\n${stderr}` };
+  } finally {
+    process.stdout.write = originalStdoutWrite;
+    process.stderr.write = originalStderrWrite;
+  }
 }
 
 async function makeDeck(root, deckName) {
