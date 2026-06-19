@@ -3,7 +3,7 @@
 compose review の finding を精査し、妥当な修正だけを compose source artifacts に反映してください。
 
 **やること:**
-1. `review/compose-review.md` の finding を読み、`plan.md` と `design-system.md` に照らして妥当性を判断してください。
+1. `review/compose-review.md` の finding を読み、`plan.md`、`slide-blueprint.md`、`sections/manifest.md`、`design-system.md` に照らして妥当性を判断してください。
 2. 妥当な finding は `design-system.md`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` に反映してください。
 3. plan-level content 変更が必要な finding は反映せず、理由を記録してください。
 4. `review/compose-fix.md` に finding ごとの対応結果を書いてください。

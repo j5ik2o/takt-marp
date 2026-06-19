@@ -19,7 +19,8 @@
 ## section file 必須内容
 
 - YAML front matterを持たないMarp本文断片
-- 各slideは `---` delimiter で始める
+- section fileの先頭slideは `---` delimiter で始めず、`<!-- slide_id: SNNN -->` から始める
+- 2枚目以降のslideは `---` delimiter で区切る
 - 各slideに `<!-- slide_id: SNNN -->` を含める
 - 各slideにspeaker notesを含める
 - `html:` visual はHTML/CSS構造を本文に含める

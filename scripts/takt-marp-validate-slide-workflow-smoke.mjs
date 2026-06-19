@@ -1428,7 +1428,6 @@ async function writeMockComposeArtifacts(targetInfo) {
   await writeFile(
     path.join(sectionsPath, "01-intro.md"),
     [
-      "---",
       "<!-- slide_id: S001 -->",
       "",
       "# Workflow smoke test",
@@ -1456,7 +1455,6 @@ async function writeMockComposeArtifacts(targetInfo) {
   await writeFile(
     path.join(sectionsPath, "02-body.md"),
     [
-      "---",
       "<!-- slide_id: S003 -->",
       "",
       "Input discipline",
