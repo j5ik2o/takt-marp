@@ -1,7 +1,7 @@
 # 実装計画
 
 - [ ] 1. 基盤: global 実行と template 境界の土台を整える
-- [ ] 1.1 package install 境界を global CLI 契約へ更新する
+- [x] 1.1 package install 境界を global CLI 契約へ更新する
   - global install 後に `takt-marp` が PATH から起動できる bin、runtime dependency、Node.js runtime、package include 境界を宣言する
   - package に含める範囲を CLI、workflow 実行、template、smoke、Marp utility の実行に必要なものへ限定する
   - 完了条件: package metadata と pack dry-run 検証で PATH 起動、対応 Node.js version、include 境界の期待値が確認できる
