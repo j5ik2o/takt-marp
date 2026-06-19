@@ -944,6 +944,45 @@ async function main() {
     assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
   });
 
+  await check("global CLI smoke uses isolated no-copy temp project and preserves provider args", async () => {
+    const userRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-smoke-user-"));
+    const capturePath = path.join(userRoot, "smoke-captures.jsonl");
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeFakeSmokeScript(fakePackage.packageRoot);
+
+    const defaultResult = spawnSync(process.execPath, [fakePackage.binScript, "smoke"], {
+      cwd: userRoot,
+      encoding: "utf8",
+      env: { ...process.env, TAKT_MARP_SMOKE_CAPTURE: capturePath },
+    });
+    assert(defaultResult.status === 0, `default smoke failed: ${defaultResult.stderr}`);
+    const defaultRecords = await readJsonLines(capturePath);
+    assert(defaultRecords.length === 1, `expected one default smoke capture, got ${defaultRecords.length}`);
+    assert(
+      JSON.stringify(defaultRecords[0].args) === JSON.stringify([]),
+      `default smoke should pass no provider args and let smoke validator default to mock: ${JSON.stringify(defaultRecords[0].args)}`,
+    );
+    assert(defaultRecords[0].cwd !== userRoot, "smoke script ran in the user cwd instead of an isolated temp project");
+    await assertNoSmokeTemplateProviderOrRuntimeFiles(userRoot);
+    await assertNoSmokeTemplateProviderOrRuntimeFiles(defaultRecords[0].cwd);
+
+    const providerResult = spawnSync(process.execPath, [fakePackage.binScript, "smoke", "--provider", "realish"], {
+      cwd: userRoot,
+      encoding: "utf8",
+      env: { ...process.env, TAKT_MARP_SMOKE_CAPTURE: capturePath },
+    });
+    assert(providerResult.status === 0, `provider smoke failed: ${providerResult.stderr}`);
+    const providerRecords = await readJsonLines(capturePath);
+    assert(providerRecords.length === 2, `expected two smoke captures, got ${providerRecords.length}`);
+    assert(
+      JSON.stringify(providerRecords[1].args) === JSON.stringify(["--provider", "realish"]),
+      `provider smoke args were not passed through unchanged: ${JSON.stringify(providerRecords[1].args)}`,
+    );
+    assert(providerRecords[1].cwd !== userRoot, "provider smoke script ran in the user cwd instead of an isolated temp project");
+    await assertNoSmokeTemplateProviderOrRuntimeFiles(userRoot);
+    await assertNoSmokeTemplateProviderOrRuntimeFiles(providerRecords[1].cwd);
+  });
+
   await check("global CLI workflow command uses ejected workflow override", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-ejected-"));
     await makeDeck(root, "demo");
@@ -1410,6 +1449,34 @@ async function assertNoRuntimeOrProviderFiles(root) {
   }
 }
 
+async function assertNoSmokeTemplateProviderOrRuntimeFiles(root) {
+  const forbidden = [
+    ".takt/workflows",
+    ".takt/facets",
+    ".takt/config.yaml",
+    ".takt/provider-settings.yaml",
+    ".takt/provider.yaml",
+    ".takt/providers.yaml",
+    ".takt/credentials.env",
+    ".takt/credentials.json",
+    ".takt/runs",
+    ".takt/render",
+    ".takt/workflow-current-target.json",
+  ];
+  for (const relativePath of forbidden) {
+    assert(!existsSync(path.join(root, ...relativePath.split("/"))), `smoke generated forbidden path in ${root}: ${relativePath}`);
+  }
+}
+
+async function readJsonLines(filePath) {
+  const content = await readFile(filePath, "utf8");
+  return content
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
 function collectPackContentViolations(paths, templateEntries) {
   const violations = [];
   checkPackContents(paths, templateEntries, (group, detail) => violations.push({ group, detail }));
@@ -1527,6 +1594,27 @@ async function makeFakeCliPackageRoot() {
     binScript: path.join(realPackageRoot, "bin", "takt-marp.mjs"),
     packageRoot: realPackageRoot,
   };
+}
+
+async function makeFakeSmokeScript(packageRoot) {
+  const smokeScript = path.join(packageRoot, "scripts", "takt-marp-validate-slide-workflow-smoke.mjs");
+  await writeFile(
+    smokeScript,
+    [
+      "#!/usr/bin/env node",
+      "import { appendFile, mkdir } from \"node:fs/promises\";",
+      "import path from \"node:path\";",
+      "",
+      "const capturePath = process.env.TAKT_MARP_SMOKE_CAPTURE;",
+      "if (capturePath) {",
+      "  await mkdir(path.dirname(capturePath), { recursive: true });",
+      "  await appendFile(capturePath, `${JSON.stringify({ cwd: process.cwd(), args: process.argv.slice(2) })}\\n`, \"utf8\");",
+      "}",
+      "console.log(`fake smoke cwd: ${process.cwd()}`);",
+      "",
+    ].join("\n"),
+    { encoding: "utf8", mode: 0o755 },
+  );
 }
 
 async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {

@@ -3,7 +3,6 @@ import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { initializeProject } from "./takt-marp-project-init.mjs";
 import { ejectProject } from "./takt-marp-project-eject.mjs";
 import { resolveTemplateSource, workflowFilePath } from "./takt-marp-project-templates.mjs";
 import { packageScriptPath } from "./takt-marp-runtime-context.mjs";
@@ -181,8 +180,8 @@ async function runEject(args) {
 
 async function runSmoke(args) {
   // Smoke runs in a freshly created temporary project so the user's current
-  // project is never touched. The temp project is retained after the run as
-  // the home of the provider-specific smoke summaries.
+  // project is never touched. Template source selection stays no-copy by
+  // default; only the smoke validator may create smoke deck artifacts.
   let tempProject;
   try {
     tempProject = await mkdtemp(path.join(os.tmpdir(), "takt-marp-smoke-"));
@@ -192,7 +191,6 @@ async function runSmoke(args) {
       "SMOKE_PREPARE_FAILED",
     );
   }
-  await initializeProject({ targetDir: tempProject, force: false });
   console.log(`Temporary smoke project: ${tempProject}`);
 
   // Pass argv through unchanged: provider selection (--provider) and the

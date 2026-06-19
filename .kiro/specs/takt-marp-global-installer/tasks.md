@@ -121,7 +121,7 @@
   - _Depends:_ 1.3, 3.1
 
 - [ ] 4. smoke: mock/real 分離と no-copy 検証を実装する
-- [ ] 4.1 SmokeEntry を no-copy temp project 実行へ変更する
+- [x] 4.1 SmokeEntry を no-copy temp project 実行へ変更する
   - provider 未指定時は mock provider を既定にし、指定時は provider 名を smoke validation へ素通しする
   - smoke 用 workspace は利用者 cwd を汚さず、temp project にも既定で workflow/facet template を eject しない
   - real provider 設定が不足している場合も provider 設定を生成せず、環境確認につながる失敗情報を返す
