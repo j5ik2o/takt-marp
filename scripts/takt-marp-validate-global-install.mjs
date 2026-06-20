@@ -291,6 +291,7 @@ async function assertNonEmptyFile(filePath, label) {
 }
 
 function assertWorkflowReachedSelectedPath(result, expectedPathFragment, label) {
+  const expectedFragments = Array.isArray(expectedPathFragment) ? expectedPathFragment : [expectedPathFragment];
   check(
     result.code === 0,
     `${label}: workflow command must exit 0 after running the selected workflow.\n${commandSummary(result)}`,
@@ -299,10 +300,12 @@ function assertWorkflowReachedSelectedPath(result, expectedPathFragment, label) 
     result.output.includes("[INFO] Running workflow:"),
     `${label}: workflow command must reach TAKT workflow startup.\n${commandSummary(result)}`,
   );
-  check(
-    result.output.includes(expectedPathFragment),
-    `${label}: workflow command must use expected workflow path fragment '${expectedPathFragment}'.\n${commandSummary(result)}`,
-  );
+  for (const fragment of expectedFragments) {
+    check(
+      result.output.includes(fragment),
+      `${label}: workflow command must use expected workflow path fragment '${fragment}'.\n${commandSummary(result)}`,
+    );
+  }
   for (const forbiddenReason of [
     "PROJECT_NOT_INITIALIZED",
     "PROJECT_TEMPLATE_STATE_INVALID",
@@ -451,7 +454,7 @@ async function phaseWorkflowCommandNoCopy(ctx) {
   );
   assertWorkflowReachedSelectedPath(
     plan,
-    "templates/project/workflows/takt-marp-slide-plan.yaml",
+    ["takt-marp-bundled-runtime-", "takt-marp-slide-plan.yaml"],
     "no-copy plan",
   );
   assertTemplateAssetsAbsent(projectDir, "after no-copy plan");

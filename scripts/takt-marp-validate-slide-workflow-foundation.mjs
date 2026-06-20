@@ -1951,9 +1951,16 @@ async function main() {
 
     const args = (await readFile(argsPath, "utf8")).trim().split("\n");
     const workflowArgIndex = args.indexOf("-w");
-    const expectedWorkflowPath = path.join(fakePackage.packageRoot, "templates", "project", "workflows", "takt-marp-slide-plan.yaml");
     assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
-    assert(args[workflowArgIndex + 1] === expectedWorkflowPath, `TAKT did not receive bundled workflow path: ${args.join(" ")}`);
+    assert(
+      path.basename(args[workflowArgIndex + 1]) === "takt-marp-slide-plan.yaml",
+      `TAKT did not receive bundled plan workflow path: ${args.join(" ")}`,
+    );
+    assert(
+      args[workflowArgIndex + 1].includes("takt-marp-bundled-runtime-"),
+      `TAKT bundled plan workflow path did not use runtime view: ${args.join(" ")}`,
+    );
+    assert(!existsSync(args[workflowArgIndex + 1]), `bundled plan runtime workflow was not cleaned up: ${args[workflowArgIndex + 1]}`);
     const providerArgIndex = args.indexOf("--provider");
     assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
     assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
@@ -1983,9 +1990,16 @@ async function main() {
 
     const args = (await readFile(argsPath, "utf8")).trim().split("\n");
     const workflowArgIndex = args.indexOf("-w");
-    const expectedWorkflowPath = path.join(fakePackage.packageRoot, "templates", "project", "workflows", "takt-marp-slide-research.yaml");
     assert(workflowArgIndex >= 0, `research TAKT args did not include -w: ${args.join(" ")}`);
-    assert(args[workflowArgIndex + 1] === expectedWorkflowPath, `TAKT did not receive bundled research workflow path: ${args.join(" ")}`);
+    assert(
+      path.basename(args[workflowArgIndex + 1]) === "takt-marp-slide-research.yaml",
+      `TAKT did not receive bundled research workflow path: ${args.join(" ")}`,
+    );
+    assert(
+      args[workflowArgIndex + 1].includes("takt-marp-bundled-runtime-"),
+      `TAKT bundled research workflow path did not use runtime view: ${args.join(" ")}`,
+    );
+    assert(!existsSync(args[workflowArgIndex + 1]), `bundled research runtime workflow was not cleaned up: ${args[workflowArgIndex + 1]}`);
     const providerArgIndex = args.indexOf("--provider");
     assert(providerArgIndex >= 0, `research TAKT args did not include --provider: ${args.join(" ")}`);
     assert(args[providerArgIndex + 1] === "mock", `research TAKT provider argument was not preserved: ${args.join(" ")}`);
@@ -2905,6 +2919,7 @@ async function makeFakePackageRoot() {
   for (const relative of [
     "takt-marp-run-slide-workflow.mjs",
     path.join("lib", "takt-marp-errors.mjs"),
+    path.join("lib", "takt-marp-project-templates.mjs"),
     path.join("lib", "takt-marp-slide-workflow.mjs"),
     path.join("lib", "takt-marp-runtime-context.mjs"),
   ]) {

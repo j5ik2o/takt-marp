@@ -24,6 +24,7 @@ import {
   SlideWorkflowError,
   taktExecutablePath,
 } from "./lib/takt-marp-slide-workflow.mjs";
+import { prepareBundledWorkflowRuntime } from "./lib/takt-marp-project-templates.mjs";
 
 function usage() {
   return [
@@ -72,13 +73,21 @@ async function main() {
     await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
   }
 
+  const preparedWorkflow = selectedWorkflowFilePath
+    ? await prepareBundledWorkflowRuntime(availableWorkflowPath)
+    : undefined;
   await writeCurrentWorkflowTarget(command, targetInfo);
   const runSnapshotBefore = await snapshotTaktRuns(command);
   const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
-  const code = await runTakt(command, taktTarget, {
-    provider: flags.provider,
-    workflowFilePath: selectedWorkflowFilePath ? availableWorkflowPath : undefined,
-  });
+  let code;
+  try {
+    code = await runTakt(command, taktTarget, {
+      provider: flags.provider,
+      workflowFilePath: preparedWorkflow?.workflowFilePath,
+    });
+  } finally {
+    await preparedWorkflow?.cleanup();
+  }
   if (code !== 0) {
     process.exitCode = code;
     return;
