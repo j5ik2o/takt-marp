@@ -228,7 +228,7 @@
   - _Depends:_ 7.3
 
 - [ ] 8. 検証: Research Source Report Reuse の回帰を固定する
-- [ ] 8.1 foundation validation に Research Source Report Reuse の決定論的 checks を追加する
+- [x] 8.1 foundation validation に Research Source Report Reuse の決定論的 checks を追加する
   - Research Reuse Sidecar lifecycle、Workflow Identity 正規化、no reusable report、ambiguous candidate、target mismatch、brief digest mismatch、`--force` bypass を fixture で検証する
   - Research Reuse Workflow が selected Research Workflow Wrapper の sibling path として導出され、public command list に追加されないことを検証する
   - Research Reuse Workflow YAML が `workflow_call deep-research` を含まないことを static validation で固定する
