@@ -115,7 +115,7 @@
   - _Depends:_ 3.2, 3.3
 
 - [ ] 4. 検証: deterministic validation と smoke を追加する
-- [ ] 4.1 foundation validation に research command 境界を追加する
+- [x] 4.1 foundation validation に research command 境界を追加する
   - command registry、research prerequisite、TAKT target 変換、handoff marker、built-in workflow 不在 preflight を検証する
   - `research --force` が research history だけを退避し、review/approval を触らないことを検証する
   - source report locator の正常、0 件、複数件を fixture で検証する

@@ -1956,6 +1956,52 @@ async function main() {
     assert(existsSync(researchArtifacts.report), "global CLI research did not sync research-report.md");
   });
 
+  await check("global CLI research partial template state fails before TAKT and handoff marker", async () => {
+    const cases = [
+      {
+        label: "workflows-only",
+        setup: async (root) => {
+          await mkdir(path.join(root, ".takt", "workflows"), { recursive: true });
+          await writeFile(path.join(root, ".takt", "workflows", "takt-marp-slide-research.yaml"), "name: partial-research\n", "utf8");
+        },
+        detail: ".takt/workflows exists without .takt/facets",
+      },
+      {
+        label: "facets-only",
+        setup: async (root) => {
+          await mkdir(path.join(root, ".takt", "facets", "instructions"), { recursive: true });
+          await writeFile(path.join(root, ".takt", "facets", "instructions", "takt-marp-adapt-research.md"), "# Partial adapter\n", "utf8");
+        },
+        detail: ".takt/facets exists without .takt/workflows",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const root = await mkdtemp(path.join(os.tmpdir(), `slide-workflow-cli-research-partial-${testCase.label}-`));
+      const targetInfo = await makeDeck(root, "demo");
+      const researchArtifacts = researchArtifactPaths(targetInfo);
+      await mkdir(targetInfo.researchPath, { recursive: true });
+      await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+      await testCase.setup(root);
+      const fakePackage = await makeFakeCliPackageRoot();
+      await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+      await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-current", "passed", targetInfo.target));
+      const argsPath = path.join(root, `takt-args-${testCase.label}.txt`);
+      const markerPath = path.join(root, ".takt", "workflow-current-target.json");
+
+      const result = spawnSync(
+        process.execPath,
+        [fakePackage.binScript, "research", "slides/demo"],
+        { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+      );
+      assert(result.status !== 0, `global CLI research unexpectedly accepted partial template state: ${testCase.label}`);
+      assert(result.stderr.includes("PROJECT_TEMPLATE_STATE_INVALID:"), `research partial state error was not reported for ${testCase.label}: ${result.stderr}`);
+      assert(result.stderr.includes(testCase.detail), `research partial state error missed path detail for ${testCase.label}: ${result.stderr}`);
+      assert(!existsSync(argsPath), `TAKT was invoked despite research partial template state: ${testCase.label}`);
+      assert(!existsSync(markerPath), `research handoff marker was written before template state preflight failed: ${testCase.label}`);
+    }
+  });
+
   await check("global CLI smoke uses isolated no-copy temp project and preserves provider args", async () => {
     const userRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-smoke-user-"));
     const capturePath = path.join(userRoot, "smoke-captures.jsonl");
