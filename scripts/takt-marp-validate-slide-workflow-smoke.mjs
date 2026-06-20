@@ -17,9 +17,12 @@ import {
   readApproval,
   readFrontMatter,
   researchArtifactPaths,
+  researchReuseSidecarPath,
   readSupervision,
+  resolveResearchReuseCandidate,
   resolveDeckTarget,
   supervisionPath,
+  deleteResearchReuseSidecar,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 import { resolveTemplateSource, workflowFilePath } from "./lib/takt-marp-project-templates.mjs";
@@ -32,6 +35,7 @@ const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const DEFAULT_TARGET = "slides/_workflow-smoke";
 const DEFAULT_SMOKE_PROVIDER = "mock";
 const PLAN_WITHOUT_RESEARCH_TARGET = "slides/_workflow-smoke-plan-without-research";
+const RESEARCH_REUSE_TARGET = "slides/_workflow-smoke-research-reuse";
 const STATE_VALIDATION_TARGET = "slides/_workflow-smoke-state-validation";
 const RENDER_VALIDATION_TARGET = "slides/_workflow-smoke-render-validation";
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
@@ -148,6 +152,13 @@ async function main() {
     checks.push(...researchSequenceChecks.checks);
     commands.push(...researchSequenceChecks.commands);
     observedPaths.push(...researchSequenceChecks.observedPaths);
+    if (isMockProvider(options)) {
+      currentCheckName = "sequence:research-reuse";
+      const researchReuseSequenceChecks = await runResearchReuseSequenceChecks({ provider: options.provider, templateContext, keep: options.keep });
+      checks.push(...researchReuseSequenceChecks.checks);
+      commands.push(...researchReuseSequenceChecks.commands);
+      observedPaths.push(...researchReuseSequenceChecks.observedPaths);
+    }
     currentCheckName = "sequence:workflow";
     const planSequenceChecks = await runPlanSequenceChecks(targetInfo, { provider: options.provider, templateContext, researchExpected: true });
     checks.push(...planSequenceChecks.checks);
@@ -886,6 +897,232 @@ async function runResearchSequenceChecks(targetInfo, options) {
   });
 }
 
+async function runResearchReuseSequenceChecks(options) {
+  const checks = [];
+  const commands = [];
+  const observedPaths = [];
+  const runDirs = [];
+  let fakePackage;
+  let targetInfo;
+  try {
+    const setup = await setupAdditionalSmokeDeck(RESEARCH_REUSE_TARGET);
+    targetInfo = setup.targetInfo;
+    fakePackage = await makeSmokeResearchRunnerPackage();
+    observedPaths.push(...setup.observedPaths);
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await assertReadableFile(researchArtifacts.brief, "sequence:research-reuse-brief-fixture");
+    observedPaths.push(relativePath(researchArtifacts.brief));
+
+    const failedRunName = `mock-${targetInfo.deckName}-research-failed`;
+    const failedReportsDir = path.join(ROOT, ".takt", "runs", failedRunName, "reports");
+    const sourceReportPath = path.join(failedReportsDir, "subworkflows", "workflow-deep-research", "research-report.md");
+    runDirs.push(path.join(ROOT, ".takt", "runs", failedRunName));
+    const fullFailureArgsPath = path.join(ROOT, ".takt", "runs", `${failedRunName}-args.txt`);
+    await writeFakeTaktExecutable(fakePackage.packageRoot, fakeFullResearchFailureTaktScript(failedRunName, targetInfo, 42));
+    const failedFullResearch = runFakeResearchRunnerCommand("sequence:research-reuse-failed-full-command", fakePackage, targetInfo, {
+      argsCapturePath: fullFailureArgsPath,
+      expectedStatus: 42,
+    });
+    commands.push(failedFullResearch.commandLine);
+    await assertCapturedWorkflow(fullFailureArgsPath, "takt-marp-slide-research.yaml", "sequence:research-reuse-failed-full-command");
+    const sidecarPath = researchReuseSidecarPath(targetInfo, { root: ROOT });
+    const failedCandidate = await resolveResearchReuseCandidate(targetInfo, { root: ROOT });
+    assert(failedCandidate, "sequence:research-reuse-failed-full-sidecar did not create a reusable sidecar");
+    assert(
+      failedCandidate.source_report_path === sourceReportPath,
+      `sequence:research-reuse-failed-full-sidecar source mismatch: ${JSON.stringify(failedCandidate)}`,
+    );
+    assert(!existsSync(researchArtifacts.report), "sequence:research-reuse-failed-full-sidecar synced deck report before reuse");
+    observedPaths.push(relativePath(sourceReportPath), relativePath(sidecarPath), relativePath(fullFailureArgsPath));
+    checks.push(pass("sequence:research-reuse-failed-full-command", "Failed full research ran through the workflow runner and preserved its non-zero exit."));
+    checks.push(pass("sequence:research-reuse-failed-full-sidecar", "Failed full research left a reusable built-in source report sidecar."));
+
+    const successRunName = `mock-${targetInfo.deckName}-research-reuse-success`;
+    const successReportsDir = path.join(ROOT, ".takt", "runs", successRunName, "reports");
+    runDirs.push(path.join(ROOT, ".takt", "runs", successRunName));
+    const successArgsPath = path.join(ROOT, ".takt", "runs", `${successRunName}-args.txt`);
+    await writeFakeTaktExecutable(fakePackage.packageRoot, fakeReuseSuccessTaktScript(successRunName, targetInfo));
+    const reuseSuccess = runFakeResearchRunnerCommand("sequence:research-reuse-success-command", fakePackage, targetInfo, {
+      argsCapturePath: successArgsPath,
+      expectedStatus: 0,
+    });
+    commands.push(reuseSuccess.commandLine);
+    await assertCapturedWorkflow(successArgsPath, "takt-marp-slide-research-reuse.yaml", "sequence:research-reuse-success-command");
+    const artifactPaths = await assertResearchArtifacts(targetInfo);
+    observedPaths.push(...artifactPaths.map(relativePath));
+    assert(!existsSync(sidecarPath), "sequence:research-reuse-success-sidecar-delete did not delete sidecar after reuse success");
+    assert(
+      !existsSync(path.join(successReportsDir, "subworkflows", "workflow-deep-research", "research-report.md")),
+      "sequence:research-reuse-no-deep-rerun wrote a deep research report during reuse success",
+    );
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === MOCK_BUILTIN_RESEARCH_REPORT,
+      "sequence:research-reuse-success-artifacts did not preserve the reused built-in report",
+    );
+    observedPaths.push(relativePath(successArgsPath));
+    checks.push(pass("sequence:research-reuse-success-command", "Reuse success ran through the workflow runner and selected the private reuse workflow."));
+    checks.push(pass("sequence:research-reuse-success-artifacts", "Reuse success produced normal research artifacts from the existing source report."));
+    checks.push(pass("sequence:research-reuse-success-sidecar-delete", "Reuse success deleted the reusable sidecar."));
+    checks.push(pass("sequence:research-reuse-no-deep-rerun", "Reuse success did not create a new deep research source report."));
+
+    const retryFailedRunName = `mock-${targetInfo.deckName}-research-failed-for-retry`;
+    const retryFailedReportsDir = path.join(ROOT, ".takt", "runs", retryFailedRunName, "reports");
+    runDirs.push(path.join(ROOT, ".takt", "runs", retryFailedRunName));
+    const retryFailureArgsPath = path.join(ROOT, ".takt", "runs", `${retryFailedRunName}-args.txt`);
+    await writeFakeTaktExecutable(fakePackage.packageRoot, fakeFullResearchFailureTaktScript(retryFailedRunName, targetInfo, 43));
+    const retryFullFailure = runFakeResearchRunnerCommand("sequence:research-reuse-retry-full-failure-command", fakePackage, targetInfo, {
+      argsCapturePath: retryFailureArgsPath,
+      expectedStatus: 43,
+      extraArgs: ["--force"],
+    });
+    commands.push(retryFullFailure.commandLine);
+    await assertCapturedWorkflow(retryFailureArgsPath, "takt-marp-slide-research.yaml", "sequence:research-reuse-retry-full-failure-command");
+
+    const reuseFailureRunName = `mock-${targetInfo.deckName}-research-reuse-failure`;
+    runDirs.push(path.join(ROOT, ".takt", "runs", reuseFailureRunName));
+    const reuseFailureArgsPath = path.join(ROOT, ".takt", "runs", `${reuseFailureRunName}-args.txt`);
+    await writeFakeTaktExecutable(fakePackage.packageRoot, fakeReuseFailureTaktScript(45));
+    const reuseFailure = runFakeResearchRunnerCommand("sequence:research-reuse-failure-command", fakePackage, targetInfo, {
+      argsCapturePath: reuseFailureArgsPath,
+      expectedStatus: 45,
+    });
+    commands.push(reuseFailure.commandLine);
+    await assertCapturedWorkflow(reuseFailureArgsPath, "takt-marp-slide-research-reuse.yaml", "sequence:research-reuse-failure-command");
+    const preservedCandidate = await resolveResearchReuseCandidate(targetInfo, { root: ROOT });
+    assert(preservedCandidate, "sequence:research-reuse-failure-sidecar-preserved did not preserve sidecar after reuse failure");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === MOCK_BUILTIN_RESEARCH_REPORT,
+      "sequence:research-reuse-failure-source-copy source report copy changed during failed reuse",
+    );
+    observedPaths.push(relativePath(retryFailureArgsPath), relativePath(reuseFailureArgsPath));
+    checks.push(pass("sequence:research-reuse-failure-command", "Reuse failure ran through the workflow runner and preserved the TAKT exit code."));
+    checks.push(pass("sequence:research-reuse-failure-sidecar-preserved", "Reuse failure preserved the reusable sidecar for a later retry."));
+
+    return Object.freeze({
+      checks: Object.freeze(checks),
+      commands: Object.freeze(commands),
+      observedPaths: Object.freeze(observedPaths),
+    });
+  } finally {
+    if (!options.keep && targetInfo) {
+      await rm(targetInfo.deckPath, { recursive: true, force: true });
+      await deleteResearchReuseSidecar(targetInfo, { root: ROOT });
+      await Promise.all(runDirs.map((runDir) => rm(runDir, { recursive: true, force: true })));
+      if (fakePackage) {
+        await rm(fakePackage.packageRoot, { recursive: true, force: true });
+      }
+    }
+  }
+}
+
+async function makeSmokeResearchRunnerPackage() {
+  const packageRoot = await mkdtemp(path.join(os.tmpdir(), "takt-marp-smoke-reuse-package-"));
+  await mkdir(path.join(packageRoot, "scripts"), { recursive: true });
+  await cp(RUNNER_SCRIPT, path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"));
+  await cp(path.join(SCRIPT_DIR, "lib"), path.join(packageRoot, "scripts", "lib"), { recursive: true });
+  await cp(path.join(PACKAGE_ROOT, "templates", "project"), path.join(packageRoot, "templates", "project"), { recursive: true });
+  const deepResearchWorkflowPath = path.join(packageRoot, "node_modules", "takt", "builtins", "ja", "workflows", "deep-research.yaml");
+  await mkdir(path.dirname(deepResearchWorkflowPath), { recursive: true });
+  await writeFile(deepResearchWorkflowPath, "name: deep-research\n", "utf8");
+  return Object.freeze({
+    packageRoot,
+    runnerScript: path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
+    researchWorkflowFile: path.join(packageRoot, "templates", "project", "workflows", "takt-marp-slide-research.yaml"),
+  });
+}
+
+async function writeFakeTaktExecutable(packageRoot, script) {
+  const executablePath = runtimeExecutablePath("takt", { root: packageRoot });
+  await rm(executablePath, { force: true });
+  await mkdir(path.dirname(executablePath), { recursive: true });
+  await writeFile(executablePath, script, { encoding: "utf8", mode: 0o755 });
+}
+
+function runFakeResearchRunnerCommand(name, fakePackage, targetInfo, options) {
+  const runnerArgs = ["research", targetInfo.target, "--workflow-file", fakePackage.researchWorkflowFile, "--provider", "mock", ...(options.extraArgs ?? [])];
+  const commandLine = `node ${JSON.stringify(fakePackage.runnerScript)} ${runnerArgs.map((arg) => JSON.stringify(arg)).join(" ")}`;
+  const result = spawnSync(process.execPath, [fakePackage.runnerScript, ...runnerArgs], {
+    cwd: ROOT,
+    encoding: "utf8",
+    env: { ...process.env, TAKT_ARGS_CAPTURE: options.argsCapturePath },
+    timeout: WORKFLOW_COMMAND_TIMEOUT_MS,
+    maxBuffer: CAPTURE_MAX_BUFFER,
+  });
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  assert(!result.error, `${name} failed while executing: ${result.error?.message}`);
+  assert(result.status === options.expectedStatus, `${name} expected exit ${options.expectedStatus}, got ${result.status ?? "unknown"}: ${output}`);
+  return Object.freeze({ commandLine, output });
+}
+
+async function assertCapturedWorkflow(argsCapturePath, expectedWorkflowFileName, name) {
+  const args = (await readFile(argsCapturePath, "utf8")).trim().split("\n");
+  const workflowArgIndex = args.indexOf("-w");
+  assert(workflowArgIndex >= 0, `${name} did not pass -w to TAKT: ${args.join(" ")}`);
+  assert(
+    path.basename(args[workflowArgIndex + 1]) === expectedWorkflowFileName,
+    `${name} expected ${expectedWorkflowFileName}, got ${args[workflowArgIndex + 1]} from args ${args.join(" ")}`,
+  );
+}
+
+function fakeFullResearchFailureTaktScript(runName, targetInfo, exitCode) {
+  const reportsDir = `.takt/runs/${runName}/reports`;
+  const sourceReportPath = `${reportsDir}/subworkflows/workflow-deep-research/research-report.md`;
+  const meta = {
+    workflow: "takt-marp-slide-research",
+    task: `${targetInfo.target}/research/research-brief.md`,
+    reportDirectory: reportsDir,
+  };
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    ...shellWriteFile(`.takt/runs/${runName}/meta.json`, `${JSON.stringify(meta, null, 2)}\n`),
+    ...shellWriteFile(sourceReportPath, MOCK_BUILTIN_RESEARCH_REPORT),
+    `exit ${exitCode}`,
+    "",
+  ].join("\n");
+}
+
+function fakeReuseSuccessTaktScript(runName, targetInfo) {
+  const reportsDir = `.takt/runs/${runName}/reports`;
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    ...shellWriteFile(`${reportsDir}/research-report.md`, MOCK_ADAPTER_SHADOW_RESEARCH_REPORT),
+    ...shellWriteFile(`${reportsDir}/research-sources.md`, mockResearchDerivedArtifact(targetInfo, "Research Sources")),
+    ...shellWriteFile(`${reportsDir}/research-claims.md`, mockResearchDerivedArtifact(targetInfo, "Research Claims")),
+    ...shellWriteFile(`${reportsDir}/open-questions.md`, mockResearchDerivedArtifact(targetInfo, "Open Questions")),
+    ...shellWriteFile(`${reportsDir}/research-supervision.md`, mockResearchSupervisionArtifact(targetInfo, `mock-smoke-${targetInfo.deckName}-research-reuse-success`, "passed")),
+    "exit 0",
+    "",
+  ].join("\n");
+}
+
+function fakeReuseFailureTaktScript(exitCode) {
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    `exit ${exitCode}`,
+    "",
+  ].join("\n");
+}
+
+function shellWriteFile(filePath, content) {
+  return [
+    `mkdir -p "$(dirname ${shellSingleQuote(filePath)})"`,
+    `printf '%s' ${shellSingleQuote(content)} > ${shellSingleQuote(filePath)}`,
+  ];
+}
+
+function shellSingleQuote(value) {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 async function assertResearchArtifacts(targetInfo) {
   const artifacts = researchArtifactPaths(targetInfo);
   const requiredPaths = [
@@ -1552,29 +1789,33 @@ async function writeMockResearchArtifacts(targetInfo, workflowRunId, reportsPath
   }
   await writeFile(
     artifacts.supervision,
-    [
-      "---",
-      "command: research",
-      `target: ${targetInfo.target}`,
-      `generated_at: ${MOCK_GENERATED_AT}`,
-      `workflow_run_id: ${workflowRunId}`,
-      "step: supervision",
-      "cycle: 1",
-      "state: researched",
-      "result: passed",
-      "blocking_findings: 0",
-      "major_findings: 0",
-      "minor_findings: 0",
-      "info_findings: 0",
-      "---",
-      "",
-      "# Mock Research Supervision",
-      "",
-      "Result: passed",
-      "",
-    ].join("\n"),
+    mockResearchSupervisionArtifact(targetInfo, workflowRunId, "passed"),
     "utf8",
   );
+}
+
+function mockResearchSupervisionArtifact(targetInfo, workflowRunId, result) {
+  return [
+    "---",
+    "command: research",
+    `target: ${targetInfo.target}`,
+    `generated_at: ${MOCK_GENERATED_AT}`,
+    `workflow_run_id: ${workflowRunId}`,
+    "step: supervision",
+    "cycle: 1",
+    "state: researched",
+    `result: ${result}`,
+    "blocking_findings: 0",
+    "major_findings: 0",
+    "minor_findings: 0",
+    "info_findings: 0",
+    "---",
+    "",
+    "# Mock Research Supervision",
+    "",
+    `Result: ${result}`,
+    "",
+  ].join("\n");
 }
 
 function mockResearchDerivedArtifact(targetInfo, title) {

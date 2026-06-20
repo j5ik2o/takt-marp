@@ -237,7 +237,7 @@
   - _Boundary:_ Validation Surface
   - _Depends:_ 7.4
 
-- [ ] 8.2 smoke validation に failed full research から reuse success までの経路を追加する
+- [x] 8.2 smoke validation に failed full research から reuse success までの経路を追加する
   - mock provider で full research が deep research report 作成後に非 0 終了する scenario を作り、Research Reuse Sidecar が作成されることを確認する
   - 次回 `research` が deep research を再実行せず Research Reuse Workflow で adapter/supervision artifacts を同期することを確認する
   - reuse success では Research Reuse Sidecar が削除され、reuse failure では再試行用に維持されることを確認する
