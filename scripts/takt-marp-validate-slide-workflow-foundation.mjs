@@ -38,10 +38,14 @@ import {
   parseRequiredState,
   readSupervision,
   researchArtifactPaths,
+  researchBriefSha256,
+  researchReuseSidecarPath,
   requireCommand,
+  resolveResearchReuseCandidate,
   resolveDeckTarget,
   shouldCleanGeneratedOutputsOnForce,
   supervisionPath,
+  writeResearchReuseSidecar,
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
@@ -1213,6 +1217,61 @@ async function main() {
     );
     assert(!isSuccessfulCommandState(targetInfo, "research"), "stale review-domain research supervision satisfied research state");
     assert((await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8")) === briefBefore, "brief.md was touched by research path resolution");
+  });
+
+  await check("research reuse sidecar validates target digest and source report before reuse", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReusable topic\n", "utf8");
+    const sourceReportPath = path.join(
+      root,
+      ".takt",
+      "runs",
+      "run-failed",
+      "reports",
+      "subworkflows",
+      "iteration-1--step-deep_research--workflow-deep-research",
+      "reports",
+      "research-report.md",
+    );
+    await mkdir(path.dirname(sourceReportPath), { recursive: true });
+    await writeFile(sourceReportPath, "# Built-in Research Report\n\nReusable report\n", "utf8");
+    const sourceReportsDir = path.join(root, ".takt", "runs", "run-failed", "reports");
+    const sidecarPath = researchReuseSidecarPath(targetInfo, { root });
+
+    const sidecar = await writeResearchReuseSidecar(targetInfo, {
+      sourceRun: "run-failed",
+      sourceReportsDir,
+      sourceReportPath,
+    }, { root });
+    assert(existsSync(sidecarPath), `research reuse sidecar was not written: ${sidecarPath}`);
+    assert(sidecar.target === targetInfo.target, `sidecar target mismatch: ${JSON.stringify(sidecar)}`);
+    assert(sidecar.deck === targetInfo.deckName, `sidecar deck mismatch: ${JSON.stringify(sidecar)}`);
+    assert(sidecar.research_brief_sha256 === await researchBriefSha256(targetInfo), "sidecar did not persist current research brief digest");
+
+    const reusable = await resolveResearchReuseCandidate(targetInfo, { root });
+    assert(reusable, "valid sidecar was not returned as a reuse candidate");
+    assert(reusable.source_report_path === sourceReportPath, `reuse candidate source report path mismatch: ${JSON.stringify(reusable)}`);
+
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-target-mismatch", sourceReportsDir, sourceReportPath }, { root });
+    const targetMismatch = JSON.parse(await readFile(sidecarPath, "utf8"));
+    targetMismatch.target = "slides/other";
+    await writeFile(sidecarPath, `${JSON.stringify(targetMismatch, null, 2)}\n`, "utf8");
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "target mismatch sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "target mismatch sidecar was not deleted as stale");
+
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-digest-mismatch", sourceReportsDir, sourceReportPath }, { root });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nChanged topic\n", "utf8");
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "brief digest mismatch sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "brief digest mismatch sidecar was not deleted as stale");
+
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReusable topic\n", "utf8");
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-missing-source", sourceReportsDir, sourceReportPath }, { root });
+    await rm(sourceReportPath, { force: true });
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing source report sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "missing source report sidecar was not deleted as stale");
   });
 
   await check("research workflow wrapper delegates deep research without copying built-in research facets", async () => {

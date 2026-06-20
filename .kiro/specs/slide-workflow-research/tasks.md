@@ -163,13 +163,13 @@
   - _Depends:_ 5.1
 
 - [ ] 6. 基盤: Research Source Report Reuse の安全判定を追加する
-- [ ] 6.1 Research Reuse Sidecar の永続化と brief digest 判定を追加する
+- [x] 6.1 Research Reuse Sidecar の永続化と brief digest 判定を追加する
   - Research Reuse Sidecar を deck-local artifact ではなく runtime state として保存し、target、deck、research brief path、brief digest、source run、source report path を保持する
   - current `research-brief.md` から SHA-256 digest を計算し、Research Reuse Sidecar の digest と一致する場合だけ candidate として扱う
   - source report path が消えている場合や target/digest が一致しない場合は stale candidate として削除し、通常の full research に戻る
   - 完了条件: target mismatch、brief digest mismatch、missing source report の fixture で Research Reuse Sidecar が破棄され、reuse mode に入らない
   - _Requirements:_ 8.1, 8.2, 8.4, 8.5, 8.6, 8.8
-  - _Boundary:_ Research Reuse Sidecar
+  - _Boundary:_ Research Reuse Sidecar, Validation Surface
   - _Depends:_ none
 
 - [ ] 6.2 failed run candidate detection と Workflow Identity 正規化を追加する

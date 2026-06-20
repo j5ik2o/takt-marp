@@ -2,6 +2,7 @@ import { accessSync, constants, existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 import { resolveRuntimeContext, runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
 
@@ -70,6 +71,7 @@ export const RESEARCH_ARTIFACT_FILES = Object.freeze({
   openQuestions: "open-questions.md",
   supervision: "research-supervision.md",
 });
+export const RESEARCH_REUSE_SIDECAR_VERSION = 1;
 
 function commandConfig(config) {
   return Object.freeze({
@@ -304,6 +306,124 @@ export function researchArtifactPaths(targetInfo) {
 
 export function researchTaktTarget(targetInfo) {
   return path.posix.join(targetInfo.target, "research", RESEARCH_ARTIFACT_FILES.brief);
+}
+
+export function researchReuseSidecarPath(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  return path.join(root, ".takt", "research-reuse", `${encodeURIComponent(targetInfo.deckName)}.json`);
+}
+
+export async function researchBriefSha256(targetInfo) {
+  return createHash("sha256").update(await readFile(researchArtifactPaths(targetInfo).brief)).digest("hex");
+}
+
+export async function writeResearchReuseSidecar(targetInfo, candidate, options = {}) {
+  const root = options.root ?? process.cwd();
+  const sidecarPath = researchReuseSidecarPath(targetInfo, { root });
+  const sourceReportPath = candidate.sourceReportPath ?? candidate.source_report_path;
+  const sourceReportsDir = candidate.sourceReportsDir ?? candidate.source_reports_dir;
+  const sourceRun = candidate.sourceRun ?? candidate.source_run;
+
+  if (!sourceReportPath) {
+    throw new SlideWorkflowError("Research Reuse Sidecar requires source_report_path", "TAKT_RESEARCH_REUSE_INVALID");
+  }
+  if (!sourceRun) {
+    throw new SlideWorkflowError("Research Reuse Sidecar requires source_run", "TAKT_RESEARCH_REUSE_INVALID");
+  }
+
+  const sidecar = Object.freeze({
+    version: RESEARCH_REUSE_SIDECAR_VERSION,
+    target: targetInfo.target,
+    deck: targetInfo.deckName,
+    research_brief_path: researchTaktTarget(targetInfo),
+    research_brief_sha256: await researchBriefSha256(targetInfo),
+    source_run: sourceRun,
+    source_reports_dir: sourceReportsDir ? projectRelativePath(sourceReportsDir, root) : null,
+    source_report_path: projectRelativePath(sourceReportPath, root),
+    source_report_origin: "builtin_deep_research",
+    created_at: new Date().toISOString(),
+  });
+
+  await mkdir(path.dirname(sidecarPath), { recursive: true });
+  const tempPath = `${sidecarPath}.${process.pid}-${Date.now()}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(sidecar, null, 2)}\n`, "utf8");
+  await rename(tempPath, sidecarPath);
+  return sidecar;
+}
+
+export async function readResearchReuseSidecar(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const sidecarPath = researchReuseSidecarPath(targetInfo, { root });
+  if (!existsSync(sidecarPath)) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(await readFile(sidecarPath, "utf8"));
+    return Object.freeze({
+      ...parsed,
+      sidecar_path: sidecarPath,
+    });
+  } catch {
+    await deleteResearchReuseSidecar(targetInfo, { root });
+    return null;
+  }
+}
+
+export async function deleteResearchReuseSidecar(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const sidecarPath = researchReuseSidecarPath(targetInfo, { root });
+  await rm(sidecarPath, { force: true });
+  return sidecarPath;
+}
+
+export async function resolveResearchReuseCandidate(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const sidecar = await readResearchReuseSidecar(targetInfo, { root });
+  if (!sidecar) {
+    return null;
+  }
+
+  const sourceReportPath = resolveProjectPath(sidecar.source_report_path, root);
+  const sourceReportsDir = sidecar.source_reports_dir ? resolveProjectPath(sidecar.source_reports_dir, root) : null;
+  const currentDigest = await researchBriefSha256(targetInfo);
+  const valid =
+    sidecar.version === RESEARCH_REUSE_SIDECAR_VERSION &&
+    sidecar.target === targetInfo.target &&
+    sidecar.deck === targetInfo.deckName &&
+    sidecar.research_brief_path === researchTaktTarget(targetInfo) &&
+    sidecar.research_brief_sha256 === currentDigest &&
+    sidecar.source_report_origin === "builtin_deep_research" &&
+    existsSync(sourceReportPath);
+
+  if (!valid) {
+    await deleteResearchReuseSidecar(targetInfo, { root });
+    return null;
+  }
+
+  return Object.freeze({
+    ...sidecar,
+    source_reports_dir: sourceReportsDir,
+    source_report_path: sourceReportPath,
+  });
+}
+
+function projectRelativePath(filePath, root) {
+  const absolutePath = path.resolve(root, filePath);
+  const relativePath = path.relative(root, absolutePath);
+  if (relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return absolutePath;
+}
+
+function resolveProjectPath(filePath, root) {
+  if (!filePath) {
+    return "";
+  }
+  if (path.isAbsolute(filePath)) {
+    return filePath;
+  }
+  return path.join(root, ...filePath.split("/"));
 }
 
 export function assertResearchBriefAvailable(targetInfo) {
