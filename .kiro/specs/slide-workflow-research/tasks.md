@@ -1,6 +1,6 @@
 # 実装計画
 
-- [ ] 1. 基盤: command/state と research domain の土台を作る
+- [x] 1. 基盤: command/state と research domain の土台を作る
 - [x] 1.1 Command Config Registry で research command を単一定義源に追加する
   - `research / plan / compose / polish / deliver` の command metadata から既存 exports と validation が派生する状態にする
   - `research` は approval 非対応、successful state `researched`、artifact domain `research`、invalidation target `research` として扱う
@@ -38,7 +38,7 @@
   - _Boundary:_ Workflow Runner, Command Config Registry
   - _Depends:_ 1.3
 
-- [ ] 2. コア: built-in deep research を deck-local artifact に接続する
+- [x] 2. コア: built-in deep research を deck-local artifact に接続する
 - [x] 2.1 Research Workflow Wrapper を追加する
   - `kind: workflow_call` と `call: deep-research` で built-in research workflow を呼ぶ wrapper を追加する
   - wrapper は `deep_research` call、adapter、supervision だけを所有し、built-in persona/policy/output contract を repo-local にコピーしない
@@ -76,7 +76,7 @@
   - _Boundary:_ Research Artifact Sync
   - _Depends:_ 2.2, 2.3
 
-- [ ] 3. 統合: CLI、template、plan optional context を接続する
+- [x] 3. 統合: CLI、template、plan optional context を接続する
 - [x] 3.1 Template Distribution で bundled/ejected research assets を配布する
   - research workflow と adapter instruction を template sync 対象に追加し、built-in research facets は配布対象に含めない
   - bundled source と ejected source の両方で `takt-marp-slide-research.yaml` が解決できるようにする
@@ -114,7 +114,7 @@
   - _Boundary:_ Plan Optional Context, Research Artifact Sync
   - _Depends:_ 3.2, 3.3
 
-- [ ] 4. 検証: deterministic validation と smoke を追加する
+- [x] 4. 検証: deterministic validation と smoke を追加する
 - [x] 4.1 foundation validation に research command 境界を追加する
   - command registry、research prerequisite、TAKT target 変換、handoff marker、built-in workflow 不在 preflight を検証する
   - `research --force` が research history だけを退避し、review/approval を触らないことを検証する
@@ -144,7 +144,7 @@
   - _Boundary:_ Template Distribution, Validation Surface
   - _Depends:_ 3.1
 
-- [ ] 5. 仕上げ: 全体回帰と実装境界を確認する
+- [x] 5. 仕上げ: 全体回帰と実装境界を確認する
 - [x] 5.1 research feature 全体の regression を実行する
   - foundation validation、smoke validation、template drift validation、package boundary validation を実行する
   - 失敗が出た場合は該当境界の実装タスクへ戻して直し、検証タスク側で期待値を緩めない
