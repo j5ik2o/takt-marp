@@ -2187,7 +2187,7 @@ async function main() {
     const researchArtifacts = researchArtifactPaths(targetInfo);
     await mkdir(targetInfo.researchPath, { recursive: true });
     await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse success\n", "utf8");
-    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
     const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
     const fakePackage = await makeFakePackageRoot();
     await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
@@ -2202,11 +2202,73 @@ async function main() {
     const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
     assert(marker.research_reuse === true, `reuse marker flag missing: ${JSON.stringify(marker)}`);
     assert(
-      marker.research_source_report_path === path.relative(root, reusable.sourceReportPath).split(path.sep).join("/"),
+      marker.research_source_report_path === "slides/demo/research/research-report.md",
       `reuse marker source report path mismatch: ${JSON.stringify(marker)}`,
     );
     assert(marker.research_source_report_origin === "builtin_deep_research", `reuse marker origin mismatch: ${JSON.stringify(marker)}`);
     assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "reuse success did not delete sidecar");
+  });
+
+  await check("research reuse mode copies source report before TAKT and keeps it authoritative", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-source-copy-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse source report copy\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const expectedReport = await readFile(reusable.sourceReportPath, "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-reuse-source-copy", "passed", targetInfo.target, { sourceReports: [] }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `reuse source report copy failed: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(
+      marker.research_source_report_path === "slides/demo/research/research-report.md",
+      `reuse marker must point at deck-local source report copy: ${JSON.stringify(marker)}`,
+    );
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === expectedReport,
+      "reuse source report copy was not preserved byte-for-byte as deck-local research-report.md",
+    );
+  });
+
+  await check("research reuse source report copy failure stops before TAKT and preserves deck report", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-source-copy-fail-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse source report copy failure\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Deck Research Report\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    await rm(reusable.sourceReportPath, { force: true });
+    await mkdir(reusable.sourceReportPath, { recursive: true });
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-should-not-start", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "reuse source report copy failure unexpectedly succeeded");
+    assert(!existsSync(argsPath), "TAKT was invoked despite reuse source report copy failure");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === "# Existing Deck Research Report\n",
+      "failed reuse source report copy corrupted existing deck-local research-report.md",
+    );
   });
 
   await check("research reuse failure preserves sidecar for retry", async () => {
@@ -2230,7 +2292,7 @@ async function main() {
     const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
     assert(marker.research_reuse === true, `reuse failure marker flag missing: ${JSON.stringify(marker)}`);
     assert(
-      marker.research_source_report_path === path.relative(root, reusable.sourceReportPath).split(path.sep).join("/"),
+      marker.research_source_report_path === "slides/demo/research/research-report.md",
       `reuse failure marker source report path mismatch: ${JSON.stringify(marker)}`,
     );
     assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse failure did not preserve sidecar for retry");

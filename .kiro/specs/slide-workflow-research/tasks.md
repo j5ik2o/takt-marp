@@ -209,7 +209,7 @@
   - _Boundary:_ Research Reuse Workflow, Template Distribution, Validation Surface
   - _Depends:_ 7.1
 
-- [ ] 7.3 Research Artifact Sync で reuse source report を入力正本にする
+- [x] 7.3 Research Artifact Sync で reuse source report を入力正本にする
   - reuse mode では Research Reuse Sidecar が指す source report を `slides/<deck>/research/research-report.md` に byte-for-byte copy してから Research Reuse Workflow を起動する
   - reuse mode の deck-local copy を adapter output で置換せず、通常 research 成功時と同じ artifacts 同期先に揃える
   - source report copy に失敗した場合は reuse mode を開始せず、破損した partial artifact を残さない

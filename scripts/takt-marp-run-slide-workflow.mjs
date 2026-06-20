@@ -94,7 +94,10 @@ async function main() {
     const selectedWorkflowForTakt = researchReuseCandidate
       ? assertResearchReuseWorkflowAvailable(preparedWorkflow?.workflowFilePath ?? availableWorkflowPath)
       : preparedWorkflow?.workflowFilePath;
-    await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate });
+    const preparedResearchReuseCandidate = researchReuseCandidate
+      ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
+      : null;
+    await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate: preparedResearchReuseCandidate });
     runSnapshotBefore = await snapshotTaktRuns(command);
     runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
     const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
@@ -113,11 +116,20 @@ async function main() {
     return;
   }
   if (command === "research") {
-    await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore);
+    await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, { researchReuseCandidate });
     await deleteResearchReuseSidecar(targetInfo);
   } else {
     await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
   }
+}
+
+async function prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate) {
+  const researchArtifacts = researchArtifactPaths(targetInfo);
+  await replaceFileAtomically(researchReuseCandidate.source_report_path, researchArtifacts.report);
+  return Object.freeze({
+    ...researchReuseCandidate,
+    source_report_path: researchArtifacts.report,
+  });
 }
 
 async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
@@ -211,7 +223,7 @@ async function syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore) {
   await replaceDeckReports(targetInfo.reviewPath, reportNameSet, reportCopies);
 }
 
-async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore) {
+async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, options = {}) {
   const reportsDir = await createdTaktReportsDir("research", targetInfo, runSnapshotBefore);
   if (!reportsDir) {
     throw new SlideWorkflowError(
@@ -221,9 +233,22 @@ async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore) {
   }
 
   const researchArtifacts = researchArtifactPaths(targetInfo);
-  const sourceReportPath = await findSingleResearchSourceReportPath(reportsDir);
+  const sourceReportCopies = [];
+  if (options.researchReuseCandidate) {
+    if (!existsSync(researchArtifacts.report)) {
+      throw new SlideWorkflowError(
+        `TAKT completed but the deck-local reuse source report was not found: ${path.relative(process.cwd(), researchArtifacts.report)}`,
+        "TAKT_RESEARCH_REUSE_SOURCE_REPORT_MISSING",
+      );
+    }
+  } else {
+    sourceReportCopies.push(Object.freeze({
+      sourcePath: await findSingleResearchSourceReportPath(reportsDir),
+      finalPath: researchArtifacts.report,
+    }));
+  }
   const artifactCopies = [
-    Object.freeze({ sourcePath: sourceReportPath, finalPath: researchArtifacts.report }),
+    ...sourceReportCopies,
     ...researchAdapterArtifactCopies(reportsDir, researchArtifacts),
   ];
   for (const { sourcePath, finalPath } of artifactCopies) {
