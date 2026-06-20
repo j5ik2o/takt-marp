@@ -19,6 +19,7 @@ import {
   researchTaktTarget,
   requireCommand,
   resolveDeckTarget,
+  shouldCleanGeneratedOutputsOnForce,
   SlideWorkflowError,
   taktExecutablePath,
 } from "./lib/takt-marp-slide-workflow.mjs";
@@ -58,7 +59,9 @@ async function main() {
 
   if (flags.force) {
     await archiveCommandArtifacts(targetInfo, downstreamCommands(command), "force", { includeApprovals: true });
-    await cleanGeneratedOutputs(targetInfo);
+    if (shouldCleanGeneratedOutputsOnForce(command)) {
+      await cleanGeneratedOutputs(targetInfo);
+    }
   } else if (isSuccessfulCommandState(targetInfo, command)) {
     throw new SlideWorkflowError(
       `Command '${command}' already reached successful state. Use --force to invalidate and rerun.`,

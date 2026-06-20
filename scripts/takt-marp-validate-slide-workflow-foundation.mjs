@@ -39,6 +39,7 @@ import {
   researchArtifactPaths,
   requireCommand,
   resolveDeckTarget,
+  shouldCleanGeneratedOutputsOnForce,
   supervisionPath,
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
@@ -861,6 +862,7 @@ async function main() {
     assert(COMMANDS.includes("research"), `COMMANDS must include research: ${COMMANDS.join(", ")}`);
     assert(COMMAND_STATES.research === "researched", `research state must be researched, got ${COMMAND_STATES.research}`);
     assert(researchConfig.artifactDomain === "research", `research artifact domain must be research, got ${researchConfig.artifactDomain}`);
+    assert(researchConfig.cleanGeneratedOutputsOnForce === false, "research force must not clean generated outputs");
     assert(
       JSON.stringify(researchConfig.invalidationTargets) === JSON.stringify(["research"]),
       `research invalidation targets must stay in research domain, got ${researchConfig.invalidationTargets.join(", ")}`,
@@ -870,7 +872,10 @@ async function main() {
       JSON.stringify(downstreamCommands("research")) === JSON.stringify(["research"]),
       `research downstream must stay in research domain, got ${downstreamCommands("research").join(", ")}`,
     );
+    assert(!shouldCleanGeneratedOutputsOnForce("research"), "research force cleanup predicate must be disabled");
     assert(JSON.stringify(planConfig.sourceArtifacts) === JSON.stringify(["brief.md"]), `plan prerequisites changed: ${planConfig.sourceArtifacts.join(", ")}`);
+    assert(planConfig.cleanGeneratedOutputsOnForce === true, "plan force must keep generated output cleanup");
+    assert(shouldCleanGeneratedOutputsOnForce("plan"), "plan force cleanup predicate must stay enabled");
     assert(!planConfig.requiredState, `plan must not require a prior command state, got ${planConfig.requiredState}`);
 
     let caught;
@@ -1171,6 +1176,139 @@ async function main() {
     assert(!existsSync(argsPath), "TAKT was invoked despite missing TAKT built-in deep research");
   });
 
+  await check("research successful rerun without force is blocked before TAKT", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-rerun-blocked-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    await writeSupervision(targetInfo, "research", "researched", "passed", "run-research-1");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "research runner unexpectedly allowed successful rerun");
+    assert(result.stderr.includes("RERUN_BLOCKED:"), `research rerun did not report RERUN_BLOCKED: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT started despite research rerun blocking");
+  });
+
+  await check("research force archives only research-domain artifacts and preserves review approvals", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-force-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
+    await writeFile(researchArtifacts.claims, "# Existing Research Claims\n", "utf8");
+    await writeFile(researchArtifacts.openQuestions, "# Existing Open Questions\n", "utf8");
+    await writeSupervision(targetInfo, "research", "researched", "passed", "run-research-1");
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    const planSupervisionPath = supervisionPath(targetInfo, "plan");
+    const planApprovalPath = path.join(targetInfo.reviewPath, "plan-approval.md");
+    const planSupervisionBefore = await readFile(planSupervisionPath, "utf8");
+    const planApprovalBefore = await readFile(planApprovalPath, "utf8");
+    const distDeckPath = path.join(root, "dist", "demo");
+    const renderDeckPath = path.join(root, ".takt", "render", "demo");
+    await mkdir(distDeckPath, { recursive: true });
+    await writeFile(path.join(distDeckPath, "old.pdf"), "stale pdf", "utf8");
+    await mkdir(renderDeckPath, { recursive: true });
+    await writeFile(path.join(renderDeckPath, "metadata.json"), "{}", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath, "--force"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `research force rerun failed: ${result.stderr}`);
+    const researchHistoryFiles = await readdir(path.join(targetInfo.researchPath, "history"));
+    assert(
+      researchHistoryFiles.some((name) => name.endsWith("force-research-supervision.md")),
+      `research force did not archive supervision under research/history: ${researchHistoryFiles.join(", ")}`,
+    );
+    for (const fileName of ["research-report.md", "research-sources.md", "research-claims.md", "open-questions.md"]) {
+      assert(
+        researchHistoryFiles.some((name) => name.endsWith(`force-${fileName}`)),
+        `research force did not archive ${fileName} under research/history: ${researchHistoryFiles.join(", ")}`,
+      );
+      assert(!existsSync(path.join(targetInfo.researchPath, fileName)), `research force left stale ${fileName} in research domain`);
+    }
+    assert(existsSync(researchArtifacts.brief), "research force archived research-brief.md source input");
+    assert(existsSync(path.join(distDeckPath, "old.pdf")), "research force cleaned dist deck output");
+    assert(existsSync(path.join(renderDeckPath, "metadata.json")), "research force cleaned TAKT render output");
+    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "research force created review/history");
+    assert((await readFile(planSupervisionPath, "utf8")) === planSupervisionBefore, "research force changed review plan supervision");
+    assert((await readFile(planApprovalPath, "utf8")) === planApprovalBefore, "research force changed review plan approval");
+  });
+
+  await check("rejected research rerun archives research supervision under research history and invokes TAKT", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-rejected-rerun-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    await writeSupervision(targetInfo, "research", "none", "rejected", "run-research-1");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `rejected research rerun failed: ${result.stderr}`);
+    assert(existsSync(argsPath), "TAKT was not invoked after rejected research archive");
+    const researchHistoryFiles = await readdir(path.join(targetInfo.researchPath, "history"));
+    assert(
+      researchHistoryFiles.some((name) => name.endsWith("rejected-rerun-research-supervision.md")),
+      `rejected research supervision was not archived under research/history: ${researchHistoryFiles.join(", ")}`,
+    );
+    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "rejected research rerun created review/history");
+  });
+
+  await check("research TAKT failure preserves existing plan state and review artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-external-failure-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    const planSupervisionPath = supervisionPath(targetInfo, "plan");
+    const planApprovalPath = path.join(targetInfo.reviewPath, "plan-approval.md");
+    const planSupervisionBefore = await readFile(planSupervisionPath, "utf8");
+    const planApprovalBefore = await readFile(planApprovalPath, "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeFailingTaktScript(42));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 42, `research failure should return TAKT exit code 42, got ${result.status}: ${result.stderr}`);
+    assert((await readFile(planSupervisionPath, "utf8")) === planSupervisionBefore, "research failure changed review plan supervision");
+    assert((await readFile(planApprovalPath, "utf8")) === planApprovalBefore, "research failure changed review plan approval");
+    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "research failure archived review artifacts");
+  });
+
   await check("global CLI workflow command uses bundled no-copy templates without npm project", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-bundled-"));
     await makeDeck(root, "demo");
@@ -1391,6 +1529,8 @@ async function main() {
     await writeApproval(targetInfo, "plan", "foundation-test");
     await mkdir(path.join(root, "dist", "demo"), { recursive: true });
     await writeFile(path.join(root, "dist", "demo", "old.pdf"), "stale pdf", "utf8");
+    await mkdir(path.join(root, ".takt", "render", "demo"), { recursive: true });
+    await writeFile(path.join(root, ".takt", "render", "demo", "metadata.json"), "{}", "utf8");
     const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
     const fakePackage = await makeFakePackageRoot();
     await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
@@ -1407,6 +1547,7 @@ async function main() {
     assert(historyFiles.some((name) => name.endsWith("force-plan-supervision.md")), `force did not archive supervision: ${historyFiles.join(", ")}`);
     assert(historyFiles.some((name) => name.endsWith("force-plan-approval.md")), `force did not archive approval: ${historyFiles.join(", ")}`);
     assert(!existsSync(path.join(root, "dist", "demo", "old.pdf")), "force did not clean generated output");
+    assert(!existsSync(path.join(root, ".takt", "render", "demo", "metadata.json")), "force did not clean TAKT render output");
     assert(!existsSync(path.join(root, ".takt", "workflows")), "selected-source force created project-local workflow templates");
   });
 
@@ -2080,6 +2221,17 @@ function fakeResearchTaktScript(runName, result, reportTarget) {
     "# Research Supervision",
     "EOF",
     "exit 0",
+    "",
+  ].join("\n");
+}
+
+function fakeFailingTaktScript(exitCode) {
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    `exit ${exitCode}`,
     "",
   ].join("\n");
 }

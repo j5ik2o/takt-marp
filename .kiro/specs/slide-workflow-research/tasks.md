@@ -29,7 +29,7 @@
   - _Boundary:_ Workflow Runner
   - _Depends:_ 1.2
 
-- [ ] 1.4 research rerun と force invalidation を research domain に閉じる
+- [x] 1.4 research rerun と force invalidation を research domain に閉じる
   - successful `research` は `--force` なしで拒否し、rejected research は同一 command artifacts を退避して再実行できるようにする
   - `research --force` は `slides/<deck>/research/history/` だけへ退避し、既存 `review/` reports や approval を退避しない
   - external research failure は research command の失敗として扱い、既存 successful plan state を変更しない

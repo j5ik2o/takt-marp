@@ -13,6 +13,7 @@ const COMMAND_CONFIG_ENTRIES = Object.freeze([
     successfulState: "researched",
     artifactDomain: "research",
     approvalSupported: false,
+    cleanGeneratedOutputsOnForce: false,
     invalidationTargets: ["research"],
     sourceArtifacts: [],
   }),
@@ -73,6 +74,7 @@ export const RESEARCH_ARTIFACT_FILES = Object.freeze({
 function commandConfig(config) {
   return Object.freeze({
     ...config,
+    cleanGeneratedOutputsOnForce: config.cleanGeneratedOutputsOnForce ?? true,
     invalidationTargets: Object.freeze([...config.invalidationTargets]),
     sourceArtifacts: Object.freeze([...config.sourceArtifacts]),
   });
@@ -511,14 +513,13 @@ export async function commandSupervisionResult(targetInfo, command) {
 }
 
 export async function archiveCommandArtifacts(targetInfo, commands, reason, options = {}) {
-  const historyPath = path.join(targetInfo.reviewPath, "history");
   const timestamp = timestampForFile();
   const includeApprovals = options.includeApprovals ?? false;
   const moved = [];
 
   for (const command of commands) {
-    const candidates = [supervisionPath(targetInfo, command)];
-    if (includeApprovals) candidates.push(approvalPath(targetInfo, command));
+    const historyPath = path.join(artifactDomainPath(targetInfo, command), "history");
+    const candidates = archiveCandidatePaths(targetInfo, command, { includeApprovals });
 
     for (const source of candidates) {
       if (!existsSync(source)) continue;
@@ -530,6 +531,30 @@ export async function archiveCommandArtifacts(targetInfo, commands, reason, opti
   }
 
   return moved;
+}
+
+function archiveCandidatePaths(targetInfo, command, options = {}) {
+  const config = configFor(command);
+  if (config.artifactDomain === "research") {
+    const artifacts = researchArtifactPaths(targetInfo);
+    return uniquePaths([
+      artifacts.supervision,
+      artifacts.report,
+      artifacts.sources,
+      artifacts.claims,
+      artifacts.openQuestions,
+    ]);
+  }
+
+  const candidates = [supervisionPath(targetInfo, command)];
+  if (options.includeApprovals && config.approvalSupported) {
+    candidates.push(approvalPath(targetInfo, command));
+  }
+  return uniquePaths(candidates);
+}
+
+function uniquePaths(paths) {
+  return [...new Set(paths)];
 }
 
 export async function cleanGeneratedOutputs(targetInfo, options = {}) {
@@ -546,6 +571,10 @@ export async function cleanGeneratedOutputs(targetInfo, options = {}) {
 
 export function downstreamCommands(command) {
   return [...configFor(command).invalidationTargets];
+}
+
+export function shouldCleanGeneratedOutputsOnForce(command) {
+  return configFor(command).cleanGeneratedOutputsOnForce;
 }
 
 export function timestampForFile() {
