@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatError, SlideWorkflowError } from "./lib/takt-marp-slide-workflow.mjs";
-import { resolveTemplateSource, workflowFilePath } from "./lib/takt-marp-project-templates.mjs";
+import {
+  prepareBundledWorkflowRuntime,
+  resolveTemplateSource,
+  workflowFilePath,
+} from "./lib/takt-marp-project-templates.mjs";
+import { loadPersonaPromptFromPath, loadWorkflowByIdentifier } from "takt/dist/infra/config/index.js";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
@@ -36,6 +41,56 @@ function assertTemplateAssetsAbsent(rootDir, label) {
   for (const relativePath of [".takt/workflows", ".takt/facets"]) {
     check(!existsSync(projectPath(rootDir, relativePath)), `${label}: template assets must not exist: ${relativePath}`);
   }
+}
+
+function assertTransientRuntimeAbsent(rootDir, label) {
+  check(!existsSync(projectPath(rootDir, "workflows")), `${label}: transient bundled runtime parent was not cleaned up`);
+}
+
+function assertPathInside(basePath, targetPath, message) {
+  const resolvedBase = normalizeComparablePath(existsSync(basePath) ? realpathSync(basePath) : path.resolve(basePath));
+  const resolvedTarget = normalizeComparablePath(existsSync(targetPath) ? realpathSync(targetPath) : path.resolve(targetPath));
+  const relative = path.relative(resolvedBase, resolvedTarget);
+  check(relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative)), message);
+}
+
+function normalizeComparablePath(filePath) {
+  return process.platform === "darwin" && filePath.startsWith("/private/var/")
+    ? `/var/${filePath.slice("/private/var/".length)}`
+    : filePath;
+}
+
+async function assertBundledRuntimePersonaPromptAllowed(projectDir, workflowPath) {
+  const prepared = await prepareBundledWorkflowRuntime(workflowPath, { projectRoot: projectDir });
+  try {
+    assertPathInside(
+      projectPath(projectDir, "workflows"),
+      prepared.workflowFilePath,
+      `bundled runtime workflow must be under the project workflows allowlist root: ${prepared.workflowFilePath}`,
+    );
+    const workflow = loadWorkflowByIdentifier(prepared.workflowFilePath, projectDir);
+    const step = workflow.steps.find((candidate) => candidate.name === "adapt_research");
+    check(step, "bundled research workflow missing adapt_research step");
+    check(step.personaPath, "adapt_research did not resolve to a persona prompt file");
+    try {
+      loadPersonaPromptFromPath(step.personaPath, projectDir);
+    } catch (error) {
+      if (String(error.message ?? error).includes("Persona prompt file path is not allowed")) {
+        throw new SlideWorkflowError(
+          [
+            "Bundled research runtime persona prompt was rejected by TAKT's provider-time allowlist.",
+            `workflow: ${prepared.workflowFilePath}`,
+            `persona: ${step.personaPath}`,
+          ].join("\n"),
+          "BUNDLED_RESEARCH_ALLOWLIST_REJECTED",
+        );
+      }
+      throw error;
+    }
+  } finally {
+    await prepared.cleanup();
+  }
+  assertTransientRuntimeAbsent(projectDir, "after persona allowlist check");
 }
 
 function runCommand(command, args, options = {}) {
@@ -106,6 +161,7 @@ async function main() {
       selectedWorkflowFilePath.includes("templates/project/workflows/takt-marp-slide-research.yaml"),
       `expected package-bundled research workflow path, got ${selectedWorkflowFilePath}`,
     );
+    await assertBundledRuntimePersonaPromptAllowed(projectDir, selectedWorkflowFilePath);
 
     const result = await runCommand(
       process.execPath,
@@ -121,6 +177,7 @@ async function main() {
       { cwd: projectDir },
     );
     assertTemplateAssetsAbsent(projectDir, "after bundled research");
+    assertTransientRuntimeAbsent(projectDir, "after bundled research");
 
     if (result.output.includes("Persona prompt file path is not allowed")) {
       throw new SlideWorkflowError(

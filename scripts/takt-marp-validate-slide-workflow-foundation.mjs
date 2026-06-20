@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { cp, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
@@ -1960,7 +1960,13 @@ async function main() {
       args[workflowArgIndex + 1].includes("takt-marp-bundled-runtime-"),
       `TAKT bundled plan workflow path did not use runtime view: ${args.join(" ")}`,
     );
+    assertPathInside(
+      path.join(root, "workflows"),
+      args[workflowArgIndex + 1],
+      `TAKT bundled plan workflow path must be inside the project workflows allowlist root: ${args.join(" ")}`,
+    );
     assert(!existsSync(args[workflowArgIndex + 1]), `bundled plan runtime workflow was not cleaned up: ${args[workflowArgIndex + 1]}`);
+    assert(!existsSync(path.join(root, "workflows")), "bundled plan runtime parent was not cleaned up");
     const providerArgIndex = args.indexOf("--provider");
     assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
     assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
@@ -1999,7 +2005,13 @@ async function main() {
       args[workflowArgIndex + 1].includes("takt-marp-bundled-runtime-"),
       `TAKT bundled research workflow path did not use runtime view: ${args.join(" ")}`,
     );
+    assertPathInside(
+      path.join(root, "workflows"),
+      args[workflowArgIndex + 1],
+      `TAKT bundled research workflow path must be inside the project workflows allowlist root: ${args.join(" ")}`,
+    );
     assert(!existsSync(args[workflowArgIndex + 1]), `bundled research runtime workflow was not cleaned up: ${args[workflowArgIndex + 1]}`);
+    assert(!existsSync(path.join(root, "workflows")), "bundled research runtime parent was not cleaned up");
     const providerArgIndex = args.indexOf("--provider");
     assert(providerArgIndex >= 0, `research TAKT args did not include --provider: ${args.join(" ")}`);
     assert(args[providerArgIndex + 1] === "mock", `research TAKT provider argument was not preserved: ${args.join(" ")}`);
@@ -3516,6 +3528,19 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+function assertPathInside(basePath, targetPath, message) {
+  const resolvedBase = normalizeComparablePath(existsSync(basePath) ? realpathSync(basePath) : path.resolve(basePath));
+  const resolvedTarget = normalizeComparablePath(existsSync(targetPath) ? realpathSync(targetPath) : path.resolve(targetPath));
+  const relativePath = path.relative(resolvedBase, resolvedTarget);
+  assert(relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath)), message);
+}
+
+function normalizeComparablePath(filePath) {
+  return process.platform === "darwin" && filePath.startsWith("/private/var/")
+    ? `/var/${filePath.slice("/private/var/".length)}`
+    : filePath;
 }
 
 main().catch((error) => {
