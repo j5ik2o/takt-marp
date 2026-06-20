@@ -1,6 +1,5 @@
 import { statSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveRuntimeContext } from "./takt-marp-runtime-context.mjs";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
@@ -167,7 +166,11 @@ export async function prepareBundledWorkflowRuntime(workflowFile, options = {}) 
     });
   }
 
-  const runtimeRoot = await mkdtemp(path.join(os.tmpdir(), "takt-marp-bundled-runtime-"));
+  const projectRoot = path.resolve(options.projectRoot ?? options.root ?? process.cwd());
+  const runtimeParent = path.join(projectRoot, "workflows");
+  const runtimeParentExisted = directoryExists(runtimeParent);
+  await mkdir(runtimeParent, { recursive: true });
+  const runtimeRoot = await mkdtemp(path.join(runtimeParent, ".takt-marp-bundled-runtime-"));
   const runtimeWorkflowsDir = path.join(runtimeRoot, "workflows");
   await mkdir(runtimeWorkflowsDir, { recursive: true });
   await cp(path.join(templateRoot, "facets"), path.join(runtimeRoot, "facets"), { recursive: true });
@@ -191,6 +194,13 @@ export async function prepareBundledWorkflowRuntime(workflowFile, options = {}) 
     workflowFilePath: path.join(runtimeWorkflowsDir, path.basename(resolvedWorkflowFile)),
     cleanup: async () => {
       await rm(runtimeRoot, { recursive: true, force: true });
+      if (!runtimeParentExisted) {
+        await rmdir(runtimeParent).catch((error) => {
+          if (error.code !== "ENOENT" && error.code !== "ENOTEMPTY") {
+            throw error;
+          }
+        });
+      }
     },
   });
 }
