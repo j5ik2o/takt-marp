@@ -145,7 +145,7 @@
   - _Depends:_ 3.1
 
 - [ ] 5. 仕上げ: 全体回帰と実装境界を確認する
-- [ ] 5.1 research feature 全体の regression を実行する
+- [x] 5.1 research feature 全体の regression を実行する
   - foundation validation、smoke validation、template drift validation、package boundary validation を実行する
   - 失敗が出た場合は該当境界の実装タスクへ戻して直し、検証タスク側で期待値を緩めない
   - 完了条件: research command、plan optional context、template distribution、既存 4 command の主要回帰がすべて exit 0 で完走する
