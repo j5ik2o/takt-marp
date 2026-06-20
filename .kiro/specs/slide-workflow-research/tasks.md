@@ -135,7 +135,7 @@
   - _Boundary:_ Validation Surface
   - _Depends:_ 3.3, 4.1
 
-- [ ] 4.3 (P) template validation と package boundary で research 配布を固定する
+- [x] 4.3 (P) template validation と package boundary で research 配布を固定する
   - `.takt/workflows/takt-marp-slide-research.yaml` と `templates/project/workflows/takt-marp-slide-research.yaml` の drift を検出する
   - ejected templates に research wrapper と adapter instruction が含まれることを検証する
   - built-in research facets が `templates/project/facets/**` にコピーされていないことを検証する

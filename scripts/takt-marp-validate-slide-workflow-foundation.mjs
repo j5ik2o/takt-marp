@@ -122,6 +122,20 @@ const BUILTIN_RESEARCH_FACET_IDENTIFIERS = Object.freeze([
   "research-analyze",
   "research-supervise",
 ]);
+const BUILTIN_RESEARCH_FACET_RELATIVE_PATHS = Object.freeze([
+  "instructions/research-plan.md",
+  "instructions/research-dig.md",
+  "instructions/research-analyze.md",
+  "instructions/research-supervise.md",
+  "knowledge/research.md",
+  "knowledge/research-comparative.md",
+  "output-contracts/research-report.md",
+  "personas/research-planner.md",
+  "personas/research-digger.md",
+  "personas/research-analyzer.md",
+  "personas/research-supervisor.md",
+  "policies/research.md",
+]);
 const BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES = Object.freeze(["research-report.md"]);
 const RESEARCH_TEMPLATE_RELATIVE_PATHS = Object.freeze([
   "workflows/takt-marp-slide-research.yaml",
@@ -1231,6 +1245,28 @@ async function main() {
     for (const command of ["plan", "compose", "polish", "deliver"]) {
       const workflowSource = await readFile(path.join(ROOT_DIR, ".takt", "workflows", `takt-marp-slide-${command}.yaml`), "utf8");
       assertWorkflowCallStep(workflowSource, `ai_quality_gate_${command}`, "./takt-marp-slide-ai-quality-gate.yaml");
+    }
+  });
+
+  await check("built-in research facet copy detection rejects generic research policy copies", async () => {
+    const copiedPolicyPath = path.join(ROOT_DIR, "templates", "project", "facets", "policies", "research.md");
+    const builtInPolicyPath = path.join(ROOT_DIR, "node_modules", "takt", "builtins", "ja", "facets", "policies", "research.md");
+    await mkdir(path.dirname(copiedPolicyPath), { recursive: true });
+    await cp(builtInPolicyPath, copiedPolicyPath);
+    try {
+      let caught;
+      try {
+        await assertNoLocalBuiltInResearchFacetCopies();
+      } catch (error) {
+        caught = error;
+      }
+      assert(caught, "built-in research policy copy was not rejected");
+      assert(
+        formatError(caught).includes("templates/project/facets/policies/research.md"),
+        `built-in research policy copy error omitted path: ${formatError(caught)}`,
+      );
+    } finally {
+      await rm(copiedPolicyPath, { force: true });
     }
   });
 
@@ -2693,6 +2729,11 @@ async function assertNoLocalBuiltInResearchFacetCopies() {
     for (const filePath of await listFilesRecursively(rootPath)) {
       const relativePath = path.relative(ROOT_DIR, filePath).split(path.sep).join("/");
       const fileName = path.basename(filePath);
+      for (const builtInRelativePath of BUILTIN_RESEARCH_FACET_RELATIVE_PATHS) {
+        if (relativePath.endsWith(`/facets/${builtInRelativePath}`)) {
+          findings.add(`${relativePath} copies built-in research facet path ${builtInRelativePath}`);
+        }
+      }
       for (const outputContractFile of BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES) {
         if (fileName === outputContractFile) {
           findings.add(`${relativePath} copies built-in output contract file ${outputContractFile}`);
