@@ -33,6 +33,12 @@
   - Quality Checklist Coverage: brief の品質チェック項目ごとに対応 slide ID または review gate を示す
 - Plan Findings
   - fixed outline や required element の未対応、slide count 矛盾、重要情報の欠落は `needs_input` ではなく stable finding ID 付きで記録する
+- Research Context Usage
+  - Available: yes / no
+  - Inputs read: `research-report.md`、`research-claims.md`、`open-questions.md` のうち存在したもの
+  - Research-derived evidence used: claim_id/source_id または artifact 名で識別できる根拠
+  - Unresolved assumptions: `open-questions.md` 由来の未解決前提または保留事項
+  - Non-blocking boundary: research artifacts の不在や open questions だけでは `needs_input` にしない
 - Requested Deliverables
   - 後続 delivery command が読む authoritative line として `deliverables: [...]` を含める
 
@@ -44,5 +50,9 @@
 - `svg:` と `inline-svg:` は座標制御、複雑な矢印、再利用図版、単体レビューが必要な場合に限定し、`render_owner: generate_visuals` を指定してください。
 - `existing:` は明示された既存画像・図版だけに使い、`render_owner: generate_visuals` を指定してください。
 - `brief.md` / `brief.normalized.md` の Output Requirements と矛盾する deliverables を計画しないでください。
+- primary input は `brief.md` / `brief.normalized.md` のまま維持してください。research artifacts は存在時だけ読む optional context です。
+- research 由来の根拠を使う場合は `Research Context Usage` と slide の `Source` で artifact/claim/source を識別してください。
+- `open-questions.md` は未解決前提または保留として扱い、推測で回答を埋めないでください。
+- plan 成功条件に外部 web access や追加調査を加えないでください。
 - Target slide count が固定アウトライン、要求密度、講義本体要件と矛盾する場合、勝手に圧縮・拡張しないでください。`Target slide count: 5` は5枚の概要版として扱い、講義本体を要求する場合は target を100〜140または期待値相当(例: 119)へ修正する必要があることを Plan Findings に記録してください。
 - Coverage Matrix の未対応項目を空欄にしないでください。未対応の場合も `not covered` と理由、修正対象 finding ID を書いてください。

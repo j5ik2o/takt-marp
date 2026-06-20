@@ -1054,6 +1054,41 @@ async function main() {
     await assertCommandPrerequisites(targetInfo, "plan");
   });
 
+  await check("plan workflow declares research artifacts as optional context without web access", async () => {
+    const workflowSource = await readFile(path.join(ROOT_DIR, ".takt", "workflows", "takt-marp-slide-plan.yaml"), "utf8");
+    const analyzeInstruction = await readFile(
+      path.join(ROOT_DIR, ".takt", "facets", "instructions", "takt-marp-analyze-reference-deck.md"),
+      "utf8",
+    );
+    const planInstruction = await readFile(path.join(ROOT_DIR, ".takt", "facets", "instructions", "takt-marp-plan.md"), "utf8");
+    const referenceContract = await readFile(
+      path.join(ROOT_DIR, ".takt", "facets", "output-contracts", "takt-marp-reference-analysis.md"),
+      "utf8",
+    );
+    const planContract = await readFile(
+      path.join(ROOT_DIR, ".takt", "facets", "output-contracts", "takt-marp-slide-plan.md"),
+      "utf8",
+    );
+
+    assert(workflowSource.includes("briefをprimary input"), "plan workflow must keep brief as primary input");
+    assert(workflowSource.includes("optional context"), "plan workflow must document optional research context");
+    assert(workflowSource.includes("network_access: false"), "plan workflow must keep network access disabled");
+    assert(!workflowSource.includes("network_access: true"), "plan workflow must not enable network access");
+
+    for (const source of [analyzeInstruction, planInstruction, referenceContract, planContract]) {
+      for (const artifactName of ["research-report.md", "research-claims.md", "open-questions.md"]) {
+        assert(source.includes(artifactName), `plan optional context contract omitted ${artifactName}`);
+      }
+      assert(
+        source.includes("optional context") || source.includes("optional research context"),
+        "plan optional context contract must mark research as optional",
+      );
+      assert(source.includes("needs_input"), "plan optional context contract must describe non-blocking needs_input behavior");
+      assert(source.includes("外部 web access"), "plan optional context contract must forbid external web access as a success condition");
+      assert(source.includes("未解決"), "plan optional context contract must keep open questions unresolved");
+    }
+  });
+
   await check("research artifact domain resolves separately from review artifacts", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
@@ -2170,6 +2205,57 @@ async function main() {
     assert(blueprint.includes("Mock slide blueprint for run-current"), `slide blueprint was not synced from reports: ${blueprint}`);
   });
 
+  await check("plan optional research context is absent without becoming a prerequisite", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    const fakePackage = await makeFakePackageRoot();
+    await assertCommandPrerequisites(targetInfo, "plan");
+    await makeTaktExecutable(fakePackage.packageRoot, fakePlanTaktScriptWithOptionalResearchContext("run-current", "passed"));
+
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    assert(result.status === 0, `runner treated missing research artifacts as a plan failure: ${result.stderr}`);
+    const referenceAnalysis = await readFile(path.join(targetInfo.deckPath, "reference-analysis.md"), "utf8");
+    const plan = await readFile(path.join(targetInfo.deckPath, "plan.md"), "utf8");
+    assert(referenceAnalysis.includes("Available: no"), `reference-analysis did not record missing optional research context: ${referenceAnalysis}`);
+    assert(referenceAnalysis.includes("Inputs read: none"), `reference-analysis incorrectly consumed research context: ${referenceAnalysis}`);
+    assert(plan.includes("Research Context Usage"), `plan omitted research context usage section: ${plan}`);
+    assert(plan.includes("Available: no"), `plan did not mark research context as absent: ${plan}`);
+    assert(!plan.includes("claim_id C-001"), `plan invented research evidence without artifacts: ${plan}`);
+    assert(!plan.includes("Status: needs_input"), `plan turned missing optional research artifacts into needs_input: ${plan}`);
+  });
+
+  await check("plan optional research context is synced as identifiable source evidence when present", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    const fakePackage = await makeFakePackageRoot();
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.report, "# Research Report\n\nsource_id: S-001\n", "utf8");
+    await writeFile(researchArtifacts.claims, "# Research Claims\n\nclaim_id: C-001\nsource_ids: [S-001]\n", "utf8");
+    await writeFile(researchArtifacts.openQuestions, "# Open Questions\n\nquestion_id: Q-001\n", "utf8");
+    await assertCommandPrerequisites(targetInfo, "plan");
+    await makeTaktExecutable(fakePackage.packageRoot, fakePlanTaktScriptWithOptionalResearchContext("run-current", "passed"));
+
+    const result = spawnSync(process.execPath, [fakePackage.runnerScript, "plan", "slides/demo"], { cwd: root, encoding: "utf8" });
+    assert(result.status === 0, `runner failed to plan with optional research context: ${result.stderr}`);
+    const referenceAnalysis = await readFile(path.join(targetInfo.deckPath, "reference-analysis.md"), "utf8");
+    const plan = await readFile(path.join(targetInfo.deckPath, "plan.md"), "utf8");
+    assert(referenceAnalysis.includes("Available: yes"), `reference-analysis did not mark research context as available: ${referenceAnalysis}`);
+    assert(
+      referenceAnalysis.includes("claim_id C-001 from research-claims.md"),
+      `reference-analysis did not preserve research-derived evidence identity: ${referenceAnalysis}`,
+    );
+    assert(
+      referenceAnalysis.includes("question_id Q-001 from open-questions.md; unresolved, do not infer"),
+      `reference-analysis did not preserve unresolved open question: ${referenceAnalysis}`,
+    );
+    assert(plan.includes("Research Context Usage"), `plan omitted research context usage section: ${plan}`);
+    assert(plan.includes("Research-derived evidence used: claim_id C-001"), `plan did not identify research-derived evidence: ${plan}`);
+    assert(plan.includes("Unresolved assumptions: question_id Q-001"), `plan did not preserve unresolved assumptions: ${plan}`);
+    assert(plan.includes("Source: research-claims.md#C-001"), `plan slide source did not point at research evidence: ${plan}`);
+    assert(!plan.includes("Status: needs_input"), `plan turned unresolved optional research context into needs_input: ${plan}`);
+  });
+
   await check("runner syncs AI gate reports to deck", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
@@ -2858,6 +2944,116 @@ function fakeTaktScript(runNames, result) {
   }
   lines.push("exit 0", "");
   return lines.join("\n");
+}
+
+function fakePlanTaktScriptWithOptionalResearchContext(runName, result) {
+  return [
+    "#!/bin/sh",
+    "target=\"\"",
+    "while [ \"$#\" -gt 0 ]; do",
+    "  if [ \"$1\" = \"-t\" ]; then",
+    "    shift",
+    "    target=\"$1\"",
+    "  fi",
+    "  shift",
+    "done",
+    `mkdir -p ".takt/runs/${runName}/reports"`,
+    `cat > ".takt/runs/${runName}/reports/brief.normalized.md" <<EOF`,
+    "# Normalized Brief",
+    "",
+    `Mock normalized brief for ${runName}.`,
+    "EOF",
+    "research_dir=\"$target/research\"",
+    "research_available=no",
+    "if [ -f \"$research_dir/research-report.md\" ] || [ -f \"$research_dir/research-claims.md\" ] || [ -f \"$research_dir/open-questions.md\" ]; then",
+    "  research_available=yes",
+    "fi",
+    `cat > ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
+    "# Reference Deck Analysis",
+    "",
+    "## Research Context",
+    "- Available: $research_available",
+    "EOF",
+    "if [ \"$research_available\" = \"yes\" ]; then",
+    `cat >> ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
+    "- Inputs read: research-report.md, research-claims.md, open-questions.md",
+    "- Research-derived evidence: claim_id C-001 from research-claims.md; source_id S-001 from research-report.md",
+    "- Unresolved assumptions: question_id Q-001 from open-questions.md; unresolved, do not infer",
+    "EOF",
+    "else",
+    `cat >> ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
+    "- Inputs read: none",
+    "- Research-derived evidence: none",
+    "- Unresolved assumptions: none",
+    "EOF",
+    "fi",
+    `cat >> ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
+    "",
+    "## Plan Implications",
+    `Mock reference analysis for ${runName}.`,
+    "EOF",
+    `cat > ".takt/runs/${runName}/reports/plan.md" <<EOF`,
+    "# Slide Plan",
+    "",
+    "## Plan Result",
+    "- Status: planned",
+    "",
+    "deliverables: [html, pdf]",
+    "",
+    "## Research Context Usage",
+    "- Available: $research_available",
+    "EOF",
+    "if [ \"$research_available\" = \"yes\" ]; then",
+    `cat >> ".takt/runs/${runName}/reports/plan.md" <<EOF`,
+    "- Inputs read: research-report.md, research-claims.md, open-questions.md",
+    "- Research-derived evidence used: claim_id C-001 from research-claims.md; source_id S-001 from research-report.md",
+    "- Unresolved assumptions: question_id Q-001 from open-questions.md; unresolved, do not infer",
+    "",
+    "## Slides",
+    "- S01",
+    "  - Source: research-claims.md#C-001",
+    "EOF",
+    "else",
+    `cat >> ".takt/runs/${runName}/reports/plan.md" <<EOF`,
+    "- Inputs read: none",
+    "- Research-derived evidence used: none",
+    "- Unresolved assumptions: none",
+    "",
+    "## Slides",
+    "- S01",
+    "  - Source: brief.normalized.md",
+    "EOF",
+    "fi",
+    `cat >> ".takt/runs/${runName}/reports/plan.md" <<EOF`,
+    "",
+    `Mock plan for ${runName}.`,
+    "EOF",
+    `cat > ".takt/runs/${runName}/reports/slide-blueprint.md" <<EOF`,
+    "# Slide Blueprint",
+    "",
+    `Mock slide blueprint for ${runName}.`,
+    "EOF",
+    `cat > ".takt/runs/${runName}/reports/plan-supervision.md" <<EOF`,
+    "---",
+    "command: plan",
+    "target: $target",
+    "generated_at: 2026-06-05T17:10:00+09:00",
+    `workflow_run_id: ${runName}`,
+    "step: supervision",
+    "cycle: 1",
+    "state: planned",
+    `result: ${result}`,
+    "blocking_findings: 0",
+    "major_findings: 0",
+    "minor_findings: 0",
+    "info_findings: 0",
+    "---",
+    "",
+    "# Supervision",
+    "EOF",
+    "exit 0",
+    "",
+  ].join("\n");
 }
 
 function fakeResearchTaktScript(runName, result, reportTarget) {

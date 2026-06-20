@@ -95,7 +95,7 @@
   - _Boundary:_ CLI
   - _Depends:_ 1.3, 3.1
 
-- [ ] 3.3 (P) Plan Optional Context で research artifacts を任意入力として扱う
+- [x] 3.3 (P) Plan Optional Context で research artifacts を任意入力として扱う
   - `plan` は `brief.md` を primary input として維持し、research artifacts がない deck でも従来どおり進む
   - `research-report.md`、`research-claims.md`、`open-questions.md` がある場合だけ追加文脈として読み、research 由来の根拠を識別できる形で出力する
   - `open-questions.md` は未解決前提または保留として扱い、推測で埋めない
