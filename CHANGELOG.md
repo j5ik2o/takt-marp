@@ -1,5 +1,46 @@
 # Changelog
 
+## [0.4.0](https://github.com/j5ik2o/takt-marp/compare/v0.3.0...v0.4.0) (2026-06-20)
+
+### Features
+
+* **slide-workflow-research:** add optional research context to plan ([6fa9e56](https://github.com/j5ik2o/takt-marp/commit/6fa9e56c29ee43a0ce04876efa70c858888aeb7c))
+* **slide-workflow-research:** add research adapter contract ([5fc7ab0](https://github.com/j5ik2o/takt-marp/commit/5fc7ab0452378e9dfd324a611ac8f72ca7f99e58))
+* **slide-workflow-research:** add research command registry ([da56ee3](https://github.com/j5ik2o/takt-marp/commit/da56ee3fdd0dfedbfee49818ee9031f7b585b41a))
+* **slide-workflow-research:** add research runner preflight ([6513a14](https://github.com/j5ik2o/takt-marp/commit/6513a140ece4fd55a4592f9aa7f41c9c7f4b1c17))
+* **slide-workflow-research:** add research supervision contract ([7ca021d](https://github.com/j5ik2o/takt-marp/commit/7ca021de2202422e3ba85e102872253600a1c109))
+* **slide-workflow-research:** add research workflow wrapper ([1911498](https://github.com/j5ik2o/takt-marp/commit/1911498ae8df2d3e8ee7d29b84ff7479e780d16c))
+* **slide-workflow-research:** distribute research templates ([7bb2e4d](https://github.com/j5ik2o/takt-marp/commit/7bb2e4d00eb0f9d9220ad105fa1b02084bfde210))
+* **slide-workflow-research:** expose research cli command ([4bad594](https://github.com/j5ik2o/takt-marp/commit/4bad594b03b90d2143fd6ea131d94bd24e8b83b9))
+* **slide-workflow-research:** isolate research reruns ([3355a8b](https://github.com/j5ik2o/takt-marp/commit/3355a8b07873c40ab809e3bb9108b957bcedbf20))
+* **slide-workflow-research:** separate research artifact domain ([1d451d0](https://github.com/j5ik2o/takt-marp/commit/1d451d075ee00f91e0bcfbc2bffe7dfd56227859))
+* **slide-workflow-research:** sync research artifacts ([dc7097c](https://github.com/j5ik2o/takt-marp/commit/dc7097c1f81a6c7143f9b78c54761484bcee83f8))
+* **slide-workflow:** add blueprint visual composition flow ([263a967](https://github.com/j5ik2o/takt-marp/commit/263a96724459e3017538b1d41d33b85eca1f658c))
+* **takt-marp-global-installer:** add project ejector ([e1d44f1](https://github.com/j5ik2o/takt-marp/commit/e1d44f1802acd2563e171f0a7cba23a9c6287e1f))
+* **takt-marp-global-installer:** expose eject command ([2441308](https://github.com/j5ik2o/takt-marp/commit/2441308022d7458be9f0c0881ad6fa6d011a3ad9))
+* **takt-marp-global-installer:** guard project template set ([23716ac](https://github.com/j5ik2o/takt-marp/commit/23716ac2d009fab09de79ba9ac7c16b2f514515a))
+* **takt-marp-global-installer:** inspect smoke selected templates ([d6d56aa](https://github.com/j5ik2o/takt-marp/commit/d6d56aa5f50f8964afa501a4c9a03d414345efd8))
+* **takt-marp-global-installer:** isolate shared error boundary ([d351f91](https://github.com/j5ik2o/takt-marp/commit/d351f91735272d351928a9dc6f5e39d1fb607495))
+* **takt-marp-global-installer:** make smoke entry no-copy ([723fb9d](https://github.com/j5ik2o/takt-marp/commit/723fb9dee3fe5747f178b69283094e8219cd1137))
+* **takt-marp-global-installer:** resolve template source state ([13e1a34](https://github.com/j5ik2o/takt-marp/commit/13e1a3437c5750cd050130c9e6be7581038c3fbd))
+* **takt-marp-global-installer:** run workflows without copying templates ([0238bcc](https://github.com/j5ik2o/takt-marp/commit/0238bccbb668b0125d7158720bcd1c1ada9f96ca))
+* **takt-marp-global-installer:** separate runtime project root ([5d9431b](https://github.com/j5ik2o/takt-marp/commit/5d9431be1b5be9788866873896610f5b8d1f02d6))
+* **takt-marp-global-installer:** support selected workflow path ([d1ffaff](https://github.com/j5ik2o/takt-marp/commit/d1ffaff82bf62825631f24ba6854c5fd819ce342))
+* **takt-marp-global-installer:** update package install boundary ([55df034](https://github.com/j5ik2o/takt-marp/commit/55df0349394f4c3d3552a1bb062afc54ee720fab))
+* **takt-marp-global-installer:** verify cli entry guard ([c9c3ce1](https://github.com/j5ik2o/takt-marp/commit/c9c3ce1661a9ae4b66587303be9fe4a5ea4bc9a5))
+
+### Bug Fixes
+
+* **slide-workflow:** align assembly visual contracts ([afc19ba](https://github.com/j5ik2o/takt-marp/commit/afc19ba7d096d060f4dfe4ec3d8f9e3b06438f38))
+* **slide-workflow:** align blueprint review contracts ([bc7b8d0](https://github.com/j5ik2o/takt-marp/commit/bc7b8d077db22646625b8bddac440f2b3d112af9))
+* **slide-workflow:** align planning instruction contracts ([1da6146](https://github.com/j5ik2o/takt-marp/commit/1da6146715ac03d5da58e7cf20b9ace5778fc66b))
+* **slide-workflow:** align profile gate and plan budget ([5342dd3](https://github.com/j5ik2o/takt-marp/commit/5342dd3f1bbd650499f973f1fbb761c3865b41b5))
+* **slide-workflow:** clarify reference and deck mode contracts ([982a7cf](https://github.com/j5ik2o/takt-marp/commit/982a7cf887c47c662dd6a4c7c2d0ae19879fdeae))
+* **slide-workflow:** enforce normalized brief and timed notes ([dcfa852](https://github.com/j5ik2o/takt-marp/commit/dcfa8524e13140f3a401c23b23fced7d3ebc3c35))
+* **slide-workflow:** keep compose context contracts aligned ([b92950d](https://github.com/j5ik2o/takt-marp/commit/b92950de8e5c8e673f420c616d2cfae2ad9ead12))
+* **slide-workflow:** sync plan blueprint artifacts ([b5e3109](https://github.com/j5ik2o/takt-marp/commit/b5e31099d96aec8baad25800a07175e6d5656e84))
+* **takt-marp-global-installer:** decouple approve from template preflight ([206bfbb](https://github.com/j5ik2o/takt-marp/commit/206bfbb6d4dc033d3cf6cd8220d5a06d2f9dd570))
+
 ## [0.3.0](https://github.com/j5ik2o/takt-marp/compare/v0.2.1...v0.3.0) (2026-06-17)
 
 ### Features
