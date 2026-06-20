@@ -123,6 +123,15 @@ const BUILTIN_RESEARCH_FACET_IDENTIFIERS = Object.freeze([
   "research-supervise",
 ]);
 const BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES = Object.freeze(["research-report.md"]);
+const RESEARCH_TEMPLATE_RELATIVE_PATHS = Object.freeze([
+  "workflows/takt-marp-slide-research.yaml",
+  "facets/instructions/takt-marp-adapt-research.md",
+  "facets/instructions/takt-marp-supervise-research.md",
+  "facets/output-contracts/takt-marp-research-sources.md",
+  "facets/output-contracts/takt-marp-research-claims.md",
+  "facets/output-contracts/takt-marp-open-questions.md",
+  "facets/output-contracts/takt-marp-research-supervision.md",
+]);
 
 async function main() {
   await check("front matter parser supports documented subset", async () => {
@@ -272,6 +281,15 @@ async function main() {
         `eject exposed non workflow/facet template entry: ${entry.relativePath}`,
       );
     }
+    for (const relativePath of RESEARCH_TEMPLATE_RELATIVE_PATHS) {
+      const ejectedPath = `.takt/${relativePath}`;
+      assert(result.created.includes(ejectedPath), `research template entry was not reported as ejected: ${ejectedPath}`);
+      assert(existsSync(path.join(targetDir, ejectedPath)), `research template entry was not copied by eject: ${ejectedPath}`);
+    }
+    assert(
+      !result.created.includes(".takt/facets/output-contracts/research-report.md"),
+      "eject must not distribute built-in deep-research research-report.md output contract",
+    );
     await assertNoRuntimeOrProviderFiles(targetDir);
   });
 
@@ -578,6 +596,24 @@ async function main() {
     }
   });
 
+  await check("template source resolver resolves research workflow from bundled and ejected sources", async () => {
+    const bundledRoot = await mkdtemp(path.join(os.tmpdir(), "template-source-research-bundled-"));
+    const bundledSource = resolveTemplateSource({ projectRoot: bundledRoot });
+    const bundledResearchWorkflow = path.join(ROOT_DIR, "templates", "project", "workflows", "takt-marp-slide-research.yaml");
+    assert(bundledSource.kind === "bundled", `expected bundled source, got ${bundledSource.kind}`);
+    assert(workflowFilePath(bundledSource, "research") === bundledResearchWorkflow, `bundled research workflow path mismatch: ${workflowFilePath(bundledSource, "research")}`);
+    assert(existsSync(bundledResearchWorkflow), `bundled research workflow template missing: ${bundledResearchWorkflow}`);
+
+    const ejectedRoot = await mkdtemp(path.join(os.tmpdir(), "template-source-research-ejected-"));
+    await mkdir(path.join(ejectedRoot, ".takt", "workflows"), { recursive: true });
+    await mkdir(path.join(ejectedRoot, ".takt", "facets"), { recursive: true });
+    const ejectedResearchWorkflow = path.join(ejectedRoot, ".takt", "workflows", "takt-marp-slide-research.yaml");
+    await writeFile(ejectedResearchWorkflow, "name: ejected-research\n", "utf8");
+    const ejectedSource = resolveTemplateSource({ projectRoot: ejectedRoot });
+    assert(ejectedSource.kind === "ejected", `expected ejected source, got ${ejectedSource.kind}`);
+    assert(workflowFilePath(ejectedSource, "research") === ejectedResearchWorkflow, `ejected research workflow path mismatch: ${workflowFilePath(ejectedSource, "research")}`);
+  });
+
   await check("template sync validator detects byte drift between package template and dev .takt trees", async () => {
     const identicalRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-identical-"));
     const identicalTemplateRoot = path.join(identicalRoot, "templates", "project");
@@ -640,6 +676,47 @@ async function main() {
     assert(
       JSON.stringify(mismatch.contentMismatch) === JSON.stringify(["workflows/takt-marp-slide-plan.yaml"]),
       `byte mismatch should be contentMismatch with path, got: ${JSON.stringify(mismatch)}`,
+    );
+  });
+
+  await check("research template distribution matches dev assets and drift detection covers research paths", async () => {
+    const templateRoot = path.join(ROOT_DIR, "templates", "project");
+    const devTaktRoot = path.join(ROOT_DIR, ".takt");
+    const templateEntries = await listTemplateEntries({ templateRoot });
+    const templatePaths = new Set(templateEntries.map((entry) => entry.relativePath));
+    for (const relativePath of RESEARCH_TEMPLATE_RELATIVE_PATHS) {
+      assert(templatePaths.has(relativePath), `research asset missing from template tree: ${relativePath}`);
+      const [templateContent, devContent] = await Promise.all([
+        readFile(path.join(templateRoot, ...relativePath.split("/"))),
+        readFile(path.join(devTaktRoot, ...relativePath.split("/"))),
+      ]);
+      assert(templateContent.equals(devContent), `research template asset drifted from dev .takt: ${relativePath}`);
+    }
+    assert(!templatePaths.has("facets/output-contracts/research-report.md"), "built-in deep-research research-report.md must not be distributed as a template");
+
+    const repoDrift = await diffTemplateTrees(templateRoot, devTaktRoot);
+    assert(repoDrift.missingInTemplate.length === 0, `repo template missing research/dev files: ${repoDrift.missingInTemplate.join(", ")}`);
+    assert(repoDrift.missingInDev.length === 0, `repo template has files absent from dev .takt: ${repoDrift.missingInDev.join(", ")}`);
+    assert(repoDrift.contentMismatch.length === 0, `repo template content drift: ${repoDrift.contentMismatch.join(", ")}`);
+
+    const driftRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-research-drift-"));
+    const driftTemplateRoot = path.join(driftRoot, "templates", "project");
+    const driftDevRoot = path.join(driftRoot, ".takt");
+    await writeTemplateTree(driftTemplateRoot, new Map([
+      ["workflows/takt-marp-slide-research.yaml", "name: stale-research\n"],
+    ]));
+    await writeTemplateTree(driftDevRoot, new Map([
+      ["workflows/takt-marp-slide-research.yaml", "name: current-research\n"],
+      ["facets/instructions/takt-marp-adapt-research.md", "# Adapter\n"],
+    ]));
+    const researchDrift = await diffTemplateTrees(driftTemplateRoot, driftDevRoot);
+    assert(
+      JSON.stringify(researchDrift.contentMismatch) === JSON.stringify(["workflows/takt-marp-slide-research.yaml"]),
+      `research workflow byte drift was not detected: ${JSON.stringify(researchDrift)}`,
+    );
+    assert(
+      JSON.stringify(researchDrift.missingInTemplate) === JSON.stringify(["facets/instructions/takt-marp-adapt-research.md"]),
+      `research adapter template drift was not detected: ${JSON.stringify(researchDrift)}`,
     );
   });
 

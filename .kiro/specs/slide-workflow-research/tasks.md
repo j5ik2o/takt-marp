@@ -77,7 +77,7 @@
   - _Depends:_ 2.2, 2.3
 
 - [ ] 3. 統合: CLI、template、plan optional context を接続する
-- [ ] 3.1 Template Distribution で bundled/ejected research assets を配布する
+- [x] 3.1 Template Distribution で bundled/ejected research assets を配布する
   - research workflow と adapter instruction を template sync 対象に追加し、built-in research facets は配布対象に含めない
   - bundled source と ejected source の両方で `takt-marp-slide-research.yaml` が解決できるようにする
   - `takt-marp eject` で research workflow と関連 facet がコピーされ、partial template state は既存 error 規約に従う

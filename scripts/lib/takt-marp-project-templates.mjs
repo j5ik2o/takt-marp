@@ -5,7 +5,7 @@ import { resolveRuntimeContext } from "./takt-marp-runtime-context.mjs";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
 
 export const TEMPLATE_DOMAINS = Object.freeze(["workflows", "facets"]);
-export const WORKFLOW_TEMPLATE_COMMANDS = Object.freeze(["plan", "compose", "polish", "deliver"]);
+export const WORKFLOW_TEMPLATE_COMMANDS = Object.freeze(["research", "plan", "compose", "polish", "deliver"]);
 export const TEMPLATE_DRIFT_KINDS = Object.freeze([
   { key: "missingInTemplate", label: "missing in template (exists only in dev .takt)" },
   { key: "missingInDev", label: "missing in dev .takt (exists only in template)" },
