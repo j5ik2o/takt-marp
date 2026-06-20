@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.2](https://github.com/j5ik2o/takt-marp/compare/v0.4.1...v0.4.2) (2026-06-20)
+
+### Bug Fixes
+
+* **slide-workflow-research:** increase research max steps ([be07ce1](https://github.com/j5ik2o/takt-marp/commit/be07ce1bd9c103928cdf8c446f208d6dd264d134))
+
 ## [0.4.1](https://github.com/j5ik2o/takt-marp/compare/v0.4.0...v0.4.1) (2026-06-20)
 
 ### Bug Fixes
