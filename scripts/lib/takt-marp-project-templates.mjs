@@ -109,6 +109,10 @@ export function workflowFilePath(source, command) {
   return path.join(source.workflowsDir, `takt-marp-slide-${command}.yaml`);
 }
 
+export function researchReuseWorkflowFilePath(researchWorkflowFilePath) {
+  return path.join(path.dirname(researchWorkflowFilePath), "takt-marp-slide-research-reuse.yaml");
+}
+
 function isPathInside(basePath, targetPath) {
   const relativePath = path.relative(path.resolve(basePath), path.resolve(targetPath));
   return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));

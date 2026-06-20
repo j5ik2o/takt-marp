@@ -191,13 +191,13 @@
   - _Depends:_ 6.2
 
 - [ ] 7. コア: Research Reuse Workflow と reuse mode を接続する
-- [ ] 7.1 Research Workflow Selection Contract で sibling private workflow を解決する
+- [x] 7.1 Research Workflow Selection Contract で sibling private workflow を解決する
   - public command は `research` のまま維持し、`research-reuse` のような user-facing command や npm script を追加しない
   - selected Research Workflow Wrapper と同じ `workflows` directory から Research Reuse Workflow の sibling path を導出する
   - bundled runtime と ejected template の両方で selected Research Reuse Workflow を TAKT 起動前に検証する
   - 完了条件: bundled/ejected どちらでも sibling Research Reuse Workflow が解決され、public command list に reuse command が増えていない
   - _Requirements:_ 7.1, 7.2, 8.1, 8.6
-  - _Boundary:_ Template Distribution, Workflow Runner
+  - _Boundary:_ Template Distribution, Workflow Runner, Validation Surface
   - _Depends:_ 6.3
 
 - [ ] 7.2 Research Reuse Workflow template を追加する

@@ -27,7 +27,7 @@ import {
   taktExecutablePath,
   writeResearchReuseSidecar,
 } from "./lib/takt-marp-slide-workflow.mjs";
-import { prepareBundledWorkflowRuntime } from "./lib/takt-marp-project-templates.mjs";
+import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
 
 function usage() {
   return [
@@ -87,15 +87,20 @@ async function main() {
   const preparedWorkflow = selectedWorkflowFilePath
     ? await prepareBundledWorkflowRuntime(availableWorkflowPath)
     : undefined;
-  await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate });
-  const runSnapshotBefore = await snapshotTaktRuns(command);
-  const runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
-  const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
   let code;
+  let runSnapshotBefore;
+  let runDirectorySnapshotBefore;
   try {
+    const selectedWorkflowForTakt = researchReuseCandidate
+      ? assertResearchReuseWorkflowAvailable(preparedWorkflow?.workflowFilePath ?? availableWorkflowPath)
+      : preparedWorkflow?.workflowFilePath;
+    await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate });
+    runSnapshotBefore = await snapshotTaktRuns(command);
+    runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
+    const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
     code = await runTakt(command, taktTarget, {
       provider: flags.provider,
-      workflowFilePath: preparedWorkflow?.workflowFilePath,
+      workflowFilePath: selectedWorkflowForTakt,
     });
   } finally {
     await preparedWorkflow?.cleanup();
@@ -147,6 +152,18 @@ function projectRelativeMarkerPath(filePath) {
     return relativePath.split(path.sep).join("/");
   }
   return filePath;
+}
+
+function assertResearchReuseWorkflowAvailable(researchWorkflowFilePath) {
+  const reuseWorkflowFilePath = researchReuseWorkflowFilePath(researchWorkflowFilePath);
+  if (!existsSync(reuseWorkflowFilePath)) {
+    throw new SlideWorkflowError(
+      `Research Reuse Workflow YAML is not implemented: ${path.relative(process.cwd(), reuseWorkflowFilePath)}. ` +
+        "Implement takt-marp-slide-research-reuse.yaml before reusing a failed research source report.",
+      "WORKFLOW_NOT_IMPLEMENTED",
+    );
+  }
+  return reuseWorkflowFilePath;
 }
 
 async function runTakt(command, target, options = {}) {
