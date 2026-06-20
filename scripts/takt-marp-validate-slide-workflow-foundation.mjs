@@ -58,6 +58,36 @@ const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const VERIFY_DELIVERY_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-verify-delivery-artifacts.mjs");
 const RESEARCH_WORKFLOW_RELATIVE_PATH = ".takt/workflows/takt-marp-slide-research.yaml";
 const RESEARCH_WRAPPER_STEP_NAMES = Object.freeze(["deep_research", "adapt_research", "supervise_research"]);
+const RESEARCH_ADAPTER_INSTRUCTION = Object.freeze({
+  name: "takt-marp-adapt-research",
+  relativePath: ".takt/facets/instructions/takt-marp-adapt-research.md",
+});
+const RESEARCH_ADAPTER_OUTPUT_CONTRACTS = Object.freeze([
+  {
+    artifactName: "research-sources.md",
+    format: "takt-marp-research-sources",
+    relativePath: ".takt/facets/output-contracts/takt-marp-research-sources.md",
+    requiredFields: ["source_id", "title", "url", "retrieved_at", "source_type", "confidence"],
+  },
+  {
+    artifactName: "research-claims.md",
+    format: "takt-marp-research-claims",
+    relativePath: ".takt/facets/output-contracts/takt-marp-research-claims.md",
+    requiredFields: ["claim_id", "claim", "confidence", "source_ids", "slide_use", "caveats"],
+  },
+  {
+    artifactName: "open-questions.md",
+    format: "takt-marp-open-questions",
+    relativePath: ".takt/facets/output-contracts/takt-marp-open-questions.md",
+    requiredFields: ["question_id", "question", "why_it_matters", "suggested_next_step"],
+  },
+]);
+const RESEARCH_ADAPTER_FORBIDDEN_BOUNDARY_TERMS = Object.freeze([
+  "web fetch",
+  "additional research",
+  "source re-evaluation",
+  "invented claims",
+]);
 const BUILTIN_RESEARCH_FACET_IDENTIFIERS = Object.freeze([
   "research-planner",
   "research-digger",
@@ -1021,6 +1051,75 @@ async function main() {
     }
   });
 
+  await check("research adapter derives index artifacts only from built-in report", async () => {
+    const wrapperPath = path.join(ROOT_DIR, ...RESEARCH_WORKFLOW_RELATIVE_PATH.split("/"));
+    const wrapperSource = await readFile(wrapperPath, "utf8");
+    const adapterStep = extractWorkflowStepBlocks(wrapperSource).find((step) => step.name === "adapt_research");
+    assert(adapterStep, "adapt_research step is missing");
+    assert(
+      wrapperSource.includes(`${RESEARCH_ADAPTER_INSTRUCTION.name}: ../facets/instructions/takt-marp-adapt-research.md`),
+      `research wrapper must register adapter instruction ${RESEARCH_ADAPTER_INSTRUCTION.name}`,
+    );
+    assert(adapterStep.block.includes(`\n    instruction: ${RESEARCH_ADAPTER_INSTRUCTION.name}\n`), "adapt_research must use the named adapter instruction");
+    assert(adapterStep.block.includes("\n    output_contracts:\n"), "adapt_research must declare output contracts");
+
+    for (const contract of RESEARCH_ADAPTER_OUTPUT_CONTRACTS) {
+      assert(
+        wrapperSource.includes(`${contract.format}: ../facets/output-contracts/${path.basename(contract.relativePath)}`),
+        `research wrapper must register output contract format ${contract.format}`,
+      );
+      assert(
+        adapterStep.block.includes(`name: ${contract.artifactName}`) && adapterStep.block.includes(`format: ${contract.format}`),
+        `adapt_research must output ${contract.artifactName} with ${contract.format}`,
+      );
+    }
+    assert(!adapterStep.block.includes("name: research-report.md"), "adapt_research must not output or copy built-in research-report.md");
+
+    const instructionPath = path.join(ROOT_DIR, ...RESEARCH_ADAPTER_INSTRUCTION.relativePath.split("/"));
+    assert(existsSync(instructionPath), `research adapter instruction missing: ${RESEARCH_ADAPTER_INSTRUCTION.relativePath}`);
+    const instructionSource = await readFile(instructionPath, "utf8");
+    assert(instructionSource.includes("research-report.md"), "adapter instruction must name research-report.md");
+    assert(instructionSource.includes("only input"), "adapter instruction must state research-report.md is the only input");
+    assert(instructionSource.includes("not_present_in_builtin_report"), "adapter instruction must preserve missing built-in report fields");
+    for (const term of RESEARCH_ADAPTER_FORBIDDEN_BOUNDARY_TERMS) {
+      assert(instructionSource.toLowerCase().includes(term), `adapter instruction must forbid ${term}`);
+    }
+
+    for (const contract of RESEARCH_ADAPTER_OUTPUT_CONTRACTS) {
+      const contractPath = path.join(ROOT_DIR, ...contract.relativePath.split("/"));
+      assert(existsSync(contractPath), `research adapter output contract missing: ${contract.relativePath}`);
+      const contractSource = await readFile(contractPath, "utf8");
+      assert(contractSource.includes("not_present_in_builtin_report"), `${contract.relativePath} must document missing built-in report values`);
+      assert(contractSource.includes("source_report: research-report.md"), `${contract.relativePath} must trace to built-in research-report.md`);
+      for (const field of contract.requiredFields) {
+        assert(contractSource.includes(field), `${contract.relativePath} missing model field ${field}`);
+      }
+    }
+
+    const localResearchReportContractPath = path.join(ROOT_DIR, ".takt", "facets", "output-contracts", "research-report.md");
+    assert(!existsSync(localResearchReportContractPath), "repo-local built-in research-report.md output contract must not be added");
+
+    const mockReport = [
+      "# Research Report",
+      "",
+      "## Findings",
+      "- Legacy deployment teams still need slide-ready evidence, but this report omits URL, retrieved_at, source mapping, and confidence.",
+      "",
+      "## Open Questions",
+      "- Which migration date is final?",
+      "",
+    ].join("\n");
+    const expectedArtifacts = buildResearchAdapterMissingFieldFixture(mockReport);
+    assert(
+      Object.values(expectedArtifacts).every((artifact) => artifact.includes("not_present_in_builtin_report")),
+      "missing URL, retrieved_at, source mapping, and confidence must remain not_present_in_builtin_report in fixture outputs",
+    );
+    assert(
+      !Object.values(expectedArtifacts).some((artifact) => artifact.includes("https://example.com")),
+      "fixture outputs must not fabricate plausible URLs for missing source data",
+    );
+  });
+
   await check("missing approval fails approved state check", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
@@ -1953,6 +2052,63 @@ function assertWorkflowCallStep(source, stepName, expectedCall) {
   assert(step, `workflow call step '${stepName}' is missing`);
   assert(step.block.includes("\n    kind: workflow_call\n"), `step '${stepName}' must be kind: workflow_call`);
   assert(step.block.includes(`\n    call: ${expectedCall}\n`), `step '${stepName}' must call ${expectedCall}`);
+}
+
+function buildResearchAdapterMissingFieldFixture(mockReport) {
+  assert(mockReport.includes("omits URL"), "fixture mock report must describe missing source fields");
+  return {
+    "research-sources.md": [
+      "---",
+      "command: research",
+      "target: slides/demo",
+      "generated_at: 2026-06-05T17:10:00+09:00",
+      "workflow_run_id: run-research-1",
+      "source_report: research-report.md",
+      "source_report_origin: builtin_deep_research",
+      "---",
+      "",
+      "# Research Sources",
+      "",
+      "| source_id | title | url | retrieved_at | source_type | confidence |",
+      "|-----------|-------|-----|--------------|-------------|------------|",
+      "| source-001 | not_present_in_builtin_report | not_present_in_builtin_report | not_present_in_builtin_report | other | not_present_in_builtin_report |",
+      "",
+    ].join("\n"),
+    "research-claims.md": [
+      "---",
+      "command: research",
+      "target: slides/demo",
+      "generated_at: 2026-06-05T17:10:00+09:00",
+      "workflow_run_id: run-research-1",
+      "source_report: research-report.md",
+      "source_report_origin: builtin_deep_research",
+      "---",
+      "",
+      "# Research Claims",
+      "",
+      "| claim_id | claim | confidence | source_ids | slide_use | caveats |",
+      "|----------|-------|------------|------------|-----------|---------|",
+      "| claim-001 | Legacy deployment teams still need slide-ready evidence | not_present_in_builtin_report | [] | Candidate slide claim | source mapping not_present_in_builtin_report |",
+      "",
+    ].join("\n"),
+    "open-questions.md": [
+      "---",
+      "command: research",
+      "target: slides/demo",
+      "generated_at: 2026-06-05T17:10:00+09:00",
+      "workflow_run_id: run-research-1",
+      "source_report: research-report.md",
+      "source_report_origin: builtin_deep_research",
+      "---",
+      "",
+      "# Open Questions",
+      "",
+      "| question_id | question | why_it_matters | suggested_next_step |",
+      "|-------------|----------|----------------|---------------------|",
+      "| question-001 | Which migration date is final? | not_present_in_builtin_report | not_present_in_builtin_report |",
+      "",
+    ].join("\n"),
+  };
 }
 
 async function assertNoLocalBuiltInResearchFacetCopies() {

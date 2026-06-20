@@ -48,7 +48,7 @@
   - _Boundary:_ Research Workflow Wrapper
   - _Depends:_ 1.3
 
-- [ ] 2.2 (P) Research Adapter で built-in report から index artifacts を生成する
+- [x] 2.2 (P) Research Adapter で built-in report から index artifacts を生成する
   - 入力を built-in `research-report.md` のみに限定し、`research-sources.md`、`research-claims.md`、`open-questions.md` を生成する
   - URL、取得日、claim/source 対応、確度が report 内で確認できない場合は `not_present_in_builtin_report` または caveat として表現する
   - 追加調査、外部 fetch、出典再評価、built-in report にない claim 生成を行わない instruction と output を固定する
