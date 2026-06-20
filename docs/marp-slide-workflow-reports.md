@@ -8,7 +8,7 @@
 
 必須field:
 
-- `command`: `plan`、`compose`、`polish`、`deliver`
+- `command`: `research`、`plan`、`compose`、`polish`、`deliver`
 - `target`: `slides/<deck>`
 - `generated_at`: parse可能な記録時刻
 - `workflow_run_id`: workflow runを識別する文字列
@@ -23,6 +23,12 @@ Canonical path:
 
 ```text
 slides/<deck>/review/{command}-supervision.md
+```
+
+`research` だけは review domain ではなく research domain に隔離する。
+
+```text
+slides/<deck>/research/research-supervision.md
 ```
 
 必須field:
@@ -40,9 +46,10 @@ slides/<deck>/review/{command}-supervision.md
 - `minor_findings`
 - `info_findings`
 
-`plan` のsuccess stateは `planned`、`compose` は `composed`、`polish` は `polished`、`deliver` は `delivered` とする。
+`research` のsuccess stateは `researched`、`plan` は `planned`、`compose` は `composed`、`polish` は `polished`、`deliver` は `delivered` とする。
 
 `plan` と `compose` では `approval_required: true` を使える。Approval待ちはTAKT workflow失敗ではなく、人間確認待ちの状態である。
+`research` は approval を持たない。
 
 例:
 
@@ -61,6 +68,57 @@ major_findings: 0
 minor_findings: 0
 info_findings: 0
 ```
+
+`research-supervision.md` の例:
+
+```yaml
+command: research
+target: slides/my-talk
+generated_at: 2026-06-05T16:50:00+09:00
+workflow_run_id: 20260605-165000-my-talk-research
+step: supervision
+cycle: 1
+state: researched
+result: passed
+blocking_findings: 0
+major_findings: 0
+minor_findings: 0
+info_findings: 0
+```
+
+## Research Artifacts
+
+Canonical paths:
+
+```text
+slides/<deck>/research/research-brief.md
+slides/<deck>/research/research-report.md
+slides/<deck>/research/research-sources.md
+slides/<deck>/research/research-claims.md
+slides/<deck>/research/open-questions.md
+slides/<deck>/research/research-supervision.md
+```
+
+`research-brief.md` は `research` command の人間入力であり、runner は `brief.md` から暗黙推測しない。
+
+`research-report.md` は TAKT built-in `deep-research` の出力を byte-for-byte copy した正本である。repo-local adapter は `research-report.md` の front matter や本文を再生成・整形・置換しない。built-in report の source locator は current run の selected parent reports directory の内側だけを探索し、`workflow-deep-research` subworkflow の `research-report.md` を優先する。
+
+`research-sources.md`、`research-claims.md`、`open-questions.md` は built-in `research-report.md` から派生する adapter output である。共通 front matter:
+
+```yaml
+command: research
+target: slides/<deck>
+generated_at: 2026-06-05T16:55:00+09:00
+workflow_run_id: 20260605-165000-my-talk-research
+source_report: research-report.md
+source_report_origin: builtin_deep_research
+```
+
+派生成果物は built-in report に存在する情報だけを抽出する。URL、取得日、確度、claim/source 対応が built-in report にない場合は推測せず、`not_present_in_builtin_report` または空配列と caveat で欠落を明示する。
+
+`research-sources.md` は `source_id`、`title`、`url`、`retrieved_at`、`source_type`、`confidence` を持つ。`research-claims.md` は `claim_id`、`claim`、`confidence`、`source_ids`、`slide_use`、`caveats` を持つ。`open-questions.md` は `question_id`、`question`、`why_it_matters`、`suggested_next_step` を持つ。
+
+`research` の sync は research domain への atomic replace とする。`research-report.md`、adapter outputs、`research-supervision.md` は `slides/<deck>/research/` に同期し、`slides/<deck>/review/` へは同期しない。
 
 ## Approval
 
@@ -149,9 +207,16 @@ Canonical reportsを再実行前に退避する場合、次の形式を使う。
 slides/<deck>/review/history/{timestamp}-{reason}-{filename}
 ```
 
+`research` の場合は次の path を使う。
+
+```text
+slides/<deck>/research/history/{timestamp}-{reason}-{filename}
+```
+
 `reason`:
 
 - `rejected-rerun`
 - `force`
 
 Rejected rerunでは対象commandのcanonical reportsをarchiveする。Force invalidationでは対象command以降のcanonical reportsとapproval filesをarchiveする。
+ただし `research --force` は research artifacts だけを退避し、`plan / compose / polish / deliver` の review reports と approval files は退避しない。

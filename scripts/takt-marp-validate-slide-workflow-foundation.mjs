@@ -1089,6 +1089,46 @@ async function main() {
     }
   });
 
+  await check("workflow and report docs describe research command contracts", async () => {
+    const workflowDocs = await readFile(path.join(ROOT_DIR, "docs", "marp-slide-workflow.md"), "utf8");
+    const reportDocs = await readFile(path.join(ROOT_DIR, "docs", "marp-slide-workflow-reports.md"), "utf8");
+    const readme = await readFile(path.join(ROOT_DIR, "README.md"), "utf8");
+    const readmeJa = await readFile(path.join(ROOT_DIR, "README.ja.md"), "utf8");
+
+    for (const source of [workflowDocs, readme, readmeJa]) {
+      assert(source.includes("takt-marp research"), "docs must expose the CLI research command surface");
+      assert(source.includes("slides/<deck>/research/research-brief.md"), "docs must name research-brief.md as research input");
+    }
+
+    for (const phrase of [
+      "`research` は任意の前段 command",
+      "`plan` の必須前提ではない",
+      "TAKT built-in `deep-research`",
+      "built-in が出力した `research-report.md` を正本",
+      "repo-local workflow は deep research 本体を fork せず",
+      "外部 web access は `research` command と built-in `deep-research` の境界に閉じる",
+      "`reference-analysis.md` または `plan.md`",
+      "`research --force` は既存 research artifacts を `slides/<deck>/research/history/` に退避",
+    ]) {
+      assert(workflowDocs.includes(phrase), `workflow docs missing research contract phrase: ${phrase}`);
+    }
+
+    for (const phrase of [
+      "slides/<deck>/research/research-supervision.md",
+      "state: researched",
+      "`research` は approval を持たない",
+      "`research-report.md` は TAKT built-in `deep-research` の出力を byte-for-byte copy した正本",
+      "source_report_origin: builtin_deep_research",
+      "research-sources.md",
+      "research-claims.md",
+      "open-questions.md",
+      "slides/<deck>/research/history/{timestamp}-{reason}-{filename}",
+      "`research --force` は research artifacts だけを退避",
+    ]) {
+      assert(reportDocs.includes(phrase), `report docs missing research contract phrase: ${phrase}`);
+    }
+  });
+
   await check("research artifact domain resolves separately from review artifacts", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");

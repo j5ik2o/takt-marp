@@ -105,7 +105,7 @@
   - _Boundary:_ Plan Optional Context
   - _Depends:_ 2.4
 
-- [ ] 3.4 workflow/report docs を research 契約と同期する
+- [x] 3.4 workflow/report docs を research 契約と同期する
   - workflow docs に research の任意性、`research-brief.md`、built-in report 正本、plan optional context を記述する
   - report docs に `research-supervision.md` と research artifacts の front matter / sync contract を記述する
   - CLI help と docs の command surface が矛盾しない状態にする
