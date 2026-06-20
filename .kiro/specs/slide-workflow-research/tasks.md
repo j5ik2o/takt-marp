@@ -181,13 +181,13 @@
   - _Boundary:_ Workflow Runner, Validation Surface
   - _Depends:_ 6.1
 
-- [ ] 6.3 reuse decision と lifecycle cleanup を Workflow Runner に接続する
+- [x] 6.3 reuse decision と lifecycle cleanup を Workflow Runner に接続する
   - `--force` が指定された場合は reuse decision を行わず、既存 Research Reuse Sidecar を削除して Research Workflow Wrapper を起動する
   - successful full research と successful reuse research では該当 deck の Research Reuse Sidecar を削除し、reuse research が非 0 終了した場合は再試行用に維持する
   - reuse mode へ入る場合だけ `.takt/workflow-current-target.json` に `research_reuse` と source report metadata を追加する
   - 完了条件: force、full success、reuse success、reuse failure の各 fixture で Research Reuse Sidecar の有無が lifecycle contract と一致する
   - _Requirements:_ 8.1, 8.4, 8.5, 8.6, 8.8
-  - _Boundary:_ Workflow Runner, Research Reuse Sidecar
+  - _Boundary:_ Workflow Runner, Research Reuse Sidecar, Validation Surface
   - _Depends:_ 6.2
 
 - [ ] 7. コア: Research Reuse Workflow と reuse mode を接続する

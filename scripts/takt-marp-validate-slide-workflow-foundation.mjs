@@ -2102,6 +2102,86 @@ async function main() {
     assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "ambiguous reusable reports left a sidecar file");
   });
 
+  await check("research reuse mode writes marker metadata and deletes sidecar on success", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-success-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse success\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-reuse-success", "passed", targetInfo.target));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `reuse research success failed: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse === true, `reuse marker flag missing: ${JSON.stringify(marker)}`);
+    assert(
+      marker.research_source_report_path === path.relative(root, reusable.sourceReportPath).split(path.sep).join("/"),
+      `reuse marker source report path mismatch: ${JSON.stringify(marker)}`,
+    );
+    assert(marker.research_source_report_origin === "builtin_deep_research", `reuse marker origin mismatch: ${JSON.stringify(marker)}`);
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "reuse success did not delete sidecar");
+  });
+
+  await check("research reuse failure preserves sidecar for retry", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-failure-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse failure\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeFailingTaktScript(45));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 45, `reuse failure should preserve TAKT exit code 45, got ${result.status}: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse === true, `reuse failure marker flag missing: ${JSON.stringify(marker)}`);
+    assert(
+      marker.research_source_report_path === path.relative(root, reusable.sourceReportPath).split(path.sep).join("/"),
+      `reuse failure marker source report path mismatch: ${JSON.stringify(marker)}`,
+    );
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse failure did not preserve sidecar for retry");
+  });
+
+  await check("research force deletes existing reuse sidecar and bypasses reuse marker", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-force-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nForce full research\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    await writeSupervision(targetInfo, "research", "researched", "passed", "run-research-old");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-force-success", "passed", targetInfo.target));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath, "--force"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `force full research failed: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse !== true, `force research unexpectedly entered reuse mode: ${JSON.stringify(marker)}`);
+    assert(!Object.hasOwn(marker, "research_source_report_path"), `force marker leaked reuse source report metadata: ${JSON.stringify(marker)}`);
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "force full research did not delete existing sidecar");
+  });
+
   await check("global CLI workflow command uses bundled no-copy templates without npm project", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-bundled-"));
     await makeDeck(root, "demo");
@@ -3542,6 +3622,25 @@ async function writeStaleResearchRun(root, target) {
     ].join("\n"),
     "utf8",
   );
+}
+
+async function writeReusableResearchSidecarFixture(root, targetInfo, sourceRun) {
+  const reportsDir = path.join(root, ".takt", "runs", sourceRun, "reports");
+  const sourceReportPath = path.join(
+    reportsDir,
+    "subworkflows",
+    "iteration-1--step-deep_research--workflow-deep-research",
+    "reports",
+    "research-report.md",
+  );
+  await mkdir(path.dirname(sourceReportPath), { recursive: true });
+  await writeFile(sourceReportPath, `# Built-in Research Report\n\nReusable report from ${sourceRun}.\n`, "utf8");
+  await writeResearchReuseSidecar(targetInfo, {
+    sourceRun,
+    sourceReportsDir: reportsDir,
+    sourceReportPath,
+  }, { root });
+  return Object.freeze({ sourceRun, reportsDir, sourceReportPath });
 }
 
 function fakeFailingTaktScript(exitCode) {

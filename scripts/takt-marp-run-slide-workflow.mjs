@@ -11,6 +11,7 @@ import {
   assertWorkflowAvailable,
   cleanGeneratedOutputs,
   commandSupervisionResult,
+  deleteResearchReuseSidecar,
   downstreamCommands,
   formatError,
   isSuccessfulCommandState,
@@ -19,6 +20,7 @@ import {
   researchArtifactPaths,
   researchTaktTarget,
   requireCommand,
+  resolveResearchReuseCandidate,
   resolveDeckTarget,
   shouldCleanGeneratedOutputsOnForce,
   SlideWorkflowError,
@@ -60,7 +62,11 @@ async function main() {
   // Keep executable availability in preflight so failed setup cannot invalidate current artifacts.
   assertTaktExecutableAvailable();
 
+  let researchReuseCandidate = null;
   if (flags.force) {
+    if (command === "research") {
+      await deleteResearchReuseSidecar(targetInfo);
+    }
     await archiveCommandArtifacts(targetInfo, downstreamCommands(command), "force", { includeApprovals: true });
     if (shouldCleanGeneratedOutputsOnForce(command)) {
       await cleanGeneratedOutputs(targetInfo);
@@ -74,10 +80,14 @@ async function main() {
     await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
   }
 
+  if (command === "research" && !flags.force) {
+    researchReuseCandidate = await resolveResearchReuseCandidate(targetInfo);
+  }
+
   const preparedWorkflow = selectedWorkflowFilePath
     ? await prepareBundledWorkflowRuntime(availableWorkflowPath)
     : undefined;
-  await writeCurrentWorkflowTarget(command, targetInfo);
+  await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate });
   const runSnapshotBefore = await snapshotTaktRuns(command);
   const runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
   const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
@@ -91,7 +101,7 @@ async function main() {
     await preparedWorkflow?.cleanup();
   }
   if (code !== 0) {
-    if (command === "research") {
+    if (command === "research" && !researchReuseCandidate) {
       await writeResearchReuseSidecarFromFailedRun(targetInfo, runDirectorySnapshotBefore);
     }
     process.exitCode = code;
@@ -99,12 +109,13 @@ async function main() {
   }
   if (command === "research") {
     await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore);
+    await deleteResearchReuseSidecar(targetInfo);
   } else {
     await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
   }
 }
 
-async function writeCurrentWorkflowTarget(command, targetInfo) {
+async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
   const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
   await mkdir(path.dirname(markerPath), { recursive: true });
   const marker = {
@@ -117,11 +128,25 @@ async function writeCurrentWorkflowTarget(command, targetInfo) {
     marker.research_brief_path = researchTaktTarget(targetInfo);
     marker.research_output_dir = path.posix.join(targetInfo.target, "research");
   }
+  if (command === "research" && options.researchReuseCandidate) {
+    marker.research_reuse = true;
+    marker.research_source_report_path = projectRelativeMarkerPath(options.researchReuseCandidate.source_report_path);
+    marker.research_source_report_origin = "builtin_deep_research";
+    marker.research_source_run = options.researchReuseCandidate.source_run;
+  }
   await writeFile(
     markerPath,
     `${JSON.stringify(marker, null, 2)}\n`,
     "utf8",
   );
+}
+
+function projectRelativeMarkerPath(filePath) {
+  const relativePath = path.relative(process.cwd(), filePath);
+  if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return filePath;
 }
 
 async function runTakt(command, target, options = {}) {
