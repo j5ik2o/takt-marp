@@ -1,5 +1,5 @@
 name: takt-marp-slide-plan
-description: Marpスライド生成のplan command。briefを検証し、正規化brief、slide plan、review/fix/supervision reportを生成する。
+description: Marpスライド生成のplan command。briefをprimary inputとして検証し、research artifactsがあればoptional contextとして使い、正規化brief、slide plan、review/fix/supervision reportを生成する。
 workflow_config:
   provider_options:
     codex:

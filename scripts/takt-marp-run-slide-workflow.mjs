@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import {
   archiveCommandArtifacts,
+  assertBuiltinWorkflowAvailable,
   assertCommandPrerequisites,
   assertTaktExecutableAvailable,
   assertWorkflowAvailable,
@@ -15,8 +16,11 @@ import {
   isSuccessfulCommandState,
   parseFrontMatter,
   parseArgs,
+  researchArtifactPaths,
+  researchTaktTarget,
   requireCommand,
   resolveDeckTarget,
+  shouldCleanGeneratedOutputsOnForce,
   SlideWorkflowError,
   taktExecutablePath,
 } from "./lib/takt-marp-slide-workflow.mjs";
@@ -48,12 +52,17 @@ async function main() {
 
   await assertCommandPrerequisites(targetInfo, command);
   const availableWorkflowPath = assertWorkflowAvailable(command, { workflowFilePath: selectedWorkflowFilePath });
+  if (command === "research") {
+    assertBuiltinWorkflowAvailable("deep-research");
+  }
   // Keep executable availability in preflight so failed setup cannot invalidate current artifacts.
   assertTaktExecutableAvailable();
 
   if (flags.force) {
     await archiveCommandArtifacts(targetInfo, downstreamCommands(command), "force", { includeApprovals: true });
-    await cleanGeneratedOutputs(targetInfo);
+    if (shouldCleanGeneratedOutputsOnForce(command)) {
+      await cleanGeneratedOutputs(targetInfo);
+    }
   } else if (isSuccessfulCommandState(targetInfo, command)) {
     throw new SlideWorkflowError(
       `Command '${command}' already reached successful state. Use --force to invalidate and rerun.`,
@@ -65,7 +74,8 @@ async function main() {
 
   await writeCurrentWorkflowTarget(command, targetInfo);
   const runSnapshotBefore = await snapshotTaktRuns(command);
-  const code = await runTakt(command, targetInfo.target, {
+  const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
+  const code = await runTakt(command, taktTarget, {
     provider: flags.provider,
     workflowFilePath: selectedWorkflowFilePath ? availableWorkflowPath : undefined,
   });
@@ -73,24 +83,29 @@ async function main() {
     process.exitCode = code;
     return;
   }
-  await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
+  if (command === "research") {
+    await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore);
+  } else {
+    await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
+  }
 }
 
 async function writeCurrentWorkflowTarget(command, targetInfo) {
   const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
   await mkdir(path.dirname(markerPath), { recursive: true });
+  const marker = {
+    command,
+    target: targetInfo.target,
+    deck: targetInfo.deckName,
+    started_at: new Date().toISOString(),
+  };
+  if (command === "research") {
+    marker.research_brief_path = researchTaktTarget(targetInfo);
+    marker.research_output_dir = path.posix.join(targetInfo.target, "research");
+  }
   await writeFile(
     markerPath,
-    `${JSON.stringify(
-      {
-        command,
-        target: targetInfo.target,
-        deck: targetInfo.deckName,
-        started_at: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(marker, null, 2)}\n`,
     "utf8",
   );
 }
@@ -138,6 +153,76 @@ async function syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore) {
   const sourceArtifactCopies = await commandSourceArtifactCopies(reportsDir, command, targetInfo);
   await replaceDeckSourceArtifacts(sourceArtifactCopies);
   await replaceDeckReports(targetInfo.reviewPath, reportNameSet, reportCopies);
+}
+
+async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore) {
+  const reportsDir = await createdTaktReportsDir("research", targetInfo, runSnapshotBefore);
+  if (!reportsDir) {
+    throw new SlideWorkflowError(
+      `TAKT completed but no matching research report directory was found for ${targetInfo.target}.`,
+      "TAKT_RESEARCH_REPORT_SYNC_MISSING",
+    );
+  }
+
+  const researchArtifacts = researchArtifactPaths(targetInfo);
+  const sourceReportPath = await findSingleResearchSourceReportPath(reportsDir);
+  const artifactCopies = [
+    Object.freeze({ sourcePath: sourceReportPath, finalPath: researchArtifacts.report }),
+    ...researchAdapterArtifactCopies(reportsDir, researchArtifacts),
+  ];
+  for (const { sourcePath, finalPath } of artifactCopies) {
+    await replaceFileAtomically(sourcePath, finalPath);
+  }
+}
+
+async function findSingleResearchSourceReportPath(reportsDir) {
+  const found = [];
+  await collectReportPaths(reportsDir, "research-report.md", found);
+  const preferred = found.filter((reportPath) => isDeepResearchWorkflowReport(reportsDir, reportPath));
+  if (preferred.length > 1) {
+    const relativeCandidates = preferred.map((reportPath) => path.relative(process.cwd(), reportPath)).sort();
+    throw new SlideWorkflowError(
+      `TAKT completed but multiple built-in research-report.md candidates were found under selected reports directory: ${relativeCandidates.join(", ")}`,
+      "TAKT_RESEARCH_SOURCE_REPORT_AMBIGUOUS",
+    );
+  }
+  if (preferred.length === 1) {
+    return preferred[0];
+  }
+
+  const directReportPath = path.join(reportsDir, "research-report.md");
+  if (existsSync(directReportPath)) {
+    return directReportPath;
+  }
+
+  throw new SlideWorkflowError(
+    `TAKT completed but no built-in research-report.md was found under workflow-deep-research or selected reports directory root: ${path.relative(process.cwd(), reportsDir)}`,
+    "TAKT_RESEARCH_SOURCE_REPORT_MISSING",
+  );
+}
+
+function isDeepResearchWorkflowReport(reportsDir, reportPath) {
+  const relativePath = path.relative(reportsDir, reportPath);
+  return relativePath.split(path.sep).some((segment) => segment.includes("workflow-deep-research"));
+}
+
+function researchAdapterArtifactCopies(reportsDir, researchArtifacts) {
+  const artifactMap = Object.freeze({
+    "research-sources.md": researchArtifacts.sources,
+    "research-claims.md": researchArtifacts.claims,
+    "open-questions.md": researchArtifacts.openQuestions,
+    "research-supervision.md": researchArtifacts.supervision,
+  });
+  return Object.entries(artifactMap).map(([artifactName, finalPath]) => {
+    const sourcePath = path.join(reportsDir, artifactName);
+    if (!existsSync(sourcePath)) {
+      throw new SlideWorkflowError(
+        `TAKT completed but required research artifact was not found in selected reports directory: ${path.relative(process.cwd(), sourcePath)}`,
+        "TAKT_RESEARCH_ARTIFACT_SYNC_MISSING",
+      );
+    }
+    return Object.freeze({ sourcePath, finalPath });
+  });
 }
 
 async function selectedRunMetadata(reportsDir, command) {

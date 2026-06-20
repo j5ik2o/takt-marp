@@ -3,18 +3,82 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
-import { runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
+import { resolveRuntimeContext, runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
 
 export { SlideWorkflowError, formatError } from "./takt-marp-errors.mjs";
 
-export const COMMANDS = ["plan", "compose", "polish", "deliver"];
-export const COMMAND_STATES = {
-  plan: "planned",
-  compose: "composed",
-  polish: "polished",
-  deliver: "delivered",
-};
-export const APPROVAL_COMMANDS = ["plan", "compose"];
+const COMMAND_CONFIG_ENTRIES = Object.freeze([
+  commandConfig({
+    name: "research",
+    successfulState: "researched",
+    artifactDomain: "research",
+    approvalSupported: false,
+    cleanGeneratedOutputsOnForce: false,
+    invalidationTargets: ["research"],
+    sourceArtifacts: [],
+  }),
+  commandConfig({
+    name: "plan",
+    successfulState: "planned",
+    artifactDomain: "review",
+    approvalSupported: true,
+    invalidationTargets: ["plan", "compose", "polish", "deliver"],
+    sourceArtifacts: ["brief.md"],
+  }),
+  commandConfig({
+    name: "compose",
+    successfulState: "composed",
+    artifactDomain: "review",
+    approvalSupported: true,
+    invalidationTargets: ["compose", "polish", "deliver"],
+    sourceArtifacts: [],
+    requiredState: "plan:planned:approved",
+  }),
+  commandConfig({
+    name: "polish",
+    successfulState: "polished",
+    artifactDomain: "review",
+    approvalSupported: false,
+    invalidationTargets: ["polish", "deliver"],
+    sourceArtifacts: [],
+    requiredState: "compose:composed:approved",
+  }),
+  commandConfig({
+    name: "deliver",
+    successfulState: "delivered",
+    artifactDomain: "review",
+    approvalSupported: false,
+    invalidationTargets: ["deliver"],
+    sourceArtifacts: [],
+    requiredState: "polish:polished",
+  }),
+]);
+
+export const COMMAND_CONFIGS = Object.freeze(Object.fromEntries(COMMAND_CONFIG_ENTRIES.map((config) => [config.name, config])));
+export const COMMANDS = Object.freeze(COMMAND_CONFIG_ENTRIES.map((config) => config.name));
+export const COMMAND_STATES = Object.freeze(
+  Object.fromEntries(COMMAND_CONFIG_ENTRIES.map((config) => [config.name, config.successfulState])),
+);
+export const APPROVAL_COMMANDS = Object.freeze(
+  COMMAND_CONFIG_ENTRIES.filter((config) => config.approvalSupported).map((config) => config.name),
+);
+export const RESEARCH_ARTIFACT_FILES = Object.freeze({
+  brief: "research-brief.md",
+  report: "research-report.md",
+  sources: "research-sources.md",
+  claims: "research-claims.md",
+  openQuestions: "open-questions.md",
+  supervision: "research-supervision.md",
+});
+
+function commandConfig(config) {
+  return Object.freeze({
+    ...config,
+    cleanGeneratedOutputsOnForce: config.cleanGeneratedOutputsOnForce ?? true,
+    invalidationTargets: Object.freeze([...config.invalidationTargets]),
+    sourceArtifacts: Object.freeze([...config.sourceArtifacts]),
+  });
+}
 
 export function parseArgs(argv) {
   const positional = [];
@@ -43,13 +107,18 @@ export function parseArgs(argv) {
 }
 
 export function requireCommand(command) {
-  if (!COMMANDS.includes(command)) {
+  return configFor(command).name;
+}
+
+export function configFor(command) {
+  if (!Object.hasOwn(COMMAND_CONFIGS, command)) {
     throw new SlideWorkflowError(
       `Unsupported command '${command}'. Expected one of: ${COMMANDS.join(", ")}`,
       "INVALID_COMMAND",
     );
   }
-  return command;
+  const config = COMMAND_CONFIGS[command];
+  return config;
 }
 
 export function resolveDeckTarget(target, options = {}) {
@@ -84,6 +153,7 @@ export function resolveDeckTarget(target, options = {}) {
     target: normalized,
     deckPath,
     reviewPath: path.join(deckPath, "review"),
+    researchPath: path.join(deckPath, "research"),
   });
 }
 
@@ -110,6 +180,22 @@ export function assertWorkflowAvailable(command, options = {}) {
 
 export function taktExecutablePath(options = {}) {
   return runtimeExecutablePath("takt", options);
+}
+
+export function builtinWorkflowPath(name, options = {}) {
+  const packageRoot = options.packageRoot ?? options.root ?? resolveRuntimeContext().packageRoot;
+  return path.join(packageRoot, "node_modules", "takt", "builtins", "ja", "workflows", `${name}.yaml`);
+}
+
+export function assertBuiltinWorkflowAvailable(name, options = {}) {
+  const expectedPath = builtinWorkflowPath(name, options);
+  if (!existsSync(expectedPath)) {
+    throw new SlideWorkflowError(
+      `TAKT built-in workflow '${name}' is not available: ${expectedPath}. Reinstall takt-marp and verify the bundled takt package.`,
+      "BUILTIN_WORKFLOW_NOT_AVAILABLE",
+    );
+  }
+  return expectedPath;
 }
 
 export function assertTaktExecutableAvailable(options = {}) {
@@ -198,8 +284,41 @@ export async function readFrontMatter(filePath) {
   return parseFrontMatter(await readFile(filePath, "utf8")).frontMatter;
 }
 
+export function artifactDomainPath(targetInfo, command) {
+  const config = configFor(command);
+  if (config.artifactDomain === "research") {
+    return targetInfo.researchPath ?? path.join(targetInfo.deckPath, "research");
+  }
+  if (config.artifactDomain === "review") {
+    return targetInfo.reviewPath ?? path.join(targetInfo.deckPath, "review");
+  }
+  throw new SlideWorkflowError(`Unsupported artifact domain '${config.artifactDomain}' for ${command}`, "INVALID_COMMAND");
+}
+
+export function researchArtifactPaths(targetInfo) {
+  const researchPath = targetInfo.researchPath ?? path.join(targetInfo.deckPath, "research");
+  return Object.freeze(
+    Object.fromEntries(Object.entries(RESEARCH_ARTIFACT_FILES).map(([key, fileName]) => [key, path.join(researchPath, fileName)])),
+  );
+}
+
+export function researchTaktTarget(targetInfo) {
+  return path.posix.join(targetInfo.target, "research", RESEARCH_ARTIFACT_FILES.brief);
+}
+
+export function assertResearchBriefAvailable(targetInfo) {
+  const briefPath = researchArtifactPaths(targetInfo).brief;
+  if (!existsSync(briefPath)) {
+    throw new SlideWorkflowError(
+      `Missing research-brief.md: ${path.relative(process.cwd(), briefPath)}. Create slides/${targetInfo.deckName}/research/research-brief.md before running research.`,
+      "PREREQUISITE_MISSING",
+    );
+  }
+  return briefPath;
+}
+
 export function supervisionPath(targetInfo, command) {
-  return path.join(targetInfo.reviewPath, `${command}-supervision.md`);
+  return path.join(artifactDomainPath(targetInfo, command), `${command}-supervision.md`);
 }
 
 export function approvalPath(targetInfo, command) {
@@ -319,23 +438,18 @@ export async function checkRequiredState(targetInfo, requirement) {
 }
 
 export async function assertCommandPrerequisites(targetInfo, command) {
-  if (command === "plan") {
-    const briefPath = path.join(targetInfo.deckPath, "brief.md");
-    if (!existsSync(briefPath)) {
-      throw new SlideWorkflowError(`Missing brief.md: ${path.relative(process.cwd(), briefPath)}`, "PREREQUISITE_MISSING");
+  const config = configFor(command);
+  if (command === "research") {
+    assertResearchBriefAvailable(targetInfo);
+  }
+  for (const artifactName of config.sourceArtifacts) {
+    const artifactPath = path.join(targetInfo.deckPath, artifactName);
+    if (!existsSync(artifactPath)) {
+      throw new SlideWorkflowError(`Missing ${artifactName}: ${path.relative(process.cwd(), artifactPath)}`, "PREREQUISITE_MISSING");
     }
-    return;
   }
-  if (command === "compose") {
-    await checkRequiredState(targetInfo, parseRequiredState("plan:planned:approved"));
-    return;
-  }
-  if (command === "polish") {
-    await checkRequiredState(targetInfo, parseRequiredState("compose:composed:approved"));
-    return;
-  }
-  if (command === "deliver") {
-    await checkRequiredState(targetInfo, parseRequiredState("polish:polished"));
+  if (config.requiredState) {
+    await checkRequiredState(targetInfo, parseRequiredState(config.requiredState));
   }
 }
 
@@ -399,14 +513,13 @@ export async function commandSupervisionResult(targetInfo, command) {
 }
 
 export async function archiveCommandArtifacts(targetInfo, commands, reason, options = {}) {
-  const historyPath = path.join(targetInfo.reviewPath, "history");
   const timestamp = timestampForFile();
   const includeApprovals = options.includeApprovals ?? false;
   const moved = [];
 
   for (const command of commands) {
-    const candidates = [supervisionPath(targetInfo, command)];
-    if (includeApprovals) candidates.push(approvalPath(targetInfo, command));
+    const historyPath = path.join(artifactDomainPath(targetInfo, command), "history");
+    const candidates = archiveCandidatePaths(targetInfo, command, { includeApprovals });
 
     for (const source of candidates) {
       if (!existsSync(source)) continue;
@@ -418,6 +531,30 @@ export async function archiveCommandArtifacts(targetInfo, commands, reason, opti
   }
 
   return moved;
+}
+
+function archiveCandidatePaths(targetInfo, command, options = {}) {
+  const config = configFor(command);
+  if (config.artifactDomain === "research") {
+    const artifacts = researchArtifactPaths(targetInfo);
+    return uniquePaths([
+      artifacts.supervision,
+      artifacts.report,
+      artifacts.sources,
+      artifacts.claims,
+      artifacts.openQuestions,
+    ]);
+  }
+
+  const candidates = [supervisionPath(targetInfo, command)];
+  if (options.includeApprovals && config.approvalSupported) {
+    candidates.push(approvalPath(targetInfo, command));
+  }
+  return uniquePaths(candidates);
+}
+
+function uniquePaths(paths) {
+  return [...new Set(paths)];
 }
 
 export async function cleanGeneratedOutputs(targetInfo, options = {}) {
@@ -433,8 +570,11 @@ export async function cleanGeneratedOutputs(targetInfo, options = {}) {
 }
 
 export function downstreamCommands(command) {
-  const index = COMMANDS.indexOf(command);
-  return COMMANDS.slice(index);
+  return [...configFor(command).invalidationTargets];
+}
+
+export function shouldCleanGeneratedOutputsOnForce(command) {
+  return configFor(command).cleanGeneratedOutputsOnForce;
 }
 
 export function timestampForFile() {

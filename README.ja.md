@@ -6,7 +6,7 @@ Marpスライドデッキと、半自動でデッキを生成するためのTAKT
 
 ## TAKT Marp workflow
 
-このworkflowは `slides/<deck>/brief.md` を起点に、`plan`、`compose`、`polish`、`deliver` の状態へ進めます。
+このworkflowは `slides/<deck>/brief.md` を起点に、`plan`、`compose`、`polish`、`deliver` の状態へ進めます。外部調査が必要な deck だけ、任意で先に `research` を実行します。
 
 詳細なworkflow contract: [docs/marp-slide-workflow.md](docs/marp-slide-workflow.md)
 
@@ -34,6 +34,7 @@ Output Requirementsの例:
 ### 2. workflowを実行する
 
 ```bash
+takt-marp research "slides/<deck>"
 takt-marp plan "slides/<deck>"
 takt-marp approve "slides/<deck>" plan --by <name>
 takt-marp compose "slides/<deck>"
@@ -49,6 +50,7 @@ takt-marp plan "slides/<deck>"
 ```
 
 人間承認は `plan` と `compose` に対してのみ `takt-marp approve` で記録します。`review`、`revise`、`qa`、`build-qa` はworkflow内部の責務であり、トップレベルコマンドではありません。
+`research` は `slides/<deck>/research/research-brief.md` を読み、`plan` の必須前提ではありません。
 
 ### 3. 生成されるファイル
 
@@ -59,6 +61,7 @@ slides/<deck>/
   design-system.md
   SLIDES.md
   images/*.svg
+  research/*.md
   review/*.md
 ```
 

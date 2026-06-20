@@ -1,7 +1,7 @@
 正規化されたbriefからスライド設計図を作成してください。
 
 **やること:**
-1. `brief.normalized.md`、`reference-analysis.md`、必要なSource Materialsを読んでください。deck-local `slides/<deck>/brief.normalized.md` / `slides/<deck>/reference-analysis.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` / `Report Directory/reference-analysis.md` を読んでください。
+1. `brief.normalized.md`、`reference-analysis.md`、必要なSource Materialsを読んでください。deck-local `slides/<deck>/brief.normalized.md` / `slides/<deck>/reference-analysis.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` / `Report Directory/reference-analysis.md` を読んでください。primary input は引き続き `brief.md` / `brief.normalized.md` です。
 2. bindされている `takt-marp-slide-plan` と `takt-marp-slide-blueprint` の output contract に従って、`plan.md` と `slide-blueprint.md` を作成してください。古いdocsのplan記述とこのinstructionやoutput contractが矛盾する場合は、このinstructionとoutput contractを優先してください。
 3. compose用の詳細設計として `slide-blueprint.md` を作成してください。`plan.md` は講義全体の設計とcoverage、`slide-blueprint.md` は各slideのcontent atoms、visual strategy、section assembly manifestを担います。
 4. 各スライドに `Message`、`Layout`、`Content`、`Visual`、`Visual Strategy`、`Speaker note intent`、`Source` を必ず書いてください。
@@ -17,7 +17,11 @@
 10. `slide-blueprint.md` に `Slide Blueprint Table` と `Section Assembly Manifest` を必ず作ってください。各slideのcontent atomsを具体化し、後続composeが本文を一括推測しなくて済む粒度にしてください。
 11. 固定アウトラインの leaf 項目は `brief.normalized.md` の `Fixed Outline` / `Required Topics` から拾い、順序と表記を変えずに coverage 対象にしてください。
 12. 未対応項目がある場合は `needs_input` にせず、`Plan Findings` に stable finding ID、severity、evidence、修正案を書いてください。Coverage Matrix 側にも `not covered -> finding_id` を残してください。
-13. `Target slide count` と固定アウトライン・情報密度・講義本体要件が矛盾する場合は、勝手に圧縮しないでください。`Target slide count: 5` は5枚の概要版として計画し、講義本体を生成するには target を100〜140または期待値相当(例:119)へ修正する必要があることを `Plan Findings` に記録してください。
+13. deck-local `slides/<deck>/research/research-report.md`、`slides/<deck>/research/research-claims.md`、`slides/<deck>/research/open-questions.md` が存在する場合だけ optional research context として読んでください。存在しない場合は従来どおり brief と reference-analysis から plan を作成し、failure や `needs_input` にしないでください。
+14. research context を使った場合は、`Research Context Usage` に artifact 名、claim_id/source_id などの識別子、plan へ反映した根拠、反映しなかった理由を残してください。各 slide の `Source` でも research 由来の根拠を識別してください。
+15. `open-questions.md` は未解決前提または保留として扱い、推測で回答を埋めず、必要なら `Plan Findings` または `Non-blocking human review points` に残してください。
+16. plan command の成功条件として外部 web access や追加調査を要求しないでください。
+17. `Target slide count` と固定アウトライン・情報密度・講義本体要件が矛盾する場合は、勝手に圧縮しないでください。`Target slide count: 5` は5枚の概要版として計画し、講義本体を生成するには target を100〜140または期待値相当(例:119)へ修正する必要があることを `Plan Findings` に記録してください。
 
 **artifact 出力:**
 - この step には `Report Directory` / `Report File` が渡されます。`Report File` の `plan.md` を正本として必ず出力してください。
@@ -27,6 +31,7 @@
 **判定基準:**
 - 発表日、deck titleの表現、appendix要否、Deliverablesの追加要否など、人間が後で承認できる事項はplan作成を止めないでください。
 - slide count、中心メッセージ、必須Source Materialの根拠が決められず `plan.md` を作れない場合だけ `needs_input` にしてください。
+- research artifacts がないことや、`open-questions.md` に未解決項目があることだけを `needs_input` にしないでください。
 - 固定アウトラインや要求密度に対して slide count が不足する場合は、`plan.md` を作ったうえで finding として修正対象にしてください。入力不足ではなく、brief/plan の矛盾として扱います。
 
 **必須出力**
@@ -36,6 +41,7 @@
 - Slide blueprint:
 - Coverage matrix:
 - Visual rendering coverage:
+- Research context usage:
 - Plan findings:
 - Files changed:
 - Non-blocking human review points:

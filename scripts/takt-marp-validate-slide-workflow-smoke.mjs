@@ -16,6 +16,7 @@ import {
   parseFrontMatter,
   readApproval,
   readFrontMatter,
+  researchArtifactPaths,
   readSupervision,
   resolveDeckTarget,
   supervisionPath,
@@ -30,9 +31,11 @@ const FIXTURE_PATH = path.join(PACKAGE_ROOT, "fixtures", "marp-slide-workflow", 
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const DEFAULT_TARGET = "slides/_workflow-smoke";
 const DEFAULT_SMOKE_PROVIDER = "mock";
+const PLAN_WITHOUT_RESEARCH_TARGET = "slides/_workflow-smoke-plan-without-research";
 const STATE_VALIDATION_TARGET = "slides/_workflow-smoke-state-validation";
 const RENDER_VALIDATION_TARGET = "slides/_workflow-smoke-render-validation";
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
+const TEMPLATE_WORKFLOW_COMMANDS = ["research", ...WORKFLOW_COMMANDS];
 const SOURCE_FIXTURE_EXCLUDES = new Set(["README.md"]);
 const WORKFLOW_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
 const NODE_CHECK_TIMEOUT_MS = 2 * 60 * 1000;
@@ -44,6 +47,23 @@ const SMOKE_ORGANIZER = "サンプル研修ラボ株式会社";
 const SMOKE_EVENT_DATE = "2031年4月17日（木）10:00〜16:30";
 const SMOKE_VENUE = "ミラージュホール A";
 const SMOKE_COMMON_EXAMPLE = "備品購入申請・承認";
+const MOCK_BUILTIN_RESEARCH_REPORT = [
+  "# Built-in Research Report",
+  "",
+  "## Findings",
+  "- Atomic Design style slide components can be planned as optional research context.",
+  "- Missing source URL, retrieval time, and confidence are intentionally absent from this mock built-in report.",
+  "",
+  "## Open Questions",
+  "- Which workshop references should a human supply before final production?",
+  "",
+].join("\n");
+const MOCK_ADAPTER_SHADOW_RESEARCH_REPORT = [
+  "# Adapter Shadow Report",
+  "",
+  "This top-level adapter shadow report must not replace the built-in deep-research report.",
+  "",
+].join("\n");
 const SMOKE_PROVIDER_SETTINGS_RELATIVE_PATHS = Object.freeze([
   ".takt/config.yaml",
   ".takt/provider-settings.yaml",
@@ -116,8 +136,20 @@ async function main() {
     checks.push(...renderEvidenceBoundaryChecks.checks);
     commands.push(...renderEvidenceBoundaryChecks.commands);
     observedPaths.push(...renderEvidenceBoundaryChecks.observedPaths);
+    if (isMockProvider(options)) {
+      currentCheckName = "sequence:plan-without-research";
+      const planWithoutResearchChecks = await runPlanWithoutResearchChecks({ provider: options.provider, templateContext, keep: options.keep });
+      checks.push(...planWithoutResearchChecks.checks);
+      commands.push(...planWithoutResearchChecks.commands);
+      observedPaths.push(...planWithoutResearchChecks.observedPaths);
+    }
+    currentCheckName = "sequence:research";
+    const researchSequenceChecks = await runResearchSequenceChecks(targetInfo, { provider: options.provider, templateContext });
+    checks.push(...researchSequenceChecks.checks);
+    commands.push(...researchSequenceChecks.commands);
+    observedPaths.push(...researchSequenceChecks.observedPaths);
     currentCheckName = "sequence:workflow";
-    const planSequenceChecks = await runPlanSequenceChecks(targetInfo, { provider: options.provider, templateContext });
+    const planSequenceChecks = await runPlanSequenceChecks(targetInfo, { provider: options.provider, templateContext, researchExpected: true });
     checks.push(...planSequenceChecks.checks);
     commands.push(...planSequenceChecks.commands);
     observedPaths.push(...planSequenceChecks.observedPaths);
@@ -325,7 +357,7 @@ async function assertSmokeFixtureContracts(targetInfo) {
   }
 }
 
-async function assertPlanSourceArtifacts(targetInfo) {
+async function assertPlanSourceArtifacts(targetInfo, { researchExpected = false } = {}) {
   const artifactPaths = [
     path.join(targetInfo.deckPath, "brief.normalized.md"),
     path.join(targetInfo.deckPath, "reference-analysis.md"),
@@ -367,8 +399,28 @@ async function assertPlanSourceArtifacts(targetInfo) {
     "Found: no",
     "analysis only; do not copy reference slides",
     "Plan Implications",
+    `Research Context Available: ${researchExpected ? "yes" : "no"}`,
   ]) {
     assert(referenceAnalysis.includes(phrase), `sequence:plan-source-artifacts reference-analysis missing '${phrase}'`);
+  }
+  const expectedResearchInputs = researchExpected
+    ? ["research-report.md", "research-claims.md", "open-questions.md"]
+    : ["Inputs read: none"];
+  for (const phrase of expectedResearchInputs) {
+    assert(referenceAnalysis.includes(phrase), `sequence:plan-source-artifacts reference-analysis missing research context '${phrase}'`);
+  }
+  if (researchExpected) {
+    for (const phrase of ["not_present_in_builtin_report", "unresolved", "not inferred"]) {
+      assert(referenceAnalysis.includes(phrase), `sequence:plan-source-artifacts reference-analysis missing research caveat '${phrase}'`);
+      assert(plan.includes(phrase), `sequence:plan-source-artifacts plan missing research caveat '${phrase}'`);
+    }
+  } else {
+    for (const [label, source] of [["reference-analysis", referenceAnalysis], ["plan", plan]]) {
+      assert(!/research[^\n]*needs_input/i.test(source), `sequence:plan-source-artifacts ${label} must not mark absent research as needs_input`);
+      assert(!source.includes("research-report.md"), `sequence:plan-source-artifacts ${label} must not read absent research-report.md`);
+      assert(!source.includes("research-claims.md"), `sequence:plan-source-artifacts ${label} must not read absent research-claims.md`);
+      assert(!source.includes("open-questions.md"), `sequence:plan-source-artifacts ${label} must not read absent open-questions.md`);
+    }
   }
   for (const phrase of [
     "# Slide Plan",
@@ -448,7 +500,7 @@ function extractBetween(source, startMarker, endMarker) {
 export function resolveSmokeTemplateContext(projectRoot = ROOT) {
   const source = resolveTemplateSource({ projectRoot });
   const workflowFiles = Object.fromEntries(
-    WORKFLOW_COMMANDS.map((command) => [command, workflowFilePath(source, command)]),
+    TEMPLATE_WORKFLOW_COMMANDS.map((command) => [command, workflowFilePath(source, command)]),
   );
   return Object.freeze({
     projectRoot: path.resolve(projectRoot),
@@ -767,6 +819,120 @@ async function runRenderEvidenceBoundaryChecks() {
   });
 }
 
+async function runPlanWithoutResearchChecks(options) {
+  const checks = [];
+  const commands = [];
+  const observedPaths = [];
+  let targetInfo;
+  try {
+    const setup = await setupAdditionalSmokeDeck(PLAN_WITHOUT_RESEARCH_TARGET);
+    targetInfo = setup.targetInfo;
+    observedPaths.push(...setup.observedPaths);
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+
+    for (const filePath of [researchArtifacts.report, researchArtifacts.sources, researchArtifacts.claims, researchArtifacts.openQuestions, researchArtifacts.supervision]) {
+      await rm(filePath, { force: true });
+    }
+
+    const planCommand = await runWorkflowCommand("sequence:plan-without-research-command", "plan", targetInfo, options);
+    commands.push(planCommand);
+    const planArtifactPaths = await assertPlanSourceArtifacts(targetInfo, { researchExpected: false });
+    observedPaths.push(...planArtifactPaths.map(relativePath));
+    const supervision = await readSupervision(targetInfo, "plan");
+    assert(supervision.data.state === "planned", `sequence:plan-without-research-supervision expected planned, got ${supervision.data.state}`);
+    assert(supervision.data.result === "passed", `sequence:plan-without-research-supervision expected passed, got ${supervision.data.result}`);
+    observedPaths.push(relativePath(supervision.filePath));
+    checks.push(pass("sequence:plan-without-research-command", "slide:plan completed when optional research artifacts were absent."));
+    checks.push(pass("sequence:plan-without-research-optional-context", "plan and reference-analysis record research context as Available: no without needs_input."));
+    checks.push(pass("sequence:plan-without-research-supervision", "plan-supervision.md remains valid for the research-absent plan path."));
+
+    return Object.freeze({
+      checks: Object.freeze(checks),
+      commands: Object.freeze(commands),
+      observedPaths: Object.freeze(observedPaths),
+    });
+  } finally {
+    if (!options.keep && targetInfo) {
+      await rm(targetInfo.deckPath, { recursive: true, force: true });
+    }
+  }
+}
+
+async function runResearchSequenceChecks(targetInfo, options) {
+  const checks = [];
+  const commands = [];
+  const observedPaths = [];
+  const researchArtifacts = researchArtifactPaths(targetInfo);
+
+  await assertReadableFile(researchArtifacts.brief, "sequence:research-brief-fixture");
+  const briefBefore = await readFile(researchArtifacts.brief, "utf8");
+  observedPaths.push(relativePath(researchArtifacts.brief));
+
+  const researchCommand = await runWorkflowCommand("sequence:research-command", "research", targetInfo, options);
+  commands.push(researchCommand);
+  const artifactPaths = await assertResearchArtifacts(targetInfo);
+  observedPaths.push(...artifactPaths.map(relativePath));
+  assert((await readFile(researchArtifacts.brief, "utf8")) === briefBefore, "sequence:research-brief-fixture research command changed research-brief.md");
+  checks.push(pass("sequence:research-command", "slide:research completed for the smoke deck before plan."));
+  checks.push(pass("sequence:research-supervision", "research-supervision.md exists in the research domain with state researched and result passed."));
+  checks.push(pass("sequence:research-report-byte-copy", "research-report.md matches the built-in deep-research source report byte-for-byte."));
+  checks.push(pass("sequence:research-adapter-artifacts", "research-sources.md, research-claims.md, and open-questions.md preserve source_report_origin and not_present_in_builtin_report gaps."));
+  checks.push(pass("sequence:research-domain-isolation", "research artifacts are synchronized under slides/<deck>/research/ and do not leak into review/."));
+
+  return Object.freeze({
+    checks: Object.freeze(checks),
+    commands: Object.freeze(commands),
+    observedPaths: Object.freeze(observedPaths),
+  });
+}
+
+async function assertResearchArtifacts(targetInfo) {
+  const artifacts = researchArtifactPaths(targetInfo);
+  const requiredPaths = [
+    artifacts.report,
+    artifacts.sources,
+    artifacts.claims,
+    artifacts.openQuestions,
+    artifacts.supervision,
+  ];
+  for (const filePath of requiredPaths) {
+    await assertReadableFile(filePath, "sequence:research-artifacts");
+  }
+
+  const supervision = await readSupervision(targetInfo, "research");
+  assert(supervision.data.command === "research", `sequence:research-supervision command mismatch: ${supervision.data.command}`);
+  assert(supervision.data.target === targetInfo.target, `sequence:research-supervision target mismatch: ${supervision.data.target}`);
+  assert(supervision.data.state === "researched", `sequence:research-supervision expected researched, got ${supervision.data.state}`);
+  assert(supervision.data.result === "passed", `sequence:research-supervision expected passed, got ${supervision.data.result}`);
+
+  const report = await readFile(artifacts.report, "utf8");
+  assert(report === MOCK_BUILTIN_RESEARCH_REPORT, "sequence:research-report-byte-copy research-report.md does not match the mock built-in report");
+  assert(!report.includes("Adapter Shadow Report"), "sequence:research-report-byte-copy adapter shadow report replaced the built-in report");
+
+  for (const [label, filePath] of [
+    ["sources", artifacts.sources],
+    ["claims", artifacts.claims],
+    ["openQuestions", artifacts.openQuestions],
+  ]) {
+    const parsed = parseFrontMatter(await readFile(filePath, "utf8"));
+    assert(parsed.frontMatter.command === "research", `sequence:research-adapter-artifacts ${label} command mismatch: ${parsed.frontMatter.command}`);
+    assert(parsed.frontMatter.target === targetInfo.target, `sequence:research-adapter-artifacts ${label} target mismatch: ${parsed.frontMatter.target}`);
+    assert(parsed.frontMatter.source_report === "research-report.md", `sequence:research-adapter-artifacts ${label} source_report mismatch: ${parsed.frontMatter.source_report}`);
+    assert(
+      parsed.frontMatter.source_report_origin === "builtin_deep_research",
+      `sequence:research-adapter-artifacts ${label} source_report_origin mismatch: ${parsed.frontMatter.source_report_origin}`,
+    );
+    assert(parsed.body.includes("not_present_in_builtin_report"), `sequence:research-adapter-artifacts ${label} lost missing-info sentinel`);
+  }
+
+  for (const fileName of ["research-report.md", "research-sources.md", "research-claims.md", "open-questions.md", "research-supervision.md"]) {
+    const reviewArtifactPath = path.join(targetInfo.reviewPath, fileName);
+    assert(!existsSync(reviewArtifactPath), `sequence:research-domain-isolation research artifact leaked into review/: ${relativePath(reviewArtifactPath)}`);
+  }
+
+  return Object.freeze(requiredPaths);
+}
+
 async function runPlanSequenceChecks(targetInfo, options) {
   const checks = [];
   const commands = [];
@@ -774,7 +940,7 @@ async function runPlanSequenceChecks(targetInfo, options) {
 
   const planCommand = await runWorkflowCommand("sequence:plan-command", "plan", targetInfo, options);
   commands.push(planCommand);
-  const planArtifactPaths = await assertPlanSourceArtifacts(targetInfo);
+  const planArtifactPaths = await assertPlanSourceArtifacts(targetInfo, { researchExpected: options.researchExpected });
   observedPaths.push(...planArtifactPaths.map(relativePath));
   const supervision = await readSupervision(targetInfo, "plan");
   assert(supervision.data.state === "planned", `sequence:plan-supervision-state expected planned, got ${supervision.data.state}`);
@@ -1352,7 +1518,10 @@ async function writeMockCommandResult(targetInfo, command) {
   await rm(path.dirname(reportsPath), { recursive: true, force: true });
   await mkdir(reportsPath, { recursive: true });
 
-  if (command === "plan") {
+  if (command === "research") {
+    await writeMockResearchArtifacts(targetInfo, workflowRunId, reportsPath);
+    return;
+  } else if (command === "plan") {
     await writeMockPlanArtifacts(targetInfo);
   } else if (command === "compose") {
     await writeMockComposeArtifacts(targetInfo);
@@ -1367,6 +1536,68 @@ async function writeMockCommandResult(targetInfo, command) {
   }
 }
 
+async function writeMockResearchArtifacts(targetInfo, workflowRunId, reportsPath) {
+  const artifacts = researchArtifactPaths(targetInfo);
+  await mkdir(path.dirname(artifacts.report), { recursive: true });
+  await mkdir(path.join(reportsPath, "subworkflows", "workflow-deep-research"), { recursive: true });
+  await writeFile(path.join(reportsPath, "research-report.md"), MOCK_ADAPTER_SHADOW_RESEARCH_REPORT, "utf8");
+  await writeFile(path.join(reportsPath, "subworkflows", "workflow-deep-research", "research-report.md"), MOCK_BUILTIN_RESEARCH_REPORT, "utf8");
+  await writeFile(artifacts.report, MOCK_BUILTIN_RESEARCH_REPORT, "utf8");
+  for (const [filePath, title] of [
+    [artifacts.sources, "Research Sources"],
+    [artifacts.claims, "Research Claims"],
+    [artifacts.openQuestions, "Open Questions"],
+  ]) {
+    await writeFile(filePath, mockResearchDerivedArtifact(targetInfo, title), "utf8");
+  }
+  await writeFile(
+    artifacts.supervision,
+    [
+      "---",
+      "command: research",
+      `target: ${targetInfo.target}`,
+      `generated_at: ${MOCK_GENERATED_AT}`,
+      `workflow_run_id: ${workflowRunId}`,
+      "step: supervision",
+      "cycle: 1",
+      "state: researched",
+      "result: passed",
+      "blocking_findings: 0",
+      "major_findings: 0",
+      "minor_findings: 0",
+      "info_findings: 0",
+      "---",
+      "",
+      "# Mock Research Supervision",
+      "",
+      "Result: passed",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+}
+
+function mockResearchDerivedArtifact(targetInfo, title) {
+  return [
+    "---",
+    "command: research",
+    `target: ${targetInfo.target}`,
+    `generated_at: ${MOCK_GENERATED_AT}`,
+    "source_report: research-report.md",
+    "source_report_origin: builtin_deep_research",
+    "---",
+    "",
+    `# ${title}`,
+    "",
+    "- evidence_status: not_present_in_builtin_report",
+    "- url: not_present_in_builtin_report",
+    "- retrieved_at: not_present_in_builtin_report",
+    "- confidence: not_present_in_builtin_report",
+    "- unresolved: Which workshop references should a human supply before final production?",
+    "",
+  ].join("\n");
+}
+
 async function writeReportCopies(reviewPath, reportsPath, reportName, content) {
   await writeFile(path.join(reviewPath, reportName), content, "utf8");
   await writeFile(path.join(reportsPath, reportName), content, "utf8");
@@ -1375,6 +1606,7 @@ async function writeReportCopies(reviewPath, reportsPath, reportName, content) {
 async function writeMockPlanArtifacts(targetInfo) {
   const brief = await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8");
   const outline = parseSmokeFixedOutline(brief);
+  const researchContext = await readMockResearchPlanContext(targetInfo);
   const coverageRows = outline.leaves.map((item, index) => {
     const slideId = `S${String(Math.min(index + 1, 5)).padStart(3, "0")}`;
     return `| ${item.chapter} | ${item.section} | ${item.label} | ${slideId} | covered |`;
@@ -1467,6 +1699,11 @@ async function writeMockPlanArtifacts(targetInfo) {
       "- Use brief.normalized.md as source of truth for the smoke deck.",
       "- Treat Target slide count: 5 as overview mode; lecture-body would require 100〜140.",
       "",
+      "## Optional Research Context",
+      `- Research Context Available: ${researchContext.available ? "yes" : "no"}`,
+      `- Inputs read: ${researchContext.inputs.length > 0 ? researchContext.inputs.join(", ") : "none"}`,
+      ...researchContext.referenceNotes,
+      "",
     ].join("\n"),
     "utf8",
   );
@@ -1508,6 +1745,7 @@ async function writeMockPlanArtifacts(targetInfo) {
       "",
       "## Plan Findings",
       "- PF-SLIDE-COUNT-001: Target slide count: 5 is valid only for overview mode; lecture-body would require 100〜140.",
+      ...researchContext.planFindings,
       "",
       "## Requested Deliverables",
       "- deliverables: [html, pdf]",
@@ -1547,6 +1785,41 @@ async function writeMockPlanArtifacts(targetInfo) {
     ].join("\n"),
     "utf8",
   );
+}
+
+async function readMockResearchPlanContext(targetInfo) {
+  const artifacts = researchArtifactPaths(targetInfo);
+  const required = [
+    ["research-report.md", artifacts.report],
+    ["research-claims.md", artifacts.claims],
+    ["open-questions.md", artifacts.openQuestions],
+  ];
+  const available = required.every(([, filePath]) => existsSync(filePath));
+  if (!available) {
+    return Object.freeze({
+      available: false,
+      inputs: Object.freeze([]),
+      referenceNotes: Object.freeze(["- Research artifacts are optional; Available: no."]),
+      planFindings: Object.freeze(["- PF-RESEARCH-OPTIONAL-001: Research context Available: no; plan proceeds from brief.md only."]),
+    });
+  }
+
+  const openQuestions = await readFile(artifacts.openQuestions, "utf8");
+  assert(openQuestions.includes("not_present_in_builtin_report"), "mock plan research context missing not_present_in_builtin_report sentinel");
+  return Object.freeze({
+    available: true,
+    inputs: Object.freeze(required.map(([name]) => name)),
+    referenceNotes: Object.freeze([
+      "- Research artifacts are optional; Available: yes.",
+      "- Research origin: builtin_deep_research via research-report.md.",
+      "- Missing URL, retrieval time, confidence, and claim-source mapping remain not_present_in_builtin_report.",
+      "- unresolved open questions are not inferred or completed by plan.",
+    ]),
+    planFindings: Object.freeze([
+      "- PF-RESEARCH-001: Research context Available: yes; cite research-report.md, research-claims.md, and open-questions.md as optional context.",
+      "- PF-RESEARCH-002: unresolved research gaps remain not_present_in_builtin_report and are not inferred.",
+    ]),
+  });
 }
 
 async function writeMockComposeArtifacts(targetInfo) {
@@ -2278,7 +2551,7 @@ function assertNoDeckLocalLoopMonitorFacets(templateContext) {
 async function assertWorkflowDoctorPasses(templateContext) {
   const doctorRoot = await mkdtemp(path.join(os.tmpdir(), "takt-marp-smoke-doctor-"));
   const workflowPaths = [
-    ...WORKFLOW_COMMANDS.map((command) => path.join(".takt", "workflows", `takt-marp-slide-${command}.yaml`)),
+    ...TEMPLATE_WORKFLOW_COMMANDS.map((command) => path.join(".takt", "workflows", `takt-marp-slide-${command}.yaml`)),
     path.join(".takt", "workflows", "takt-marp-slide-ai-quality-gate.yaml"),
   ];
   try {
@@ -2309,7 +2582,7 @@ function assertTextSequence(source, snippets, name) {
 
 function assertNoUnsupportedWorkflowCommandGateObjects(templateContext) {
   const workflowFiles = [
-    ...WORKFLOW_COMMANDS.map((command) => templateContext.workflowFiles[command]),
+    ...TEMPLATE_WORKFLOW_COMMANDS.map((command) => templateContext.workflowFiles[command]),
     templateContext.aiGateWorkflowFile,
   ];
   for (const workflowFile of workflowFiles) {
@@ -2441,6 +2714,15 @@ function printHelp() {
 
 async function setupSmokeDeck(target) {
   assertSmokeTarget(target);
+  return setupSmokeDeckUnchecked(target);
+}
+
+async function setupAdditionalSmokeDeck(target) {
+  assert(target.startsWith("slides/_workflow-smoke-"), `additional smoke target must stay under slides/_workflow-smoke-*: ${target}`);
+  return setupSmokeDeckUnchecked(target);
+}
+
+async function setupSmokeDeckUnchecked(target) {
   if (!existsSync(FIXTURE_PATH)) {
     throw new SlideWorkflowError(`Smoke fixture not found: ${relativePath(FIXTURE_PATH)}`, "FIXTURE_MISSING");
   }

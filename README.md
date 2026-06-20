@@ -6,7 +6,7 @@ Marp slide decks and a TAKT workflow for semi-automated deck generation.
 
 ## TAKT Marp workflow
 
-The workflow starts from `slides/<deck>/brief.md` and moves through `plan`, `compose`, `polish`, and `deliver`.
+The workflow starts from `slides/<deck>/brief.md` and moves through `plan`, `compose`, `polish`, and `deliver`. Use optional `research` first only when a deck needs external research context.
 
 Detailed workflow contract: [docs/marp-slide-workflow.md](docs/marp-slide-workflow.md)
 
@@ -34,6 +34,7 @@ Example output requirement:
 ### 2. Run the workflows
 
 ```bash
+takt-marp research "slides/<deck>"
 takt-marp plan "slides/<deck>"
 takt-marp approve "slides/<deck>" plan --by <name>
 takt-marp compose "slides/<deck>"
@@ -49,6 +50,7 @@ takt-marp plan "slides/<deck>"
 ```
 
 Human approval is recorded by `takt-marp approve` for `plan` and `compose` only. `review`, `revise`, `qa`, and `build-qa` are internal workflow responsibilities, not top-level commands.
+`research` reads `slides/<deck>/research/research-brief.md` and is not required before `plan`.
 
 ### 3. Generated files
 
@@ -59,6 +61,7 @@ slides/<deck>/
   design-system.md
   SLIDES.md
   images/*.svg
+  research/*.md
   review/*.md
 ```
 
