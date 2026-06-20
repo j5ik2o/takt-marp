@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.3](https://github.com/j5ik2o/takt-marp/compare/v0.4.2...v0.4.3) (2026-06-20)
+
+### Bug Fixes
+
+* **slide-workflow:** keep bundled runtime in project allowlist ([1462c36](https://github.com/j5ik2o/takt-marp/commit/1462c363d93de1e89c0db8605d70d64560e3f3b8))
+
 ## [0.4.2](https://github.com/j5ik2o/takt-marp/compare/v0.4.1...v0.4.2) (2026-06-20)
 
 ### Bug Fixes
