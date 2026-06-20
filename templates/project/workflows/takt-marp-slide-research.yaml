@@ -6,7 +6,7 @@ workflow_config:
       network_access: false
     opencode:
       network_access: false
-max_steps: 5
+max_steps: 50
 initial_step: deep_research
 
 personas:
