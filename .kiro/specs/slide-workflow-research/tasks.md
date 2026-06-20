@@ -19,7 +19,7 @@
   - _Boundary:_ Research Supervision Validator, Research Artifact Sync
   - _Depends:_ 1.1
 
-- [ ] 1.3 research preflight と built-in workflow availability を runner に追加する
+- [x] 1.3 research preflight と built-in workflow availability を runner に追加する
   - `takt-marp research slides/<deck>` は既存 target contract で deck を検証し、TAKT target だけを `slides/<deck>/research/research-brief.md` に変換する
   - `research-brief.md` がない場合は `brief.md` から推測せず、TAKT 起動前に `PREREQUISITE_MISSING` で失敗する
   - wrapper workflow template と TAKT built-in `deep-research` の存在を TAKT 起動前に検証し、不在時は明示 error を返す

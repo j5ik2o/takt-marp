@@ -1053,10 +1053,122 @@ async function main() {
     const workflowArgIndex = args.indexOf("-w");
     assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
     assert(args[workflowArgIndex + 1] === selectedWorkflowPath, `TAKT did not receive selected workflow file path: ${args.join(" ")}`);
+    const targetArgIndex = args.indexOf("-t");
+    assert(targetArgIndex >= 0, `TAKT args did not include -t: ${args.join(" ")}`);
+    assert(args[targetArgIndex + 1] === "slides/demo", `plan TAKT target changed unexpectedly: ${args.join(" ")}`);
     const providerArgIndex = args.indexOf("--provider");
     assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
     assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.target === "slides/demo", `plan marker target changed unexpectedly: ${JSON.stringify(marker)}`);
+    assert(!Object.hasOwn(marker, "research_brief_path"), `plan marker included research brief path: ${JSON.stringify(marker)}`);
+    assert(!Object.hasOwn(marker, "research_output_dir"), `plan marker included research output dir: ${JSON.stringify(marker)}`);
     assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
+  });
+
+  await check("research runner requires research brief before TAKT", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-missing-brief-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+    const briefBefore = await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "research runner unexpectedly succeeded without research brief");
+    assert(result.stderr.includes("PREREQUISITE_MISSING:"), `missing research brief did not report PREREQUISITE_MISSING: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite missing research brief");
+    assert((await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8")) === briefBefore, "research runner inferred or changed deck brief.md");
+  });
+
+  await check("research runner targets research brief and writes handoff marker", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-valid-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    const expectedResearchBriefPath = "slides/demo/research/research-brief.md";
+    const expectedResearchOutputDir = "slides/demo/research";
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+    const briefBefore = await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `research runner failed: ${result.stderr}`);
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(args[workflowArgIndex + 1] === selectedWorkflowPath, `TAKT did not receive selected research workflow file path: ${args.join(" ")}`);
+    const targetArgIndex = args.indexOf("-t");
+    assert(targetArgIndex >= 0, `TAKT args did not include -t: ${args.join(" ")}`);
+    assert(args[targetArgIndex + 1] === expectedResearchBriefPath, `research TAKT target was not research brief: ${args.join(" ")}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.command === "research", `research marker command mismatch: ${JSON.stringify(marker)}`);
+    assert(marker.target === targetInfo.target, `research marker target should stay user-facing: ${JSON.stringify(marker)}`);
+    assert(marker.research_brief_path === expectedResearchBriefPath, `research marker missing brief path: ${JSON.stringify(marker)}`);
+    assert(marker.research_output_dir === expectedResearchOutputDir, `research marker missing output dir: ${JSON.stringify(marker)}`);
+    assert(!path.isAbsolute(marker.research_brief_path), `research marker brief path must be target-relative: ${JSON.stringify(marker)}`);
+    assert(!path.isAbsolute(marker.research_output_dir), `research marker output dir must be target-relative: ${JSON.stringify(marker)}`);
+    assert(
+      !existsSync(path.join(targetInfo.reviewPath, "research-supervision.md")),
+      "research runner wrote generic review-domain research supervision before research sync is implemented",
+    );
+    assert((await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8")) === briefBefore, "research runner changed deck brief.md");
+  });
+
+  await check("research runner fails before TAKT when wrapper workflow is unavailable", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-missing-wrapper-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "research runner unexpectedly succeeded without wrapper workflow");
+    assert(result.stderr.includes("WORKFLOW_NOT_IMPLEMENTED:"), `missing research wrapper did not report WORKFLOW_NOT_IMPLEMENTED: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite missing research wrapper workflow");
+  });
+
+  await check("research runner fails before TAKT when built-in deep research is unavailable", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-missing-builtin-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScript("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "research runner unexpectedly succeeded without TAKT built-in deep research");
+    assert(result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `missing built-in did not report BUILTIN_WORKFLOW_NOT_AVAILABLE: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite missing TAKT built-in deep research");
   });
 
   await check("global CLI workflow command uses bundled no-copy templates without npm project", async () => {
@@ -1835,6 +1947,13 @@ async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {
   await writeFile(executablePath, script, { encoding: "utf8", mode: 0o755 });
 }
 
+async function makeBuiltinDeepResearchWorkflow(packageRoot) {
+  const workflowPath = path.join(packageRoot, "node_modules", "takt", "builtins", "ja", "workflows", "deep-research.yaml");
+  await mkdir(path.dirname(workflowPath), { recursive: true });
+  await writeFile(workflowPath, "name: deep-research\n", "utf8");
+  return workflowPath;
+}
+
 async function makeMarpExecutable(root) {
   const executablePath = path.join(root, "node_modules", ".bin", runtimeExecutableName("marp"));
   await mkdir(path.dirname(executablePath), { recursive: true });
@@ -1933,6 +2052,36 @@ function fakeTaktScript(runNames, result) {
   }
   lines.push("exit 0", "");
   return lines.join("\n");
+}
+
+function fakeResearchTaktScript(runName, result, reportTarget) {
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    `mkdir -p ".takt/runs/${runName}/reports"`,
+    `cat > ".takt/runs/${runName}/reports/research-supervision.md" <<EOF`,
+    "---",
+    "command: research",
+    `target: ${reportTarget}`,
+    "generated_at: 2026-06-05T17:10:00+09:00",
+    `workflow_run_id: ${runName}`,
+    "step: supervision",
+    "cycle: 1",
+    "state: researched",
+    `result: ${result}`,
+    "blocking_findings: 0",
+    "major_findings: 0",
+    "minor_findings: 0",
+    "info_findings: 0",
+    "---",
+    "",
+    "# Research Supervision",
+    "EOF",
+    "exit 0",
+    "",
+  ].join("\n");
 }
 
 function fakeTaktScriptWithAiGateReport(runName, options = {}) {

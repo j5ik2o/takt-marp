@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import {
   archiveCommandArtifacts,
+  assertBuiltinWorkflowAvailable,
   assertCommandPrerequisites,
   assertTaktExecutableAvailable,
   assertWorkflowAvailable,
@@ -15,6 +16,7 @@ import {
   isSuccessfulCommandState,
   parseFrontMatter,
   parseArgs,
+  researchTaktTarget,
   requireCommand,
   resolveDeckTarget,
   SlideWorkflowError,
@@ -48,6 +50,9 @@ async function main() {
 
   await assertCommandPrerequisites(targetInfo, command);
   const availableWorkflowPath = assertWorkflowAvailable(command, { workflowFilePath: selectedWorkflowFilePath });
+  if (command === "research") {
+    assertBuiltinWorkflowAvailable("deep-research");
+  }
   // Keep executable availability in preflight so failed setup cannot invalidate current artifacts.
   assertTaktExecutableAvailable();
 
@@ -65,7 +70,8 @@ async function main() {
 
   await writeCurrentWorkflowTarget(command, targetInfo);
   const runSnapshotBefore = await snapshotTaktRuns(command);
-  const code = await runTakt(command, targetInfo.target, {
+  const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
+  const code = await runTakt(command, taktTarget, {
     provider: flags.provider,
     workflowFilePath: selectedWorkflowFilePath ? availableWorkflowPath : undefined,
   });
@@ -73,24 +79,27 @@ async function main() {
     process.exitCode = code;
     return;
   }
-  await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
+  if (command !== "research") {
+    await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
+  }
 }
 
 async function writeCurrentWorkflowTarget(command, targetInfo) {
   const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
   await mkdir(path.dirname(markerPath), { recursive: true });
+  const marker = {
+    command,
+    target: targetInfo.target,
+    deck: targetInfo.deckName,
+    started_at: new Date().toISOString(),
+  };
+  if (command === "research") {
+    marker.research_brief_path = researchTaktTarget(targetInfo);
+    marker.research_output_dir = path.posix.join(targetInfo.target, "research");
+  }
   await writeFile(
     markerPath,
-    `${JSON.stringify(
-      {
-        command,
-        target: targetInfo.target,
-        deck: targetInfo.deckName,
-        started_at: new Date().toISOString(),
-      },
-      null,
-      2,
-    )}\n`,
+    `${JSON.stringify(marker, null, 2)}\n`,
     "utf8",
   );
 }

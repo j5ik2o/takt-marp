@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { SlideWorkflowError } from "./takt-marp-errors.mjs";
-import { runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
+import { resolveRuntimeContext, runtimeExecutablePath } from "./takt-marp-runtime-context.mjs";
 
 export { SlideWorkflowError, formatError } from "./takt-marp-errors.mjs";
 
@@ -180,6 +180,22 @@ export function taktExecutablePath(options = {}) {
   return runtimeExecutablePath("takt", options);
 }
 
+export function builtinWorkflowPath(name, options = {}) {
+  const packageRoot = options.packageRoot ?? options.root ?? resolveRuntimeContext().packageRoot;
+  return path.join(packageRoot, "node_modules", "takt", "builtins", "ja", "workflows", `${name}.yaml`);
+}
+
+export function assertBuiltinWorkflowAvailable(name, options = {}) {
+  const expectedPath = builtinWorkflowPath(name, options);
+  if (!existsSync(expectedPath)) {
+    throw new SlideWorkflowError(
+      `TAKT built-in workflow '${name}' is not available: ${expectedPath}. Reinstall takt-marp and verify the bundled takt package.`,
+      "BUILTIN_WORKFLOW_NOT_AVAILABLE",
+    );
+  }
+  return expectedPath;
+}
+
 export function assertTaktExecutableAvailable(options = {}) {
   const executablePath = taktExecutablePath(options);
   try {
@@ -282,6 +298,21 @@ export function researchArtifactPaths(targetInfo) {
   return Object.freeze(
     Object.fromEntries(Object.entries(RESEARCH_ARTIFACT_FILES).map(([key, fileName]) => [key, path.join(researchPath, fileName)])),
   );
+}
+
+export function researchTaktTarget(targetInfo) {
+  return path.posix.join(targetInfo.target, "research", RESEARCH_ARTIFACT_FILES.brief);
+}
+
+export function assertResearchBriefAvailable(targetInfo) {
+  const briefPath = researchArtifactPaths(targetInfo).brief;
+  if (!existsSync(briefPath)) {
+    throw new SlideWorkflowError(
+      `Missing research-brief.md: ${path.relative(process.cwd(), briefPath)}. Create slides/${targetInfo.deckName}/research/research-brief.md before running research.`,
+      "PREREQUISITE_MISSING",
+    );
+  }
+  return briefPath;
 }
 
 export function supervisionPath(targetInfo, command) {
@@ -406,6 +437,9 @@ export async function checkRequiredState(targetInfo, requirement) {
 
 export async function assertCommandPrerequisites(targetInfo, command) {
   const config = configFor(command);
+  if (command === "research") {
+    assertResearchBriefAvailable(targetInfo);
+  }
   for (const artifactName of config.sourceArtifacts) {
     const artifactPath = path.join(targetInfo.deckPath, artifactName);
     if (!existsSync(artifactPath)) {
