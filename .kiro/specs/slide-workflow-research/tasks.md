@@ -246,7 +246,7 @@
   - _Boundary:_ Validation Surface
   - _Depends:_ 8.1
 
-- [ ] 8.3 template/package boundary validation に Research Reuse Workflow を含める
+- [x] 8.3 template/package boundary validation に Research Reuse Workflow を含める
   - repo-local Research Reuse Workflow と package template counterpart の drift を検出する
   - `takt-marp eject` で Research Reuse Workflow が project-local にコピーされ、built-in research facets がコピーされないことを確認する
   - bundled runtime staging が Research Workflow Wrapper と Research Reuse Workflow の両方を同じ template source から使うことを確認する

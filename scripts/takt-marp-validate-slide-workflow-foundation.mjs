@@ -16,6 +16,7 @@ import {
   diffTemplateTrees,
   formatTemplateDrift,
   listTemplateEntries,
+  prepareBundledWorkflowRuntime,
   researchReuseWorkflowFilePath,
   resolveTemplateSource,
   workflowFilePath,
@@ -316,6 +317,10 @@ async function main() {
     assert(
       !result.created.includes(".takt/facets/output-contracts/research-report.md"),
       "eject must not distribute built-in deep-research research-report.md output contract",
+    );
+    assert(
+      !existsSync(path.join(targetDir, ".takt", "facets", "output-contracts", "research-report.md")),
+      "eject copied built-in deep-research research-report.md output contract",
     );
     await assertNoRuntimeOrProviderFiles(targetDir);
   });
@@ -651,6 +656,73 @@ async function main() {
     );
   });
 
+  await check("bundled runtime stages research wrapper and reuse workflow from selected template source", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "bundled-runtime-selected-research-"));
+    const projectRoot = path.join(root, "project");
+    const templateRoot = path.join(root, "templates", "project");
+    const selectedResearchWorkflow = path.join(templateRoot, "workflows", "takt-marp-slide-research.yaml");
+    const selectedReuseWorkflow = researchReuseWorkflowFilePath(selectedResearchWorkflow);
+    await writeTemplateTree(templateRoot, new Map([
+      [
+        "workflows/takt-marp-slide-research.yaml",
+        [
+          "name: selected-wrapper-runtime-source",
+          "steps:",
+          "  - name: deep_research",
+          "    call: deep-research",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "workflows/takt-marp-slide-research-reuse.yaml",
+        [
+          "name: selected-reuse-runtime-source",
+          "steps:",
+          "  - name: adapt_research",
+          "",
+        ].join("\n"),
+      ],
+      ["facets/personas/takt-marp-slide-planner.md", "# Planner\n"],
+    ]));
+    assert(existsSync(selectedReuseWorkflow), `selected research reuse workflow fixture was not created: ${selectedReuseWorkflow}`);
+
+    const prepared = await prepareBundledWorkflowRuntime(selectedResearchWorkflow, { projectRoot, templateRoot });
+    try {
+      const runtimeReuseWorkflow = researchReuseWorkflowFilePath(prepared.workflowFilePath);
+      const [runtimeWrapperSource, runtimeReuseSource] = await Promise.all([
+        readFile(prepared.workflowFilePath, "utf8"),
+        readFile(runtimeReuseWorkflow, "utf8"),
+      ]);
+      assert(
+        prepared.workflowFilePath !== selectedResearchWorkflow,
+        "bundled runtime must stage a runtime copy instead of using the package template path directly",
+      );
+      assert(
+        runtimeWrapperSource.includes("selected-wrapper-runtime-source"),
+        `staged research wrapper did not come from selected template source: ${runtimeWrapperSource}`,
+      );
+      assert(
+        runtimeReuseSource.includes("selected-reuse-runtime-source"),
+        `staged research reuse workflow did not come from selected template source: ${runtimeReuseSource}`,
+      );
+      assert(
+        runtimeWrapperSource.includes("call: ./takt-marp-bundled-deep-research.yaml"),
+        `staged research wrapper did not rewrite the built-in deep-research call: ${runtimeWrapperSource}`,
+      );
+      assert(
+        existsSync(path.join(path.dirname(prepared.workflowFilePath), "takt-marp-bundled-deep-research.yaml")),
+        "bundled runtime did not stage the callable built-in deep-research workflow next to the wrapper",
+      );
+      assert(
+        path.dirname(runtimeReuseWorkflow) === path.dirname(prepared.workflowFilePath),
+        `staged research reuse workflow is not a sibling of the staged wrapper: ${runtimeReuseWorkflow}`,
+      );
+    } finally {
+      await prepared.cleanup();
+    }
+    assert(!existsSync(path.join(projectRoot, "workflows")), "bundled runtime cleanup left project workflows/ staging directory");
+  });
+
   await check("template sync validator detects byte drift between package template and dev .takt trees", async () => {
     const identicalRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-identical-"));
     const identicalTemplateRoot = path.join(identicalRoot, "templates", "project");
@@ -794,14 +866,17 @@ async function main() {
       "stale init compatibility shim file must be removed from scripts/lib",
     );
 
+    const researchReuseTemplatePath = "workflows/takt-marp-slide-research-reuse.yaml";
     const templateEntries = [
       { relativePath: "workflows/takt-marp-slide-plan.yaml" },
+      { relativePath: researchReuseTemplatePath },
       { relativePath: "facets/instructions/takt-marp-compose-fix.md" },
     ];
     const validPackPaths = [
       ...REQUIRED_PACK_FILES,
       "fixtures/marp-slide-workflow/_workflow-smoke/brief.md",
       "templates/project/workflows/takt-marp-slide-plan.yaml",
+      `templates/project/${researchReuseTemplatePath}`,
       "templates/project/facets/instructions/takt-marp-compose-fix.md",
     ].sort();
 
@@ -827,6 +902,17 @@ async function main() {
         `missing required runtime ${missingPath} was not reported with path: ${formatViolations(violations)}`,
       );
     }
+
+    const missingResearchReuseTemplateViolations = collectPackContentViolations(
+      validPackPaths.filter((packedPath) => packedPath !== `templates/project/${researchReuseTemplatePath}`),
+      templateEntries,
+    );
+    assert(
+      missingResearchReuseTemplateViolations.some(
+        (violation) => violation.detail === `template entry missing from pack: templates/project/${researchReuseTemplatePath}`,
+      ),
+      `missing research reuse workflow template was not reported with path: ${formatViolations(missingResearchReuseTemplateViolations)}`,
+    );
 
     const prohibitedPath = "templates/project/workflows/config.yaml";
     const prohibitedViolations = collectPackContentViolations([...validPackPaths, prohibitedPath], templateEntries);
