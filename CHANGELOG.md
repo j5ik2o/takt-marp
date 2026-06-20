@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1](https://github.com/j5ik2o/takt-marp/compare/v0.4.0...v0.4.1) (2026-06-20)
+
+### Bug Fixes
+
+* support bundled research no-copy runtime ([b6da2f2](https://github.com/j5ik2o/takt-marp/commit/b6da2f2ce6235242424862a501b1586614e9e3b1))
+
 ## [0.4.0](https://github.com/j5ik2o/takt-marp/compare/v0.3.0...v0.4.0) (2026-06-20)
 
 ### Features
