@@ -1437,6 +1437,12 @@ async function main() {
     const instructionSource = await readFile(instructionPath, "utf8");
     assert(instructionSource.includes("research-report.md"), "adapter instruction must name research-report.md");
     assert(instructionSource.includes("only input"), "adapter instruction must state research-report.md is the only input");
+    assert(instructionSource.includes("research_reuse"), "adapter instruction must branch on research reuse marker");
+    assert(instructionSource.includes("research_source_report_path"), "adapter instruction must read deck-local reuse source report path");
+    assert(
+      instructionSource.includes("source_report_origin: builtin_deep_research"),
+      "adapter instruction must preserve built-in source report origin in reuse mode",
+    );
     assert(instructionSource.includes("not_present_in_builtin_report"), "adapter instruction must preserve missing built-in report fields");
     for (const term of RESEARCH_ADAPTER_FORBIDDEN_BOUNDARY_TERMS) {
       assert(instructionSource.toLowerCase().includes(term), `adapter instruction must forbid ${term}`);

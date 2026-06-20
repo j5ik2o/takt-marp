@@ -218,7 +218,7 @@
   - _Boundary:_ Research Artifact Sync
   - _Depends:_ 7.2
 
-- [ ] 7.4 Research Adapter を reuse mode に対応させる
+- [x] 7.4 Research Adapter を reuse mode に対応させる
   - normal mode では current TAKT run の built-in report、reuse mode では marker が指す deck-local copy を source of truth として読む
   - `source_report_origin: builtin_deep_research` を維持し、deck-local copy を adapter 由来 report と誤表示しない
   - reuse mode でも追加調査、外部 fetch、出典再評価、built-in report にない claim 生成を行わない
