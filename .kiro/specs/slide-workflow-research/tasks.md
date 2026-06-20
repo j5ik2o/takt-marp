@@ -125,7 +125,7 @@
   - _Boundary:_ Validation Surface
   - _Depends:_ 1.4, 2.4, 3.1
 
-- [ ] 4.2 smoke validation に research と既存 4 command の回帰を追加する
+- [x] 4.2 smoke validation に research と既存 4 command の回帰を追加する
   - mock provider で research が `research-supervision.md` と research artifacts を `slides/<deck>/research/` に同期することを確認する
   - built-in `research-report.md` が byte-for-byte で同期され、adapter output で置換されないことを確認する
   - report の欠落情報が `not_present_in_builtin_report` として残り、補完や追加調査が行われないことを確認する
