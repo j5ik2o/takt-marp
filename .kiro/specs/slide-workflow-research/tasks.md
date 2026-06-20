@@ -39,7 +39,7 @@
   - _Depends:_ 1.3
 
 - [ ] 2. コア: built-in deep research を deck-local artifact に接続する
-- [ ] 2.1 Research Workflow Wrapper を追加する
+- [x] 2.1 Research Workflow Wrapper を追加する
   - `kind: workflow_call` と `call: deep-research` で built-in research workflow を呼ぶ wrapper を追加する
   - wrapper は `deep_research` call、adapter、supervision だけを所有し、built-in persona/policy/output contract を repo-local にコピーしない
   - web access の許可は built-in workflow 内に閉じ、通常 slide workflow へ広げない

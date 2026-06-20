@@ -56,6 +56,19 @@ const ROOT_DIR = path.dirname(SCRIPT_DIR);
 const BIN_ENTRY_SCRIPT = path.join(ROOT_DIR, "bin", "takt-marp.mjs");
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const VERIFY_DELIVERY_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-verify-delivery-artifacts.mjs");
+const RESEARCH_WORKFLOW_RELATIVE_PATH = ".takt/workflows/takt-marp-slide-research.yaml";
+const RESEARCH_WRAPPER_STEP_NAMES = Object.freeze(["deep_research", "adapt_research", "supervise_research"]);
+const BUILTIN_RESEARCH_FACET_IDENTIFIERS = Object.freeze([
+  "research-planner",
+  "research-digger",
+  "research-analyzer",
+  "research-supervisor",
+  "research-plan",
+  "research-dig",
+  "research-analyze",
+  "research-supervise",
+]);
+const BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES = Object.freeze(["research-report.md"]);
 
 async function main() {
   await check("front matter parser supports documented subset", async () => {
@@ -975,6 +988,39 @@ async function main() {
     assert((await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8")) === briefBefore, "brief.md was touched by research path resolution");
   });
 
+  await check("research workflow wrapper delegates deep research without copying built-in research facets", async () => {
+    const wrapperPath = path.join(ROOT_DIR, ...RESEARCH_WORKFLOW_RELATIVE_PATH.split("/"));
+    assert(existsSync(wrapperPath), `research workflow wrapper missing: ${RESEARCH_WORKFLOW_RELATIVE_PATH}`);
+
+    const wrapperSource = await readFile(wrapperPath, "utf8");
+    const wrapperSteps = extractWorkflowStepBlocks(wrapperSource);
+    const wrapperStepNames = wrapperSteps.map((step) => step.name);
+    assert(
+      JSON.stringify(wrapperStepNames) === JSON.stringify(RESEARCH_WRAPPER_STEP_NAMES),
+      `research wrapper must own only ${RESEARCH_WRAPPER_STEP_NAMES.join(", ")} steps, got: ${wrapperStepNames.join(", ")}`,
+    );
+
+    assertWorkflowCallStep(wrapperSource, "deep_research", "deep-research");
+    assert(!wrapperSource.includes("network_access: true"), "research wrapper must not enable network_access: true");
+    for (const identifier of BUILTIN_RESEARCH_FACET_IDENTIFIERS) {
+      assert(!wrapperSource.includes(identifier), `research wrapper must not copy built-in research facet identifier: ${identifier}`);
+    }
+    for (const fileName of BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES) {
+      assert(!wrapperSource.includes(fileName), `research wrapper must not copy built-in output contract file: ${fileName}`);
+    }
+
+    const builtInDeepResearchPath = path.join(ROOT_DIR, "node_modules", "takt", "builtins", "ja", "workflows", "deep-research.yaml");
+    assert(existsSync(builtInDeepResearchPath), "built-in deep-research workflow is missing from takt package");
+    const builtInDeepResearchSource = await readFile(builtInDeepResearchPath, "utf8");
+    assert(builtInDeepResearchSource.includes("network_access: true"), "built-in deep-research must retain its own web access allowance");
+
+    await assertNoLocalBuiltInResearchFacetCopies();
+    for (const command of ["plan", "compose", "polish", "deliver"]) {
+      const workflowSource = await readFile(path.join(ROOT_DIR, ".takt", "workflows", `takt-marp-slide-${command}.yaml`), "utf8");
+      assertWorkflowCallStep(workflowSource, `ai_quality_gate_${command}`, "./takt-marp-slide-ai-quality-gate.yaml");
+    }
+  });
+
   await check("missing approval fails approved state check", async () => {
     const root = await fixtureRoot();
     const targetInfo = await makeDeck(root, "demo");
@@ -1886,6 +1932,66 @@ async function writeTemplateTree(root, entries) {
     await mkdir(path.dirname(destination), { recursive: true });
     await writeFile(destination, content);
   }
+}
+
+function extractWorkflowStepBlocks(source) {
+  const stepsStart = source.search(/^steps:\n/m);
+  assert(stepsStart >= 0, "workflow YAML missing top-level steps section");
+  const stepsSource = source.slice(stepsStart).replace(/^steps:\n/, "");
+  return stepsSource
+    .split(/\n(?=  - name: )/)
+    .filter((block) => block.startsWith("  - name: "))
+    .map((block) => {
+      const match = block.match(/^  - name: ([^\n]+)/);
+      assert(match, `workflow step block missing name: ${block}`);
+      return { name: match[1].trim(), block };
+    });
+}
+
+function assertWorkflowCallStep(source, stepName, expectedCall) {
+  const step = extractWorkflowStepBlocks(source).find((candidate) => candidate.name === stepName);
+  assert(step, `workflow call step '${stepName}' is missing`);
+  assert(step.block.includes("\n    kind: workflow_call\n"), `step '${stepName}' must be kind: workflow_call`);
+  assert(step.block.includes(`\n    call: ${expectedCall}\n`), `step '${stepName}' must call ${expectedCall}`);
+}
+
+async function assertNoLocalBuiltInResearchFacetCopies() {
+  const findings = new Set();
+  for (const rootRelativePath of [".takt/facets", "templates/project/facets"]) {
+    const rootPath = path.join(ROOT_DIR, ...rootRelativePath.split("/"));
+    for (const filePath of await listFilesRecursively(rootPath)) {
+      const relativePath = path.relative(ROOT_DIR, filePath).split(path.sep).join("/");
+      const fileName = path.basename(filePath);
+      for (const outputContractFile of BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES) {
+        if (fileName === outputContractFile) {
+          findings.add(`${relativePath} copies built-in output contract file ${outputContractFile}`);
+        }
+      }
+
+      const source = await readFile(filePath, "utf8");
+      for (const identifier of BUILTIN_RESEARCH_FACET_IDENTIFIERS) {
+        if (relativePath.includes(identifier) || source.includes(identifier)) {
+          findings.add(`${relativePath} contains built-in research facet identifier ${identifier}`);
+        }
+      }
+    }
+  }
+  assert(findings.size === 0, `repo-local built-in research facet copies detected: ${[...findings].join("; ")}`);
+}
+
+async function listFilesRecursively(rootPath) {
+  let dirents;
+  try {
+    dirents = await readdir(rootPath, { recursive: true, withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      return [];
+    }
+    throw error;
+  }
+  return dirents
+    .filter((dirent) => dirent.isFile())
+    .map((dirent) => path.join(dirent.parentPath, dirent.name));
 }
 
 async function fixtureRoot() {

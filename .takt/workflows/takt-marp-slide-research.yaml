@@ -1,0 +1,67 @@
+name: takt-marp-slide-research
+description: Marp slide research command wrapper that delegates web research to TAKT built-in deep-research.
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 5
+initial_step: deep_research
+
+personas:
+  takt-marp-slide-planner: ../facets/personas/takt-marp-slide-planner.md
+  takt-marp-slide-supervisor: ../facets/personas/takt-marp-slide-supervisor.md
+policies:
+  takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+
+steps:
+  - name: deep_research
+    kind: workflow_call
+    call: deep-research
+    rules:
+      - condition: COMPLETE
+        next: adapt_research
+      - condition: ABORT
+        next: ABORT
+
+  - name: adapt_research
+    edit: false
+    required_permission_mode: readonly
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: |
+      Review the completed deep_research handoff for the current slide deck.
+      Keep this wrapper limited to confirming that the handoff is ready for the later deck-local adapter.
+      Do not perform additional external lookup, widen web access for slide workflows, or redefine built-in research behavior in this repository.
+    rules:
+      - condition: handoff is ready for the deck-local adapter
+        next: supervise_research
+      - condition: handoff is unavailable or outside this wrapper boundary
+        next: ABORT
+
+  - name: supervise_research
+    edit: false
+    required_permission_mode: readonly
+    persona: takt-marp-slide-supervisor
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: |
+      Confirm that this workflow only delegates to deep_research and performs wrapper-level adapter and supervision checks.
+      Treat copied built-in research behavior, local web access enablement, or additional workflow steps as boundary violations.
+      Detailed deck-local artifact generation and supervision reports belong to later tasks.
+    rules:
+      - condition: wrapper boundary is satisfied
+        next: COMPLETE
+      - condition: wrapper boundary is violated
+        next: ABORT
