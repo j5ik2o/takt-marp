@@ -162,7 +162,7 @@
   - _Boundary:_ Validation Surface
   - _Depends:_ 5.1
 
-- [ ] 6. 基盤: Research Source Report Reuse の安全判定を追加する
+- [x] 6. 基盤: Research Source Report Reuse の安全判定を追加する
 - [x] 6.1 Research Reuse Sidecar の永続化と brief digest 判定を追加する
   - Research Reuse Sidecar を deck-local artifact ではなく runtime state として保存し、target、deck、research brief path、brief digest、source run、source report path を保持する
   - current `research-brief.md` から SHA-256 digest を計算し、Research Reuse Sidecar の digest と一致する場合だけ candidate として扱う
@@ -190,7 +190,7 @@
   - _Boundary:_ Workflow Runner, Research Reuse Sidecar, Validation Surface
   - _Depends:_ 6.2
 
-- [ ] 7. コア: Research Reuse Workflow と reuse mode を接続する
+- [x] 7. コア: Research Reuse Workflow と reuse mode を接続する
 - [x] 7.1 Research Workflow Selection Contract で sibling private workflow を解決する
   - public command は `research` のまま維持し、`research-reuse` のような user-facing command や npm script を追加しない
   - selected Research Workflow Wrapper と同じ `workflows` directory から Research Reuse Workflow の sibling path を導出する
@@ -227,7 +227,7 @@
   - _Boundary:_ Research Adapter
   - _Depends:_ 7.3
 
-- [ ] 8. 検証: Research Source Report Reuse の回帰を固定する
+- [x] 8. 検証: Research Source Report Reuse の回帰を固定する
 - [x] 8.1 foundation validation に Research Source Report Reuse の決定論的 checks を追加する
   - Research Reuse Sidecar lifecycle、Workflow Identity 正規化、no reusable report、ambiguous candidate、target mismatch、brief digest mismatch、`--force` bypass を fixture で検証する
   - Research Reuse Workflow が selected Research Workflow Wrapper の sibling path として導出され、public command list に追加されないことを検証する
