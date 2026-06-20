@@ -1990,6 +1990,118 @@ async function main() {
     assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "research failure archived review artifacts");
   });
 
+  await check("failed research run creates reuse sidecar from current workflow identity and deep report", async () => {
+    const workflowCases = [
+      { label: "workflow-name", workflow: "takt-marp-slide-research" },
+      { label: "workflow-path", workflow: await makeSelectedWorkflowFile("research") },
+    ];
+
+    for (const testCase of workflowCases) {
+      const root = await mkdtemp(path.join(os.tmpdir(), `slide-workflow-research-reuse-candidate-${testCase.label}-`));
+      const targetInfo = await makeDeck(root, "demo");
+      const researchArtifacts = researchArtifactPaths(targetInfo);
+      await mkdir(targetInfo.researchPath, { recursive: true });
+      await writeFile(researchArtifacts.brief, `# Research Brief\n\n${testCase.label}\n`, "utf8");
+      const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+      const fakePackage = await makeFakePackageRoot();
+      await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+      await makeTaktExecutable(
+        fakePackage.packageRoot,
+        fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+          workflow: testCase.workflow,
+          exitCode: 42,
+          sourceReports: [
+            {
+              relativePath: "subworkflows/iteration-1--step-deep_research--workflow-deep-research/reports/research-report.md",
+              lines: [`# Built-in Research Report ${testCase.label}`, "", "Reusable failed run report."],
+            },
+          ],
+        }),
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+        { cwd: root, encoding: "utf8" },
+      );
+      assert(result.status === 42, `failed research should preserve TAKT exit code for ${testCase.label}, got ${result.status}: ${result.stderr}`);
+      const candidate = await resolveResearchReuseCandidate(targetInfo, { root });
+      assert(candidate, `failed research did not create a reusable sidecar for ${testCase.label}`);
+      assert(candidate.source_run === "run-current", `sidecar source_run mismatch for ${testCase.label}: ${JSON.stringify(candidate)}`);
+      assert(
+        candidate.source_report_path.endsWith("workflow-deep-research/reports/research-report.md"),
+        `sidecar source report path must point at deep research report for ${testCase.label}: ${JSON.stringify(candidate)}`,
+      );
+      assert(!existsSync(researchArtifacts.report), `failed full research should not sync deck-local report before reuse: ${researchArtifacts.report}`);
+    }
+  });
+
+  await check("failed research run without reusable deep report does not create reuse sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-no-report-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nNo report\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+        workflow: "takt-marp-slide-research",
+        exitCode: 43,
+        sourceReports: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 43, `failed research without reusable report should preserve TAKT exit code, got ${result.status}: ${result.stderr}`);
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing deep research report created a reuse sidecar");
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "missing deep research report left a sidecar file");
+  });
+
+  await check("failed research run rejects ambiguous reusable reports without sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-ambiguous-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nAmbiguous report\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+        workflow: selectedWorkflowPath,
+        exitCode: 44,
+        sourceReports: [
+          {
+            relativePath: "subworkflows/iteration-1--step-deep_research--workflow-deep-research/reports/research-report.md",
+            lines: ["# First Built-in Research Report"],
+          },
+          {
+            relativePath: "subworkflows/iteration-2--step-deep_research--workflow-deep-research/reports/research-report.md",
+            lines: ["# Second Built-in Research Report"],
+          },
+        ],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "ambiguous failed research unexpectedly succeeded");
+    assert(result.stderr.includes("TAKT_RESEARCH_REUSE_AMBIGUOUS:"), `ambiguous reuse candidate did not report TAKT_RESEARCH_REUSE_AMBIGUOUS: ${result.stderr}`);
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "ambiguous reusable reports created a sidecar");
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "ambiguous reusable reports left a sidecar file");
+  });
+
   await check("global CLI workflow command uses bundled no-copy templates without npm project", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-bundled-"));
     await makeDeck(root, "demo");
@@ -3299,6 +3411,38 @@ function fakeResearchTaktScriptWithArtifacts(runName, result, reportTarget, opti
     "exit 0",
     "",
   ].join("\n");
+}
+
+function fakeFailingResearchTaktScriptWithReuseMeta(runName, targetInfo, options = {}) {
+  const sourceReports = options.sourceReports ?? [
+    {
+      relativePath: "subworkflows/iteration-1--step-deep_research--workflow-deep-research/reports/research-report.md",
+      lines: ["# Built-in Research Report", "", `Reusable report from ${runName}.`],
+    },
+  ];
+  const reportsDir = `.takt/runs/${runName}/reports`;
+  const meta = {
+    workflow: options.workflow ?? "takt-marp-slide-research",
+    task: researchTaktTargetForFixture(targetInfo),
+    reportDirectory: reportsDir,
+  };
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    `mkdir -p "${reportsDir}"`,
+    `cat > ".takt/runs/${runName}/meta.json" <<'EOF'`,
+    JSON.stringify(meta, null, 2),
+    "EOF",
+    ...sourceReports.flatMap(({ relativePath, lines }) => fakeReportFileLines(runName, relativePath, lines)),
+    `exit ${options.exitCode ?? 42}`,
+    "",
+  ].join("\n");
+}
+
+function researchTaktTargetForFixture(targetInfo) {
+  return `${targetInfo.target}/research/research-brief.md`;
 }
 
 function fakeResearchSupervisionLines(runName, result, reportTarget) {

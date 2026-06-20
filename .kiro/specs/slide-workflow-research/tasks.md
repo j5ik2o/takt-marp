@@ -172,13 +172,13 @@
   - _Boundary:_ Research Reuse Sidecar, Validation Surface
   - _Depends:_ none
 
-- [ ] 6.2 failed run candidate detection と Workflow Identity 正規化を追加する
+- [x] 6.2 failed run candidate detection と Workflow Identity 正規化を追加する
   - `research` 実行前後の `.takt/runs` snapshot を比較し、今回作成または更新された research run だけを候補にする
   - `meta.json.workflow` が workflow 名でも workflow file path でも、Workflow Identity として `takt-marp-slide-research` に正規化して判定する
   - `meta.json.task`、`reportDirectory`、`workflow-deep-research` 配下の built-in `research-report.md` を組み合わせ、再利用可能な source report を一意に特定する
   - 完了条件: reusable report なしでは Research Reuse Sidecar を作らず、複数候補では `TAKT_RESEARCH_REUSE_AMBIGUOUS` を返して推測で選ばない
   - _Requirements:_ 8.1, 8.2, 8.3
-  - _Boundary:_ Workflow Runner
+  - _Boundary:_ Workflow Runner, Validation Surface
   - _Depends:_ 6.1
 
 - [ ] 6.3 reuse decision と lifecycle cleanup を Workflow Runner に接続する
