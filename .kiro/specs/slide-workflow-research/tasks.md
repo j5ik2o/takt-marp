@@ -200,13 +200,13 @@
   - _Boundary:_ Template Distribution, Workflow Runner, Validation Surface
   - _Depends:_ 6.3
 
-- [ ] 7.2 Research Reuse Workflow template を追加する
+- [x] 7.2 Research Reuse Workflow template を追加する
   - Research Reuse Workflow は `deep_research` step、`kind: workflow_call`、`call: deep-research` を含めず、adapter と supervision だけを実行する
   - repo-local workflow と package template counterpart を template sync 対象にし、手編集ではなく既存 sync/check mechanism で揃える
   - full research wrapper の output contract と同じ successful state `researched` を維持する
   - 完了条件: Research Reuse Workflow YAML の static inspection で deep research 呼び出しが存在せず、template drift validation が repo-local/template counterpart の差分を検出できる
   - _Requirements:_ 7.6, 8.1, 8.7
-  - _Boundary:_ Research Reuse Workflow, Template Distribution
+  - _Boundary:_ Research Reuse Workflow, Template Distribution, Validation Surface
   - _Depends:_ 7.1
 
 - [ ] 7.3 Research Artifact Sync で reuse source report を入力正本にする

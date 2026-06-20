@@ -1,0 +1,72 @@
+name: takt-marp-slide-research-reuse
+description: "Private workflow that reuses an existing source report and emits research artifacts with successful state: researched."
+workflow_config:
+  provider_options:
+    codex:
+      network_access: false
+    opencode:
+      network_access: false
+max_steps: 20
+initial_step: adapt_research
+
+personas:
+  takt-marp-slide-planner: ../facets/personas/takt-marp-slide-planner.md
+  takt-marp-slide-supervisor: ../facets/personas/takt-marp-slide-supervisor.md
+policies:
+  takt-marp-general-slide-quality: ../facets/policies/takt-marp-general-slide-quality.md
+  takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
+instructions:
+  takt-marp-adapt-research: ../facets/instructions/takt-marp-adapt-research.md
+  takt-marp-supervise-research-reuse: ../facets/instructions/takt-marp-supervise-research-reuse.md
+knowledge:
+  takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
+report_formats:
+  takt-marp-research-sources: ../facets/output-contracts/takt-marp-research-sources.md
+  takt-marp-research-claims: ../facets/output-contracts/takt-marp-research-claims.md
+  takt-marp-open-questions: ../facets/output-contracts/takt-marp-open-questions.md
+  takt-marp-research-supervision: ../facets/output-contracts/takt-marp-research-supervision.md
+
+steps:
+  - name: adapt_research
+    edit: true
+    required_permission_mode: edit
+    persona: takt-marp-slide-planner
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-adapt-research
+    output_contracts:
+      report:
+        - name: research-sources.md
+          format: takt-marp-research-sources
+        - name: research-claims.md
+          format: takt-marp-research-claims
+        - name: open-questions.md
+          format: takt-marp-open-questions
+    rules:
+      - condition: reuse source reportからresearch index artifactsを生成した
+        next: supervise_research
+      - condition: source reportが読めない、またはadapter output front matterが壊れている
+        next: ABORT
+
+  - name: supervise_research
+    edit: false
+    required_permission_mode: readonly
+    persona: takt-marp-slide-supervisor
+    policy:
+      - takt-marp-general-slide-quality
+      - takt-marp-worker-boundary
+    knowledge: takt-marp-repo-conventions
+    pass_previous_response: false
+    instruction: takt-marp-supervise-research-reuse
+    output_contracts:
+      report:
+        - name: research-supervision.md
+          format: takt-marp-research-supervision
+    rules:
+      - condition: research-supervision.md was emitted with valid front matter
+        next: COMPLETE
+      - condition: wrapper boundary is violated or supervision front matter is invalid
+        next: ABORT

@@ -63,7 +63,9 @@ const BIN_ENTRY_SCRIPT = path.join(ROOT_DIR, "bin", "takt-marp.mjs");
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const VERIFY_DELIVERY_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-verify-delivery-artifacts.mjs");
 const RESEARCH_WORKFLOW_RELATIVE_PATH = ".takt/workflows/takt-marp-slide-research.yaml";
+const RESEARCH_REUSE_WORKFLOW_RELATIVE_PATH = ".takt/workflows/takt-marp-slide-research-reuse.yaml";
 const RESEARCH_WRAPPER_STEP_NAMES = Object.freeze(["deep_research", "adapt_research", "supervise_research"]);
+const RESEARCH_REUSE_STEP_NAMES = Object.freeze(["adapt_research", "supervise_research"]);
 const RESEARCH_ADAPTER_INSTRUCTION = Object.freeze({
   name: "takt-marp-adapt-research",
   relativePath: ".takt/facets/instructions/takt-marp-adapt-research.md",
@@ -91,6 +93,10 @@ const RESEARCH_ADAPTER_OUTPUT_CONTRACTS = Object.freeze([
 const RESEARCH_SUPERVISION_INSTRUCTION = Object.freeze({
   name: "takt-marp-supervise-research",
   relativePath: ".takt/facets/instructions/takt-marp-supervise-research.md",
+});
+const RESEARCH_REUSE_SUPERVISION_INSTRUCTION = Object.freeze({
+  name: "takt-marp-supervise-research-reuse",
+  relativePath: ".takt/facets/instructions/takt-marp-supervise-research-reuse.md",
 });
 const RESEARCH_SUPERVISION_OUTPUT_CONTRACT = Object.freeze({
   artifactName: "research-supervision.md",
@@ -144,8 +150,10 @@ const BUILTIN_RESEARCH_FACET_RELATIVE_PATHS = Object.freeze([
 const BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES = Object.freeze(["research-report.md"]);
 const RESEARCH_TEMPLATE_RELATIVE_PATHS = Object.freeze([
   "workflows/takt-marp-slide-research.yaml",
+  "workflows/takt-marp-slide-research-reuse.yaml",
   "facets/instructions/takt-marp-adapt-research.md",
   "facets/instructions/takt-marp-supervise-research.md",
+  "facets/instructions/takt-marp-supervise-research-reuse.md",
   "facets/output-contracts/takt-marp-research-sources.md",
   "facets/output-contracts/takt-marp-research-claims.md",
   "facets/output-contracts/takt-marp-open-questions.md",
@@ -1318,6 +1326,66 @@ async function main() {
     }
   });
 
+  await check("research reuse workflow runs adapter and supervision without deep research call", async () => {
+    const reuseWorkflowPath = path.join(ROOT_DIR, ...RESEARCH_REUSE_WORKFLOW_RELATIVE_PATH.split("/"));
+    assert(existsSync(reuseWorkflowPath), `research reuse workflow missing: ${RESEARCH_REUSE_WORKFLOW_RELATIVE_PATH}`);
+    const reuseSource = await readFile(reuseWorkflowPath, "utf8");
+    const reuseSteps = extractWorkflowStepBlocks(reuseSource);
+    const reuseStepNames = reuseSteps.map((step) => step.name);
+    const reuseSuperviseStep = reuseSteps.find((step) => step.name === "supervise_research");
+    assert(
+      JSON.stringify(reuseStepNames) === JSON.stringify(RESEARCH_REUSE_STEP_NAMES),
+      `research reuse workflow must own only ${RESEARCH_REUSE_STEP_NAMES.join(", ")} steps, got: ${reuseStepNames.join(", ")}`,
+    );
+    assert(reuseSuperviseStep, "research reuse workflow must include supervise_research step");
+    assert(!reuseSource.includes("deep_research"), "research reuse workflow must not include a deep_research step");
+    assert(!reuseSource.includes("kind: workflow_call"), "research reuse workflow must not call subworkflows");
+    assert(!reuseSource.includes("call: deep-research"), "research reuse workflow must not call TAKT built-in deep-research");
+    assert(
+      reuseSource.includes(`${RESEARCH_ADAPTER_INSTRUCTION.name}: ../facets/instructions/takt-marp-adapt-research.md`),
+      `research reuse workflow must register adapter instruction ${RESEARCH_ADAPTER_INSTRUCTION.name}`,
+    );
+    assert(
+      reuseSource.includes(`${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}: ../facets/instructions/${path.basename(RESEARCH_REUSE_SUPERVISION_INSTRUCTION.relativePath)}`),
+      `research reuse workflow must register reuse supervision instruction ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}`,
+    );
+    assert(
+      reuseSuperviseStep.block.includes(`\n    instruction: ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}\n`),
+      `research reuse workflow must use reuse supervision instruction ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}`,
+    );
+    for (const contract of RESEARCH_ADAPTER_OUTPUT_CONTRACTS) {
+      assert(
+        reuseSource.includes(`${contract.format}: ../facets/output-contracts/${path.basename(contract.relativePath)}`),
+        `research reuse workflow must register output contract format ${contract.format}`,
+      );
+      assert(
+        reuseSource.includes(`name: ${contract.artifactName}`) && reuseSource.includes(`format: ${contract.format}`),
+        `research reuse workflow must output ${contract.artifactName} with ${contract.format}`,
+      );
+    }
+    assert(
+      reuseSource.includes(`${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}: ../facets/output-contracts/${path.basename(RESEARCH_SUPERVISION_OUTPUT_CONTRACT.relativePath)}`),
+      `research reuse workflow must register output contract format ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`,
+    );
+    assert(
+      reuseSource.includes(`name: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.artifactName}`) &&
+        reuseSource.includes(`format: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`),
+      `research reuse workflow must output ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.artifactName} with ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`,
+    );
+    assert(reuseSource.includes("state: researched"), "research reuse workflow must preserve the researched successful state contract");
+
+    const reuseInstructionPath = path.join(ROOT_DIR, ...RESEARCH_REUSE_SUPERVISION_INSTRUCTION.relativePath.split("/"));
+    assert(existsSync(reuseInstructionPath), `research reuse supervision instruction missing: ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.relativePath}`);
+    const reuseInstructionSource = await readFile(reuseInstructionPath, "utf8");
+    assert(reuseInstructionSource.includes("research_reuse: true"), "reuse supervision instruction must require reuse marker");
+    assert(reuseInstructionSource.includes("research_source_report_path"), "reuse supervision instruction must validate source report path marker");
+    assert(reuseInstructionSource.includes("research_source_report_origin: builtin_deep_research"), "reuse supervision instruction must preserve source report origin");
+    assert(
+      !reuseInstructionSource.includes("workflow_call step"),
+      "reuse supervision instruction must not require the full research workflow_call boundary",
+    );
+  });
+
   await check("built-in research facet copy detection rejects generic research policy copies", async () => {
     const copiedPolicyPath = path.join(ROOT_DIR, "templates", "project", "facets", "policies", "research.md");
     const builtInPolicyPath = path.join(ROOT_DIR, "node_modules", "takt", "builtins", "ja", "facets", "policies", "research.md");
@@ -2251,10 +2319,12 @@ async function main() {
     await mkdir(targetInfo.researchPath, { recursive: true });
     await writeFile(researchArtifacts.brief, "# Research Brief\n\nBundled missing reuse workflow\n", "utf8");
     await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
-    const source = resolveTemplateSource({ projectRoot: root });
-    const selectedWorkflowPath = workflowFilePath(source, "research");
     const fakePackage = await makeFakePackageRoot();
-    await cp(path.join(ROOT_DIR, "templates", "project"), path.join(fakePackage.packageRoot, "templates", "project"), { recursive: true });
+    const fakeTemplateRoot = path.join(fakePackage.packageRoot, "templates", "project");
+    await cp(path.join(ROOT_DIR, "templates", "project"), fakeTemplateRoot, { recursive: true });
+    await rm(path.join(fakeTemplateRoot, "workflows", "takt-marp-slide-research-reuse.yaml"), { force: true });
+    const source = resolveTemplateSource({ projectRoot: root, templateRoot: fakeTemplateRoot });
+    const selectedWorkflowPath = workflowFilePath(source, "research");
     await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
     await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-should-not-start", "passed", targetInfo.target));
     const argsPath = path.join(root, "takt-args.txt");
