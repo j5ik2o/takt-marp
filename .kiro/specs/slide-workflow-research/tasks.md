@@ -153,7 +153,7 @@
   - _Boundary:_ 統合検証
   - _Depends:_ 4.2, 4.3
 
-- [ ] 5.2 scope boundary と residual risk を確認する
+- [x] 5.2 scope boundary と residual risk を確認する
   - `research` 追加で `compose / polish / deliver` の prerequisite、approval、supervision contract が変わっていないことを確認する
   - external web access が research command 内に閉じ、通常 workflow の成功条件に広がっていないことを確認する
   - git diff で `.coderabbit.*`、provider 設定、runtime state、認証情報が変更されていないことを確認する
