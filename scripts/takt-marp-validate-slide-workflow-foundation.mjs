@@ -845,9 +845,13 @@ async function main() {
 
   await check("CLI public surface exposes eject and retained commands without init", async () => {
     const { stdout } = await captureOutput(() => runCli(["--help"]));
-    for (const command of ["eject", "plan", "compose", "polish", "deliver", "approve", "smoke", "build:html", "build:pdf", "build:pptx", "preview"]) {
+    for (const command of ["eject", "research", "plan", "compose", "polish", "deliver", "approve", "smoke", "build:html", "build:pdf", "build:pptx", "preview"]) {
       assert(new RegExp(`^  ${command}\\b`, "m").test(stdout), `help missing public command '${command}': ${stdout}`);
     }
+    assert(
+      stdout.includes("research <slides/deck>") && stdout.includes("Optional pre-research command"),
+      `help must present research as an optional pre-research command: ${stdout}`,
+    );
     assert(!/^  init\b/m.test(stdout), `help must not expose retired init command: ${stdout}`);
   });
 
@@ -855,12 +859,15 @@ async function main() {
     const unknown = await captureOutput(() => runCli(["not-a-command"]));
     assert(unknown.result === 1, `unknown command should exit 1, got ${unknown.result}`);
     assert(unknown.stderr.includes("UNKNOWN_COMMAND"), `unknown command must use UNKNOWN_COMMAND: ${unknown.stderr}`);
+    assert(unknown.stderr.includes("research"), `unknown command valid-command guidance must mention research: ${unknown.stderr}`);
     assert(!unknown.stderr.includes("init"), `unknown command valid-command guidance must not mention init: ${unknown.stderr}`);
 
-    const slideCommand = await captureOutput(() => runCli(["slide:plan"]));
-    assert(slideCommand.result === 1, `slide:plan should exit 1, got ${slideCommand.result}`);
-    assert(slideCommand.stderr.includes("UNKNOWN_COMMAND"), `slide:* command must be rejected with UNKNOWN_COMMAND: ${slideCommand.stderr}`);
-    assert(slideCommand.stderr.includes("'slide:plan' is not a takt-marp command"), `slide:* rejection should name the invalid command: ${slideCommand.stderr}`);
+    for (const scriptCommand of ["slide:plan", "slide:research"]) {
+      const slideCommand = await captureOutput(() => runCli([scriptCommand]));
+      assert(slideCommand.result === 1, `${scriptCommand} should exit 1, got ${slideCommand.result}`);
+      assert(slideCommand.stderr.includes("UNKNOWN_COMMAND"), `slide:* command must be rejected with UNKNOWN_COMMAND: ${slideCommand.stderr}`);
+      assert(slideCommand.stderr.includes(`'${scriptCommand}' is not a takt-marp command`), `slide:* rejection should name the invalid command: ${slideCommand.stderr}`);
+    }
   });
 
   await check("CLI init is removed with eject guidance", async () => {
@@ -1841,6 +1848,39 @@ async function main() {
     assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
   });
 
+  await check("global CLI research command uses bundled no-copy templates and preserves provider args", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-research-bundled-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n", "utf8");
+    const fakePackage = await makeFakeCliPackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-current", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.binScript, "research", "slides/demo", "--provider", "mock"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `global CLI bundled no-copy research failed: ${result.stderr}`);
+    assert(!existsSync(path.join(root, "package.json")), "research test project unexpectedly has package.json");
+    assert(!existsSync(path.join(root, "node_modules")), "research test project unexpectedly has node_modules");
+    assert(!existsSync(path.join(root, ".takt", "workflows")), "global CLI research copied project-local workflow templates");
+    assert(!existsSync(path.join(root, ".takt", "facets")), "global CLI research copied project-local facet templates");
+
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    const expectedWorkflowPath = path.join(fakePackage.packageRoot, "templates", "project", "workflows", "takt-marp-slide-research.yaml");
+    assert(workflowArgIndex >= 0, `research TAKT args did not include -w: ${args.join(" ")}`);
+    assert(args[workflowArgIndex + 1] === expectedWorkflowPath, `TAKT did not receive bundled research workflow path: ${args.join(" ")}`);
+    const providerArgIndex = args.indexOf("--provider");
+    assert(providerArgIndex >= 0, `research TAKT args did not include --provider: ${args.join(" ")}`);
+    assert(args[providerArgIndex + 1] === "mock", `research TAKT provider argument was not preserved: ${args.join(" ")}`);
+    assert(existsSync(researchArtifacts.report), "global CLI research did not sync research-report.md");
+  });
+
   await check("global CLI smoke uses isolated no-copy temp project and preserves provider args", async () => {
     const userRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-smoke-user-"));
     const capturePath = path.join(userRoot, "smoke-captures.jsonl");
@@ -2350,9 +2390,13 @@ async function main() {
   await check("package scripts expose canonical entrypoints only", async () => {
     const pkg = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
     const scripts = pkg.scripts ?? {};
-    for (const name of ["slide:plan", "slide:compose", "slide:polish", "slide:deliver", "slide:check-state", "slide:approve", "slide:validate-foundation"]) {
+    for (const name of ["slide:research", "slide:plan", "slide:compose", "slide:polish", "slide:deliver", "slide:check-state", "slide:approve", "slide:validate-foundation"]) {
       assert(scripts[name], `missing package script ${name}`);
     }
+    assert(
+      scripts["slide:research"] === "node scripts/takt-marp-run-slide-workflow.mjs research",
+      `slide:research must invoke the research workflow runner: ${scripts["slide:research"]}`,
+    );
     for (const [name, command] of Object.entries(scripts)) {
       if (command.includes("node scripts/")) {
         assert(command.includes("node scripts/takt-marp-"), `package script ${name} uses unprefixed scripts path: ${command}`);

@@ -20,6 +20,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "slide:research": "node scripts/takt-marp-run-slide-workflow.mjs research",
     "slide:plan": "node scripts/takt-marp-run-slide-workflow.mjs plan",
     "slide:compose": "node scripts/takt-marp-run-slide-workflow.mjs compose",
     "slide:polish": "node scripts/takt-marp-run-slide-workflow.mjs polish",

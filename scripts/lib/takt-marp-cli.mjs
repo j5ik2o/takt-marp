@@ -12,7 +12,8 @@ import {
   SlideWorkflowError,
 } from "./takt-marp-slide-workflow.mjs";
 
-const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
+const RESEARCH_COMMANDS = ["research"];
+const WORKFLOW_COMMANDS = [...RESEARCH_COMMANDS, "plan", "compose", "polish", "deliver"];
 const BUILD_COMMANDS = Object.freeze({
   "build:html": "html",
   "build:pdf": "pdf",
@@ -33,6 +34,7 @@ function usage() {
     "",
     "Commands:",
     "  eject [dir] [--force|--overwrite] Copy .takt/workflows and .takt/facets templates into <dir> (default: .)",
+    "  research <slides/deck> [options] Optional pre-research command before slide planning",
     "  plan <slides/deck> [options]      Run the plan workflow for a deck in the current project",
     "  compose <slides/deck> [options]   Run the compose workflow for a deck in the current project",
     "  polish <slides/deck> [options]    Run the polish workflow for a deck in the current project",

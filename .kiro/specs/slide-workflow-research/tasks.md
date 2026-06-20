@@ -86,7 +86,7 @@
   - _Boundary:_ Template Distribution
   - _Depends:_ 2.1, 2.2
 
-- [ ] 3.2 CLI command surface と npm entrypoint に research を追加する
+- [x] 3.2 CLI command surface と npm entrypoint に research を追加する
   - help に `research` を任意の事前調査 command として既存 workflow command と区別して表示する
   - global CLI から bundled/ejected workflow path を解決し、runner へ `--workflow-file` と provider option を渡す
   - `package.json` に `slide:research` を追加し、既存 scripts 名は変えない
