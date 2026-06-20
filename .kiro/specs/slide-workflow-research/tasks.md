@@ -66,7 +66,7 @@
   - _Boundary:_ Research Supervision Validator
   - _Depends:_ 2.1
 
-- [ ] 2.4 Research Artifact Sync と source report locator を実装する
+- [x] 2.4 Research Artifact Sync と source report locator を実装する
   - selected parent reports directory の内側だけから built-in `research-report.md` を探索し、`workflow-deep-research` subworkflow を優先する
   - `research-report.md` は built-in output を byte-for-byte copy し、adapter output で置き換えない
   - adapter outputs と `research-supervision.md` を `slides/<deck>/research/` に atomic replace で同期する
