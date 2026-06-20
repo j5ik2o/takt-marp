@@ -33,6 +33,13 @@
 - 新しい spec / change を作る前に、対象が Kiro 系なのか OpenSpec 系なのかを明確にする。
 - 大きな機能は、単一の巨大 spec にせず、独立して実装・レビューできる単位へ分割する。
 
+## 生成後チェック
+
+- requirements / design / tasks / review を生成または更新した後は、次の phase、design validation、implementation、PR 化へ進む前に、spec 内のドメイン用語・契約名・境界名を `CONTEXT.md` と照合する。
+- `CONTEXT.md` に未登録のプロジェクト固有用語を見つけた場合は、glossary gap として扱い、`/domain-modeling` または `/grill-with-docs` 経由で確定してから `CONTEXT.md` に登録する。
+- 一般的な技術語、ファイル名、関数名、単発の実装詳細、一次的な作業ラベルは `CONTEXT.md` に登録しない。
+- spec 側の表記ゆれは `CONTEXT.md` の canonical term に合わせて修正する。
+
 ## レビューゲート
 
 - `requirements.md` と `tasks.md` を生成・変更した場合は、完了前に `thermo-nuclear-code-quality-review` でレビューする。
