@@ -117,6 +117,12 @@ async function main() {
   }
   if (command === "research") {
     await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, { researchReuseCandidate });
+    if (!isSuccessfulCommandState(targetInfo, "research")) {
+      throw new SlideWorkflowError(
+        `TAKT completed but research supervision did not reach successful state '${targetInfo.target} -> researched'.`,
+        "TAKT_RESEARCH_SUPERVISION_NOT_PASSED",
+      );
+    }
     await deleteResearchReuseSidecar(targetInfo);
   } else {
     await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);

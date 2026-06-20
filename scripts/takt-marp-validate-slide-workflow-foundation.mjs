@@ -2390,6 +2390,37 @@ async function main() {
     assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse failure did not preserve sidecar for retry");
   });
 
+  await check("research reuse invalid successful supervision preserves sidecar for retry", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-invalid-success-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse invalid successful supervision\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-reuse-invalid-success", "passed", targetInfo.target, {
+        sourceReports: [],
+        supervisionState: "planned",
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "reuse invalid successful supervision unexpectedly succeeded");
+    assert(
+      result.stderr.includes("TAKT_RESEARCH_SUPERVISION_NOT_PASSED:"),
+      `reuse invalid successful supervision did not report TAKT_RESEARCH_SUPERVISION_NOT_PASSED: ${result.stderr}`,
+    );
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse invalid successful supervision did not preserve sidecar for retry");
+  });
+
   await check("research force deletes existing reuse sidecar and bypasses reuse marker", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-force-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -3800,7 +3831,7 @@ function fakeResearchTaktScriptWithArtifacts(runName, result, reportTarget, opti
     "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
     "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
     "fi",
-    ...fakeResearchSupervisionLines(runName, result, reportTarget),
+    ...fakeResearchSupervisionLines(runName, result, reportTarget, { state: options.supervisionState }),
     ...fakeResearchAdapterArtifactLines(runName),
     ...sourceReports.flatMap(({ relativePath, lines }) => fakeReportFileLines(runName, relativePath, lines)),
     "exit 0",
@@ -3840,7 +3871,7 @@ function researchTaktTargetForFixture(targetInfo) {
   return `${targetInfo.target}/research/research-brief.md`;
 }
 
-function fakeResearchSupervisionLines(runName, result, reportTarget) {
+function fakeResearchSupervisionLines(runName, result, reportTarget, options = {}) {
   return fakeReportFileLines(runName, "research-supervision.md", [
     "---",
     "command: research",
@@ -3849,7 +3880,7 @@ function fakeResearchSupervisionLines(runName, result, reportTarget) {
     `workflow_run_id: ${runName}`,
     "step: supervision",
     "cycle: 1",
-    "state: researched",
+    `state: ${options.state ?? "researched"}`,
     `result: ${result}`,
     "blocking_findings: 0",
     "major_findings: 0",
