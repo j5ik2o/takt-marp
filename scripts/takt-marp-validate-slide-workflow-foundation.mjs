@@ -36,6 +36,7 @@ import {
   isSuccessfulCommandState,
   parseFrontMatter,
   parseRequiredState,
+  readSupervision,
   researchArtifactPaths,
   requireCommand,
   resolveDeckTarget,
@@ -82,6 +83,29 @@ const RESEARCH_ADAPTER_OUTPUT_CONTRACTS = Object.freeze([
     requiredFields: ["question_id", "question", "why_it_matters", "suggested_next_step"],
   },
 ]);
+const RESEARCH_SUPERVISION_INSTRUCTION = Object.freeze({
+  name: "takt-marp-supervise-research",
+  relativePath: ".takt/facets/instructions/takt-marp-supervise-research.md",
+});
+const RESEARCH_SUPERVISION_OUTPUT_CONTRACT = Object.freeze({
+  artifactName: "research-supervision.md",
+  format: "takt-marp-research-supervision",
+  relativePath: ".takt/facets/output-contracts/takt-marp-research-supervision.md",
+  requiredFields: [
+    "command: research",
+    "target: slides/<deck>",
+    "generated_at",
+    "workflow_run_id",
+    "step: supervision",
+    "cycle",
+    "state: researched",
+    "result: passed | rejected",
+    "blocking_findings",
+    "major_findings",
+    "minor_findings",
+    "info_findings",
+  ],
+});
 const RESEARCH_ADAPTER_FORBIDDEN_BOUNDARY_TERMS = Object.freeze([
   "web fetch",
   "additional research",
@@ -1084,6 +1108,7 @@ async function main() {
     for (const term of RESEARCH_ADAPTER_FORBIDDEN_BOUNDARY_TERMS) {
       assert(instructionSource.toLowerCase().includes(term), `adapter instruction must forbid ${term}`);
     }
+    assertResearchAdapterTargetRule(instructionSource, RESEARCH_ADAPTER_INSTRUCTION.relativePath);
 
     for (const contract of RESEARCH_ADAPTER_OUTPUT_CONTRACTS) {
       const contractPath = path.join(ROOT_DIR, ...contract.relativePath.split("/"));
@@ -1094,6 +1119,7 @@ async function main() {
       for (const field of contract.requiredFields) {
         assert(contractSource.includes(field), `${contract.relativePath} missing model field ${field}`);
       }
+      assertResearchAdapterTargetRule(contractSource, contract.relativePath);
     }
 
     const localResearchReportContractPath = path.join(ROOT_DIR, ".takt", "facets", "output-contracts", "research-report.md");
@@ -1118,6 +1144,118 @@ async function main() {
       !Object.values(expectedArtifacts).some((artifact) => artifact.includes("https://example.com")),
       "fixture outputs must not fabricate plausible URLs for missing source data",
     );
+  });
+
+  await check("research workflow wrapper emits research supervision from handoff marker", async () => {
+    const wrapperPath = path.join(ROOT_DIR, ...RESEARCH_WORKFLOW_RELATIVE_PATH.split("/"));
+    const wrapperSource = await readFile(wrapperPath, "utf8");
+    const superviseStep = extractWorkflowStepBlocks(wrapperSource).find((step) => step.name === "supervise_research");
+    assert(superviseStep, "supervise_research step is missing");
+
+    assert(
+      wrapperSource.includes(`${RESEARCH_SUPERVISION_INSTRUCTION.name}: ../facets/instructions/${path.basename(RESEARCH_SUPERVISION_INSTRUCTION.relativePath)}`),
+      `research wrapper must register supervision instruction ${RESEARCH_SUPERVISION_INSTRUCTION.name}`,
+    );
+    assert(
+      superviseStep.block.includes(`\n    instruction: ${RESEARCH_SUPERVISION_INSTRUCTION.name}\n`),
+      "supervise_research must use the named research supervision instruction",
+    );
+    assert(superviseStep.block.includes("\n    output_contracts:\n"), "supervise_research must declare output contracts");
+    assert(
+      wrapperSource.includes(`${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}: ../facets/output-contracts/${path.basename(RESEARCH_SUPERVISION_OUTPUT_CONTRACT.relativePath)}`),
+      `research wrapper must register output contract format ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`,
+    );
+    assert(
+      superviseStep.block.includes(`name: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.artifactName}`) &&
+        superviseStep.block.includes(`format: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`),
+      `supervise_research must output ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.artifactName} with ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`,
+    );
+
+    const instructionPath = path.join(ROOT_DIR, ...RESEARCH_SUPERVISION_INSTRUCTION.relativePath.split("/"));
+    assert(existsSync(instructionPath), `research supervision instruction missing: ${RESEARCH_SUPERVISION_INSTRUCTION.relativePath}`);
+    const instructionSource = await readFile(instructionPath, "utf8");
+    assert(instructionSource.includes(".takt/workflow-current-target.json"), "supervision instruction must read the handoff marker");
+    assert(instructionSource.includes("user-facing target"), "supervision instruction must distinguish user-facing target");
+    assert(
+      instructionSource.includes("research-brief.md"),
+      "supervision instruction must name the research brief target that must not be used as front matter target",
+    );
+    assert(instructionSource.includes("research-supervision.md"), "supervision instruction must require research-supervision.md output");
+
+    const contractPath = path.join(ROOT_DIR, ...RESEARCH_SUPERVISION_OUTPUT_CONTRACT.relativePath.split("/"));
+    assert(existsSync(contractPath), `research supervision output contract missing: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.relativePath}`);
+    const contractSource = await readFile(contractPath, "utf8");
+    for (const field of RESEARCH_SUPERVISION_OUTPUT_CONTRACT.requiredFields) {
+      assert(contractSource.includes(field), `${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.relativePath} missing required field ${field}`);
+    }
+    assert(
+      contractSource.includes(".takt/workflow-current-target.json") && contractSource.includes("research_brief_path"),
+      "research supervision contract must document handoff marker awareness",
+    );
+    assert(
+      contractSource.includes("must not be") && contractSource.includes("research-brief.md"),
+      "research supervision contract must reject using the research brief path as front matter target",
+    );
+  });
+
+  await check("research supervision validator covers passed, rejected, and target mismatch fixtures", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    const filePath = supervisionPath(targetInfo, "research");
+
+    await writeFile(
+      filePath,
+      researchSupervisionFixture(targetInfo, {
+        state: "researched",
+        result: "passed",
+        workflowRunId: "run-research-passed",
+      }),
+      "utf8",
+    );
+    const passed = await readSupervision(targetInfo, "research");
+    assert(passed.data.command === "research", "passed fixture command was not read");
+    assert(passed.data.state === "researched", "passed research fixture state was not researched");
+    assert(isSuccessfulCommandState(targetInfo, "research"), "passed researched supervision must be successful");
+
+    await writeFile(
+      filePath,
+      researchSupervisionFixture(targetInfo, {
+        state: "planned",
+        result: "passed",
+        workflowRunId: "run-research-wrong-state",
+      }),
+      "utf8",
+    );
+    await expectFailure(() => readSupervision(targetInfo, "research"), "STATE_MISMATCH");
+    assert(!isSuccessfulCommandState(targetInfo, "research"), "passed research with wrong state must not be successful");
+
+    await writeFile(
+      filePath,
+      researchSupervisionFixture(targetInfo, {
+        state: "needs_research_revision",
+        result: "rejected",
+        workflowRunId: "run-research-rejected",
+      }),
+      "utf8",
+    );
+    const rejected = await readSupervision(targetInfo, "research");
+    assert(rejected.data.result === "rejected", "rejected research fixture was not read");
+    assert((await commandSupervisionResult(targetInfo, "research")) === "rejected", "rejected research result was not detected");
+    assert(!isSuccessfulCommandState(targetInfo, "research"), "rejected research must not be successful");
+
+    await writeFile(
+      filePath,
+      researchSupervisionFixture(targetInfo, {
+        target: "slides/demo/research/research-brief.md",
+        state: "researched",
+        result: "passed",
+        workflowRunId: "run-research-brief-target",
+      }),
+      "utf8",
+    );
+    await expectFailure(() => readSupervision(targetInfo, "research"), "FIELD_MISMATCH");
+    assert(!isSuccessfulCommandState(targetInfo, "research"), "research brief target must not satisfy user-facing target validation");
   });
 
   await check("missing approval fails approved state check", async () => {
@@ -2598,6 +2736,39 @@ function fakeTaktScriptWithAiGateReport(runName, options = {}) {
     "exit 0",
     "",
   ].join("\n");
+}
+
+function researchSupervisionFixture(targetInfo, options = {}) {
+  return [
+    "---",
+    "command: research",
+    `target: ${options.target ?? targetInfo.target}`,
+    "generated_at: 2026-06-05T17:10:00+09:00",
+    `workflow_run_id: ${options.workflowRunId ?? "run-research-1"}`,
+    "step: supervision",
+    "cycle: 1",
+    `state: ${options.state ?? "researched"}`,
+    `result: ${options.result ?? "passed"}`,
+    "blocking_findings: 0",
+    "major_findings: 0",
+    "minor_findings: 0",
+    "info_findings: 0",
+    "---",
+    "",
+    "# Research Supervision",
+    "",
+  ].join("\n");
+}
+
+function assertResearchAdapterTargetRule(source, label) {
+  assert(source.includes(".takt/workflow-current-target.json"), `${label} must read the handoff marker`);
+  assert(source.includes("marker `target`"), `${label} must document marker target usage`);
+  assert(source.includes("front matter `target`"), `${label} must bind marker target to front matter target`);
+  assert(
+    source.includes("research_brief_path") && source.includes("research-brief.md"),
+    `${label} must document the research brief target prohibition`,
+  );
+  assert(source.includes("must not"), `${label} must explicitly prohibit using the research brief path as front matter target`);
 }
 
 async function writeSupervision(targetInfo, command, state, result, workflowRunId) {

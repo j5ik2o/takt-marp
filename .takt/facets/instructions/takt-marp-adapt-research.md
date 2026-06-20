@@ -3,6 +3,10 @@ built-in deep research の report を slide workflow 用の index artifacts に�
 ## Input Boundary
 
 - The only input is the built-in `research-report.md` from the current TAKT run.
+- Read `.takt/workflow-current-target.json` before writing any report artifact.
+- Treat the handoff marker as target metadata only, not as research content.
+- Use marker `target` as the user-facing target in every artifact front matter `target`.
+- The front matter `target` must not be marker `research_brief_path`, `slides/<deck>/research/research-brief.md`, or any TAKT internal target.
 - Read the built-in report as the source of truth. Do not use deck brief, old research artifacts, browser state, local cache, or external search results to fill gaps.
 - Forbidden: web fetch, additional research, source re-evaluation, invented claims.
 - Do not copy or regenerate `research-report.md`. It remains the built-in source report and will be synced by the runner in a later task.

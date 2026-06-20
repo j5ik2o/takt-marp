@@ -57,7 +57,7 @@
   - _Boundary:_ Research Adapter
   - _Depends:_ 2.1
 
-- [ ] 2.3 (P) research supervision output と validator を researched state に対応させる
+- [x] 2.3 (P) research supervision output と validator を researched state に対応させる
   - wrapper の supervision が `command: research`、`target: slides/<deck>`、`state: researched`、`result`、finding counts を flat front matter で出す
   - validator は passed research で `state: researched` を要求し、rejected research は rerun 判定に使えるようにする
   - adapter/supervision は handoff marker を読み、research brief target と user-facing target を混同しない

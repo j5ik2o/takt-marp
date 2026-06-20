@@ -6,6 +6,8 @@
 
 - 先頭は YAML front matter の `---` で始めてください。
 - front matter は scalar / inline-array subset のみを使い、nested object は使わないでください。
+- `.takt/workflow-current-target.json` を読み、marker `target` を artifact front matter `target` として使ってください。
+- front matter `target` は marker `research_brief_path`、`slides/<deck>/research/research-brief.md`、その他の TAKT internal target であってはならない。It must not be the research brief path.
 - `source_report: research-report.md` と `source_report_origin: builtin_deep_research` を必ず含めてください。
 - built-in report 内で確認できない値は推測せず、literal `not_present_in_builtin_report` を書いてください。
 

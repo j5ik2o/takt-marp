@@ -17,12 +17,14 @@ policies:
   takt-marp-worker-boundary: ../facets/policies/takt-marp-worker-boundary.md
 instructions:
   takt-marp-adapt-research: ../facets/instructions/takt-marp-adapt-research.md
+  takt-marp-supervise-research: ../facets/instructions/takt-marp-supervise-research.md
 knowledge:
   takt-marp-repo-conventions: ../facets/knowledge/takt-marp-repo-conventions.md
 report_formats:
   takt-marp-research-sources: ../facets/output-contracts/takt-marp-research-sources.md
   takt-marp-research-claims: ../facets/output-contracts/takt-marp-research-claims.md
   takt-marp-open-questions: ../facets/output-contracts/takt-marp-open-questions.md
+  takt-marp-research-supervision: ../facets/output-contracts/takt-marp-research-supervision.md
 
 steps:
   - name: deep_research
@@ -67,12 +69,13 @@ steps:
       - takt-marp-worker-boundary
     knowledge: takt-marp-repo-conventions
     pass_previous_response: false
-    instruction: |
-      Confirm that this workflow only delegates to deep_research, derives index artifacts from the built-in report, and performs wrapper-level supervision checks.
-      Treat copied built-in research behavior, local web access enablement, or additional workflow steps as boundary violations.
-      Detailed research-supervision report generation belongs to a later task.
+    instruction: takt-marp-supervise-research
+    output_contracts:
+      report:
+        - name: research-supervision.md
+          format: takt-marp-research-supervision
     rules:
-      - condition: wrapper boundary is satisfied
+      - condition: research-supervision.md was emitted with valid front matter
         next: COMPLETE
-      - condition: wrapper boundary is violated
+      - condition: wrapper boundary is violated or supervision front matter is invalid
         next: ABORT
