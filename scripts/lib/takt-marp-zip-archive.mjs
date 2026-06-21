@@ -162,9 +162,15 @@ function normalizeEntryName(name) {
   if (typeof name !== "string" || name.length === 0 || name.includes("\0")) {
     throw new SlideWorkflowError(`Invalid zip entry name: ${JSON.stringify(name)}`, "ZIP_ENTRY_PATH_INVALID");
   }
-  const normalized = name.replaceAll("\\", "/");
+  let normalized = name.replaceAll("\\", "/");
   if (normalized.startsWith("/") || /^[A-Za-z]:\//.test(normalized)) {
     throw new SlideWorkflowError(`Unsafe absolute zip entry path: ${name}`, "ZIP_ENTRY_PATH_INVALID");
+  }
+  while (normalized.startsWith("./")) {
+    normalized = normalized.slice(2);
+  }
+  if (normalized.length === 0) {
+    throw new SlideWorkflowError(`Invalid zip entry name: ${JSON.stringify(name)}`, "ZIP_ENTRY_PATH_INVALID");
   }
   const parts = normalized.split("/");
   if (parts.some((part) => part === ".." || part === ".")) {

@@ -236,6 +236,15 @@ async function main() {
       `zip entry list was not deterministic: ${archive.entryNames().join(", ")}`,
     );
     assert((await archive.readText("tokens/colors.css")).includes("--accent"), "zip text entry read failed");
+    const dotPrefixedArchive = await ZipArchiveReader.fromBuffer(createZipArchiveBuffer({
+      "./tokens/colors.css": ":root { --accent: #b0241d; }\n",
+      "./nested/readme.txt": "safe\n",
+    }));
+    assert(
+      JSON.stringify(dotPrefixedArchive.entryNames()) === JSON.stringify(["nested/readme.txt", "tokens/colors.css"]),
+      `dot-prefixed zip entry list was not normalized: ${dotPrefixedArchive.entryNames().join(", ")}`,
+    );
+    assert(dotPrefixedArchive.hasEntry("tokens/colors.css"), "dot-prefixed zip entry was not addressable without ./ prefix");
 
     let caught;
     try {
@@ -2038,6 +2047,38 @@ async function main() {
     assert(marker.command === "polish", `polish marker command mismatch: ${JSON.stringify(marker)}`);
     assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `polish marker dropped design_contract: ${JSON.stringify(marker)}`);
     assert(marker.design_contract?.fingerprint?.contract_sha256, `polish marker missing contract fingerprint: ${JSON.stringify(marker)}`);
+  });
+
+  await check("runner ignores stale Design Contract marker for polish", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-stale-design-marker-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const fakePackage = await makeFakePackageRoot();
+    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
+    let result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `plan runner failed before stale marker test: ${result.stderr}`);
+    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
+    await rm(path.join(root, planMarker.design_contract.path), { force: true });
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
+    await writeApproval(targetInfo, "compose", "foundation-test");
+
+    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
+    result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `polish runner failed after stale marker setup: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.command === "polish", `polish marker command mismatch: ${JSON.stringify(marker)}`);
+    assert(!marker.design_contract, `polish marker kept stale design_contract: ${JSON.stringify(marker)}`);
   });
 
   await check("research runner requires research brief before TAKT", async () => {

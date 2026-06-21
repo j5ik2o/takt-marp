@@ -258,11 +258,21 @@ async function existingDesignContractMarker(targetInfo) {
   const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
   if (existsSync(markerPath)) {
     const marker = JSON.parse(await readFile(markerPath, "utf8"));
-    if (marker.target === targetInfo.target && marker.design_contract) {
+    if (marker.target === targetInfo.target && marker.design_contract && designContractMarkerPathExists(marker.design_contract)) {
       return marker.design_contract;
     }
   }
   return loadResolvedDesignContractMarker(targetInfo);
+}
+
+function designContractMarkerPathExists(designContract) {
+  if (typeof designContract.path !== "string" || !designContract.path) {
+    return false;
+  }
+  const contractPath = path.isAbsolute(designContract.path)
+    ? designContract.path
+    : path.join(process.cwd(), designContract.path);
+  return existsSync(contractPath);
 }
 
 function projectRelativeMarkerPath(filePath) {
