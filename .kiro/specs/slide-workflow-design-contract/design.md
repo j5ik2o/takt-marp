@@ -609,6 +609,8 @@ interface ResolvedDesignContract {
 **責務と制約**
 
 - `polish-inspect` と `polish-fix` は marker に `design_contract.path` がある場合、Resolved Design Contract を読み token drift / Design Contract 不一致を確認する。
+- 通常 path では marker と Resolved Design Contract の `fingerprint.contract_sha256` を照合し、`SLIDES.md` front matter CSS、`_class`、`sections/*` の HTML/CSS、HTML visual、`images/*` が token constraints、brand fonts、adherence metadata、`guidance`、`source_catalog` と矛盾していないかを検査する。
+- Design Contract fingerprint mismatch、token drift、token 定義外の raw color / raw px / 未提供 font-family、token と無関係な class / style、`guidance` または `source_catalog` との矛盾は finding として扱う。
 - `design_contract` がない既存 deck は legacy path として扱い、Design Contract fingerprint や token drift の判定をスキップする。
 - legacy path でも render evidence と既存 source artifact から判断できる visual/layout/render finding は記録・修正できる。
 - Design Contract 不在そのものを blocked finding または blocked fix 理由にしない。
@@ -641,7 +643,7 @@ interface ResolvedDesignContract {
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
 - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker の破棄を検証する。
-- Design Contract なしの legacy polish path で inspect / fix が blocked にならないことを facet 文言として検証する。
+- `polish-inspect` / `polish-fix` が通常 path で `design_contract.path`、`fingerprint.contract_sha256`、token drift、`guidance`、`source_catalog` を確認し、Design Contract なしの legacy path だけ fingerprint / token drift 判定をスキップすることを facet 文言として検証する。
 
 ### package / global install / no-copy validation
 

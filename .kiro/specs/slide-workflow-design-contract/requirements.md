@@ -138,6 +138,12 @@
 
 6.6. Design Contract との不一致が `compose` 成果物の修正だけで解消できない場合、slide workflow は re-plan または Claude Design Source 更新が必要であることを利用者が確認できる形で報告しなければならない。
 
+6.7. `polish-inspect` または `polish-fix` が `design_contract.path` を持つ marker を読む場合、slide workflow は Resolved Design Contract を読み、marker と Resolved Design Contract の `fingerprint.contract_sha256`、`SLIDES.md` front matter CSS、`_class`、`sections/*` の HTML/CSS、HTML visual、`images/*` が token constraints、brand fonts、adherence metadata、`guidance`、`source_catalog` と矛盾しないことを確認しなければならない。
+
+6.8. `polish-inspect` または `polish-fix` が Design Contract fingerprint mismatch、token drift、token 定義外の raw color / raw px / 未提供 font-family、token と無関係な class / style、`guidance` または `source_catalog` との矛盾を見つけた場合、slide workflow は review finding として報告しなければならない。
+
+6.9. `design_contract` がない既存 deck を `polish-inspect` または `polish-fix` が扱う場合、slide workflow は Legacy Polish Path として Design Contract fingerprint と token drift の判定だけをスキップし、render evidence と既存 source artifact から判断できる visual / layout / render finding を記録または修正できなければならない。
+
 ### 要件 7: command surface と no-copy 契約を維持する
 
 **目的:** workflow 利用者として、Claude Design Source 導入後も既存の `plan / compose / polish / deliver` の操作感と no-copy 実行を保ちたい

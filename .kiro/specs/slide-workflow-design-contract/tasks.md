@@ -91,9 +91,10 @@
   - compose review が plan、blueprint、marker の fingerprint 一致、`_class` / style 定義、HTML visual の token constraint 適合を確認する。
   - `_adherence.oxlintrc.json` がある場合、raw hex color、raw px value、未提供 font-family を review finding として扱う。ただし Resolved Design Contract 由来の custom property 定義は正当な token 定義として除外する。
   - compose fix と work summary は `design-system.md` を修正対象や成功条件にせず、re-plan または Claude Design Source 更新が必要な場合を報告できる。
-  - polish inspect / fix は Design Contract がない既存 deck を legacy path として扱い、token drift 判定だけをスキップして render evidence と既存 source artifact の visual/layout/render 修正を許可する。
-  - 完了条件: review fixture で approved / needs_fix / blocked の各結果が Design Contract metadata と finding evidence から判定でき、legacy polish が Design Contract 不在だけで blocked にならない。
-  - _Requirements:_ 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 9.2, 9.5
+  - polish inspect / fix は `design_contract.path` がある場合に Resolved Design Contract を読み、marker と Resolved Design Contract の `fingerprint.contract_sha256`、`SLIDES.md`、`_class`、`sections/*`、HTML visual、`images/*` を token constraints、brand fonts、adherence metadata、`guidance`、`source_catalog` と照合する。
+  - polish inspect / fix は Design Contract がない既存 deck を legacy path として扱い、fingerprint / token drift 判定だけをスキップして render evidence と既存 source artifact の visual/layout/render 修正を許可する。
+  - 完了条件: review fixture で approved / needs_fix / blocked の各結果が Design Contract metadata と finding evidence から判定でき、通常 polish path が Design Contract drift を検出し、legacy polish が Design Contract 不在だけで blocked にならない。
+  - _Requirements:_ 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 9.2, 9.5
   - _Boundary:_ ComposeFacetContract
   - _Depends:_ 4.2
 

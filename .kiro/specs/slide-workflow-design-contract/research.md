@@ -174,10 +174,11 @@
   - 既存 marker の target が一致しても `design_contract.path` が存在しない場合、その marker を引き継ぐと存在しない Resolved Design Contract を facet に渡してしまう。最終実装では stale marker として扱い、保存済み Resolved Design Contract がなければ `design_contract` を持たない marker を書く。
   - 保存済み Resolved Design Contract 自体が malformed JSON または marker payload を作れない shape の場合も、`polish` / `deliver` を中断するより、`design_contract` を省略して legacy path へフォールバックする方が既存 deck の移行安全性に合う。
   - Claude Design Source 導入前に compose 済みの既存 deck には Resolved Design Contract がない。`polish-inspect` / `polish-fix` は Design Contract 不在そのものを blocked にせず、render evidence と既存 source artifact の範囲で legacy visual/layout/render 修正を許可する。
+  - ただし marker に `design_contract.path` がある通常 polish path では、Legacy Polish Path の skip 規則を適用してはならない。`polish-inspect` / `polish-fix` は Resolved Design Contract を読み、marker と contract の `fingerprint.contract_sha256`、token constraints、brand fonts、adherence metadata、`guidance`、`source_catalog` に対する drift を finding として扱う必要がある。
 - **含意**:
   - Claude Design Source resolver は「valid が 1 件あるか」ではなく「design directory 全体が exactly one valid source として整理されているか」を検証する。
   - Resolved Design Contract は workflow-managed artifact だが、`--force` invalidation が成功するまで旧成果物と整合する旧 contract を保つ。
-  - `polish` の migration path は `plan` / `compose` の migration path と異なる。`plan` / `compose` は Claude Design Source 必須、`polish` は既存 deck を壊さないため Design Contract なし legacy path を許可する。
+  - `polish` の migration path は `plan` / `compose` の migration path と異なる。`plan` / `compose` は Claude Design Source 必須、`polish` は既存 deck を壊さないため Design Contract なし legacy path を許可する。ただし Resolved Design Contract がある deck では通常 path として drift 検査を行う。
 - **追加 validation**:
   - invalid sibling zip で runner が TAKT を起動しない。
   - manifest `null` で importer が `CLAUDE_DESIGN_SOURCE_INVALID` を返す。
@@ -187,6 +188,7 @@
   - malformed marker から `polish` marker が保存済み Resolved Design Contract を復旧する。
   - `design_contract.path` が存在しない stale marker を `polish` marker に引き継がない。
   - corrupt な保存済み Resolved Design Contract を `polish` marker に引き継がない。
+  - `polish-inspect` 文言が `design_contract.path` のある通常 path で `fingerprint.contract_sha256` と token drift を確認し、Legacy Polish Path を Design Contract 不在時だけに限定する。
 
 ## アーキテクチャパターン評価
 
