@@ -300,6 +300,7 @@ async function main() {
     const compoundManifest = {
       namespace: "ClaudeDesignCompoundTokens",
       globalCssPaths: ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
+      brandFonts: [{ family: "Inter", status: "available" }],
       tokens: [
         { name: "--text-body", value: "16px", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--button-text-size", value: "12px", kind: "spacing", definedIn: "tokens/spacing.css" },
@@ -317,6 +318,7 @@ async function main() {
     assert(categories["--text-body"] === "typography", `typography path token misclassified: ${JSON.stringify(categories)}`);
     assert(categories["--button-text-size"] === "spacing", `spacing path token with text in name misclassified: ${JSON.stringify(categories)}`);
     assert(categories["--bg-page"] === "color", `color path token misclassified: ${JSON.stringify(categories)}`);
+    assert(classified.brand_fonts.includes("Inter"), `object brandFonts family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
   });
 
   await check("project template copy rejects prohibited workflow/facet entries before writing", async () => {
@@ -1347,6 +1349,14 @@ async function main() {
       assert(planInstruction.includes("design_contract.path"), `${rootRelativePath} plan instruction must open marker design_contract.path`);
       assert(planInstruction.includes("Resolved Design Contract JSON"), `${rootRelativePath} plan instruction must read the Resolved Design Contract JSON`);
       assert(planInstruction.includes("token constraints"), `${rootRelativePath} plan instruction must ground planning in token constraints`);
+
+      const planContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-plan.md"), "utf8");
+      const blueprintContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-blueprint.md"), "utf8");
+      for (const [label, contractSource] of [["plan", planContract], ["blueprint", blueprintContract]]) {
+        assert(contractSource.includes("Design Contract"), `${rootRelativePath} ${label} output contract must include a Design Contract section`);
+        assert(contractSource.includes("contract_sha256"), `${rootRelativePath} ${label} output contract must require contract_sha256`);
+        assert(contractSource.includes("token constraints"), `${rootRelativePath} ${label} output contract must require token constraints`);
+      }
     }
   });
 

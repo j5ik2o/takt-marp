@@ -392,7 +392,7 @@ function tokenCounts(tokens) {
 }
 
 function brandFonts(manifest, tokens) {
-  const fonts = new Set(Array.isArray(manifest.brandFonts) ? manifest.brandFonts.filter((item) => typeof item === "string") : []);
+  const fonts = new Set(manifestBrandFontFamilies(manifest.brandFonts));
   for (const token of tokens) {
     if (token.name.startsWith("--font")) {
       const match = token.value.match(/['"]([^'"]+)['"]/);
@@ -402,6 +402,23 @@ function brandFonts(manifest, tokens) {
     }
   }
   return Object.freeze([...fonts].sort());
+}
+
+function manifestBrandFontFamilies(brandFonts) {
+  if (!Array.isArray(brandFonts)) {
+    return [];
+  }
+  return brandFonts
+    .map((item) => {
+      if (typeof item === "string") {
+        return item.trim();
+      }
+      if (item && typeof item === "object" && typeof item.family === "string") {
+        return item.family.trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
 }
 
 function sha256Stable(value) {

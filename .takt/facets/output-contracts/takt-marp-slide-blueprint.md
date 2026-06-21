@@ -15,6 +15,7 @@
   - Deck mode
   - Planned slide count
   - Source basis(`brief.normalized.md` / `reference-analysis.md` / Source Materials)
+  - Design Contract summary(source path、namespace、contract_sha256)
 - Slide Blueprint Table
   - Slide ID
   - Section
@@ -32,12 +33,16 @@
   - Fixed Outline Coverageへの逆引き
   - Chapter Element Coverageへの逆引き
   - Code Example / Exercise / Appendix / Quality Checklistへの逆引き
+- Design Contract Trace
+  - `plan.md` と同じ contract_sha256 を示す
+  - 各section/slideで参照すべき token constraints、layout / visual / density 制約、brand fonts、adherence availability を示す
 - Plan Findings Trace
   - 未解決findingと、blueprint上で修正すべきslide ID
 
 ## 制約
 
 - `plan.md` と slide count、section range、coverage、deliverables が矛盾してはなりません。
+- `plan.md` の Design Contract section と contract_sha256、token constraints が矛盾してはなりません。
 - 各 slide ID は `S001` 形式で連番にしてください。
 - `Visual` は `none`、`html: ...`、`svg: ...`、`inline-svg: ...`、`existing: ...` のいずれかです。
 - `Visual Strategy` には `render_owner: compose_sections` または `render_owner: generate_visuals`、HTML/CSSで組めるか、SVGを選ぶ場合はその理由を含めてください。

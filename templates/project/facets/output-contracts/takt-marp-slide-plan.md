@@ -31,6 +31,9 @@
   - Exercise Coverage: 演習と模範回答ごとに対応 slide ID を示す
   - Appendix Coverage: 参考文献、用語集、演習模範回答、実践チェックリスト、導入時注意、既存システム適用手順ごとに対応 slide ID を示す
   - Quality Checklist Coverage: brief の品質チェック項目ごとに対応 slide ID または review gate を示す
+- Design Contract
+  - Resolved Design Contract の source path、namespace、source_sha256、contract_sha256、token summary、brand fonts、adherence availability を示す
+  - layout / visual / density planning で使う token constraints と、brief 要求との整合・制約を示す
 - Plan Findings
   - fixed outline や required element の未対応、slide count 矛盾、重要情報の欠落は `needs_input` ではなく stable finding ID 付きで記録する
 - Research Context Usage
@@ -54,5 +57,7 @@
 - research 由来の根拠を使う場合は `Research Context Usage` と slide の `Source` で artifact/claim/source を識別してください。
 - `open-questions.md` は未解決前提または保留として扱い、推測で回答を埋めないでください。
 - plan 成功条件に外部 web access や追加調査を加えないでください。
+- Design Contract section には marker の `design_contract.path` が指す Resolved Design Contract JSON の `fingerprint.contract_sha256` を `contract_sha256` として記録してください。
+- token constraints は CSS 実装ではなく、layout / visual / density / typography の計画制約として記録してください。
 - Target slide count が固定アウトライン、要求密度、講義本体要件と矛盾する場合、勝手に圧縮・拡張しないでください。`Target slide count: 5` は5枚の概要版として扱い、講義本体を要求する場合は target を100〜140または期待値相当(例: 119)へ修正する必要があることを Plan Findings に記録してください。
 - Coverage Matrix の未対応項目を空欄にしないでください。未対応の場合も `not covered` と理由、修正対象 finding ID を書いてください。
