@@ -10,7 +10,7 @@ compose command の成果物をレビューしてください。
    - (d) **尺マーカーの累計整合と捏造検出**: `brief.normalized.md` の `Event Context` の `Duration` が分単位の数値である場合、各スライドの speaker notes に尺マーカー `【N分 / 累計 M:SS】` が存在するか確認し、欠落しているスライドがあれば **major** として報告してください。尺マーカーが存在する場合、最終スライドの累計が `Duration` と整合するか確認してください。不整合は **major** です。また、`Duration` が「未指定」なのにマーカーが存在する場合も **major** として報告してください。
    - (e) **先鋭度・密度**: `policy takt-marp-general-slide-quality` の先鋭度・密度基準に従い、汎用タイトル・リード文は **major**、置換可能な低密度 bullet 列挙は **minor**(可読性に明確な悪影響がある場合は **major**)として判定してください。好みだけの指摘は finding にしないでください。
    - (f) **`html: true` 欠落と font path 解決不能**: `SLIDES.md` に HTML 要素(HTML visual、inline SVG 含む)があるのに front matter に `html: true` がない場合は **blocker** です。`@font-face` を宣言しているが path が `SLIDES.md` からの相対 path として解決不能な場合は **major** です(フォールバックスタックで描画は維持されるため blocker としない)。
-   - (g) **adherence metadata**: `_adherence.oxlintrc.json` 由来の rule が Resolved Design Contract にある場合、raw hex color、raw px value、未提供 font-family の新規混入を finding として扱ってください。
+   - (g) **adherence metadata**: `_adherence.oxlintrc.json` 由来の rule が Resolved Design Contract にある場合、raw hex color、raw px value、未提供 font-family の新規混入を finding として扱ってください。ただし、Resolved Design Contract 由来の custom property 定義そのもの(`:root { --token: raw-value; }` 等)は正当な token 定義であり finding にしないでください。token 定義外の直書きだけを対象にしてください。
 4. render output の有無や表示崩れは polish command の範囲として扱い、この review の成功条件にしないでください。
 5. 修正が必要な finding だけを stable `finding_id` 付きで `review/compose-review.md` に記録してください。
 6. 既定 severity から逸脱する場合は、finding の evidence に理由を記してください。

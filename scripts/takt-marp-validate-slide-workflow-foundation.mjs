@@ -24,6 +24,7 @@ import {
 import {
   archiveCommandArtifacts,
   APPROVAL_COMMANDS,
+  approvalPath,
   assertCommandPrerequisites,
   assertTaktExecutableAvailable,
   assertWorkflowAvailable,
@@ -1942,6 +1943,33 @@ async function main() {
     assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
     assert(result.stderr.includes("slides/demo/design"), `missing design source message did not identify design directory: ${result.stderr}`);
     assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source");
+  });
+
+  await check("plan force validates Claude Design Source before archiving artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-force-missing-design-source-"));
+    const targetInfo = await makeDeck(root, "demo");
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    await mkdir(path.join(root, "dist", "demo"), { recursive: true });
+    await writeFile(path.join(root, "dist", "demo", "SLIDES.pdf"), "old pdf", "utf8");
+    await rm(path.join(targetInfo.deckPath, "design"), { recursive: true, force: true });
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock", "--force"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "force runner unexpectedly accepted missing Claude Design Source");
+    assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `force missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
+    assert(existsSync(supervisionPath(targetInfo, "plan")), "force archived supervision before validating Claude Design Source");
+    assert(existsSync(approvalPath(targetInfo, "plan")), "force archived approval before validating Claude Design Source");
+    assert(existsSync(path.join(root, "dist", "demo", "SLIDES.pdf")), "force cleaned generated outputs before validating Claude Design Source");
+    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "force created review history before validating Claude Design Source");
+    assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source on force");
   });
 
   await check("runner preserves Design Contract marker for polish", async () => {

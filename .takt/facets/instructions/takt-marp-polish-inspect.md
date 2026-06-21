@@ -1,11 +1,12 @@
 render evidence と compose source artifacts を照合し、visual/layout/render finding を記録してください。
 
 **やること:**
-1. `.takt/render/<deck>/cycle-1/metadata.json`、`.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract、`sections/*`、`SLIDES.md`、HTML visual、`images/*` を読んでください。
+1. `.takt/render/<deck>/cycle-1/metadata.json`、`.takt/workflow-current-target.json`、`sections/*`、`SLIDES.md`、HTML visual、`images/*` を読んでください。marker に `design_contract.path` がある場合は、その Resolved Design Contract も読んでください。
 2. HTML/PDF/PDF raster の status と degraded reason を確認してください。
 3. visual、layout、render、design-token 関連の問題だけを finding として記録してください。
-4. plan-level content、中心メッセージ、delivery artifact の要否は scope 外として扱ってください。
-5. `review/polish-inspect.md` に stable `finding_id` 付きで finding を書いてください。
+4. `design_contract` がない既存 deck では legacy path として扱い、Design Contract fingerprint や token drift の判定は行わず、既存の render evidence と source artifact で検査できる finding だけを記録してください。Design Contract 不在そのものを blocked finding にしないでください。
+5. plan-level content、中心メッセージ、delivery artifact の要否は scope 外として扱ってください。
+6. `review/polish-inspect.md` に stable `finding_id` 付きで finding を書いてください。
 
 **判定基準:**
 - 修正不要なら `approved` としてください。

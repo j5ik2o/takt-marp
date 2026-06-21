@@ -70,6 +70,11 @@ async function main() {
     fullResearchPreflightChecked = true;
   }
 
+  let resolvedDesignContract = null;
+  if ((command === "plan" || command === "compose") && flags.force) {
+    resolvedDesignContract = await resolveAndSaveClaudeDesignContract(targetInfo);
+  }
+
   let researchReuseCandidate = null;
   if (flags.force) {
     if (command === "research") {
@@ -104,7 +109,6 @@ async function main() {
   let runSnapshotBefore;
   let runDirectorySnapshotBefore;
   let preparedResearchReuseCandidate = null;
-  let resolvedDesignContract = null;
   try {
     const selectedWorkflowForTakt = researchReuseCandidate
       ? assertResearchReuseWorkflowAvailable(preparedWorkflow?.workflowFilePath ?? availableWorkflowPath)
@@ -112,7 +116,7 @@ async function main() {
     preparedResearchReuseCandidate = researchReuseCandidate
       ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
       : null;
-    if (command === "plan" || command === "compose") {
+    if ((command === "plan" || command === "compose") && !resolvedDesignContract) {
       resolvedDesignContract = await resolveAndSaveClaudeDesignContract(targetInfo);
     }
     await writeCurrentWorkflowTarget(command, targetInfo, {
