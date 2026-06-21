@@ -991,12 +991,13 @@ async function runResearchReuseSequenceChecks(options) {
     const preservedCandidate = await resolveResearchReuseCandidate(targetInfo, { root: ROOT });
     assert(preservedCandidate, "sequence:research-reuse-failure-sidecar-preserved did not preserve sidecar after reuse failure");
     assert(
-      await readFile(researchArtifacts.report, "utf8") === MOCK_BUILTIN_RESEARCH_REPORT,
-      "sequence:research-reuse-failure-source-copy source report copy changed during failed reuse",
+      !existsSync(researchArtifacts.report),
+      "sequence:research-reuse-failure-source-copy-rollback left an uncommitted reuse source report after failed reuse",
     );
     observedPaths.push(relativePath(retryFailureArgsPath), relativePath(reuseFailureArgsPath));
     checks.push(pass("sequence:research-reuse-failure-command", "Reuse failure ran through the workflow runner and preserved the TAKT exit code."));
     checks.push(pass("sequence:research-reuse-failure-sidecar-preserved", "Reuse failure preserved the reusable sidecar for a later retry."));
+    checks.push(pass("sequence:research-reuse-failure-source-copy-rollback", "Reuse failure rolled back the staged source report copy."));
 
     return Object.freeze({
       checks: Object.freeze(checks),

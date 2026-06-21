@@ -2027,6 +2027,28 @@ async function main() {
     assert(!existsSync(argsPath), "TAKT was invoked despite missing TAKT built-in deep research");
   });
 
+  await check("research reuse mode bypasses built-in deep research availability preflight", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-no-builtin-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse without built-in deep research\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-reuse-no-builtin", "passed", targetInfo.target, { sourceReports: [] }));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `reuse mode should not require TAKT built-in deep research: ${result.stderr}`);
+    assert(existsSync(argsPath), "reuse mode did not invoke TAKT after bypassing built-in deep research preflight");
+    assert(!result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `reuse mode still failed built-in preflight: ${result.stderr}`);
+  });
+
   await check("research successful rerun without force is blocked before TAKT", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-rerun-blocked-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -2235,6 +2257,36 @@ async function main() {
     assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "missing deep research report left a sidecar file");
   });
 
+  await check("failed research run with missing reports directory does not replace TAKT exit code", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-missing-reports-dir-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nMissing reports directory\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+        workflow: selectedWorkflowPath,
+        exitCode: 46,
+        createReportsDir: false,
+        sourceReports: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 46, `missing reports directory should preserve TAKT exit code 46, got ${result.status}: ${result.stderr}`);
+    assert(!result.stderr.includes("ENOENT"), `missing reports directory leaked raw ENOENT: ${result.stderr}`);
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing reports directory created a reuse sidecar");
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "missing reports directory left a sidecar file");
+  });
+
   await check("failed research run rejects ambiguous reusable reports without sidecar", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-ambiguous-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -2267,7 +2319,7 @@ async function main() {
       [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
       { cwd: root, encoding: "utf8" },
     );
-    assert(result.status !== 0, "ambiguous failed research unexpectedly succeeded");
+    assert(result.status === 44, `ambiguous failed research should preserve TAKT exit code 44, got ${result.status}: ${result.stderr}`);
     assert(result.stderr.includes("TAKT_RESEARCH_REUSE_AMBIGUOUS:"), `ambiguous reuse candidate did not report TAKT_RESEARCH_REUSE_AMBIGUOUS: ${result.stderr}`);
     assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "ambiguous reusable reports created a sidecar");
     assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "ambiguous reusable reports left a sidecar file");
@@ -2369,6 +2421,8 @@ async function main() {
     const researchArtifacts = researchArtifactPaths(targetInfo);
     await mkdir(targetInfo.researchPath, { recursive: true });
     await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse failure\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Successful Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
     const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
     const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
     const fakePackage = await makeFakePackageRoot();
@@ -2388,6 +2442,14 @@ async function main() {
       `reuse failure marker source report path mismatch: ${JSON.stringify(marker)}`,
     );
     assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse failure did not preserve sidecar for retry");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === "# Existing Successful Research Report\n",
+      "reuse failure did not roll back deck-local research-report.md",
+    );
+    assert(
+      await readFile(researchArtifacts.sources, "utf8") === "# Existing Research Sources\n",
+      "reuse failure changed existing research-sources.md",
+    );
   });
 
   await check("research reuse invalid successful supervision preserves sidecar for retry", async () => {
@@ -2396,6 +2458,10 @@ async function main() {
     const researchArtifacts = researchArtifactPaths(targetInfo);
     await mkdir(targetInfo.researchPath, { recursive: true });
     await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse invalid successful supervision\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Successful Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
+    await writeFile(researchArtifacts.claims, "# Existing Research Claims\n", "utf8");
+    await writeFile(researchArtifacts.openQuestions, "# Existing Open Questions\n", "utf8");
     await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
     const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
     const fakePackage = await makeFakePackageRoot();
@@ -2419,6 +2485,22 @@ async function main() {
       `reuse invalid successful supervision did not report TAKT_RESEARCH_SUPERVISION_NOT_PASSED: ${result.stderr}`,
     );
     assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse invalid successful supervision did not preserve sidecar for retry");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === "# Existing Successful Research Report\n",
+      "reuse invalid successful supervision did not roll back deck-local research-report.md",
+    );
+    assert(
+      await readFile(researchArtifacts.sources, "utf8") === "# Existing Research Sources\n",
+      "reuse invalid successful supervision changed existing research-sources.md before supervision validation",
+    );
+    assert(
+      await readFile(researchArtifacts.claims, "utf8") === "# Existing Research Claims\n",
+      "reuse invalid successful supervision changed existing research-claims.md before supervision validation",
+    );
+    assert(
+      await readFile(researchArtifacts.openQuestions, "utf8") === "# Existing Open Questions\n",
+      "reuse invalid successful supervision changed existing open-questions.md before supervision validation",
+    );
   });
 
   await check("research force deletes existing reuse sidecar and bypasses reuse marker", async () => {
@@ -3857,7 +3939,8 @@ function fakeFailingResearchTaktScriptWithReuseMeta(runName, targetInfo, options
     "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
     "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
     "fi",
-    `mkdir -p "${reportsDir}"`,
+    `mkdir -p ".takt/runs/${runName}"`,
+    ...(options.createReportsDir === false ? [] : [`mkdir -p "${reportsDir}"`]),
     `cat > ".takt/runs/${runName}/meta.json" <<'EOF'`,
     JSON.stringify(meta, null, 2),
     "EOF",
