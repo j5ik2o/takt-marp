@@ -67,3 +67,15 @@ _Avoid_: review validator, human approval, report formatter
 **Plan Optional Context（plan任意文脈）**:
 `plan` が `brief.md` を primary input として維持しながら、存在する research artifacts だけを補助文脈として読む扱い。
 _Avoid_: research prerequisite, mandatory research, plan input replacement
+
+**Claude Design Source（Claude Designソース）**:
+Claude Design から export または handoff された、slide workflow が受け付ける唯一の user-facing design system 入力。
+_Avoid_: manual design-contract.md, bundled design profile, generated design-system.md
+
+**Design Contract（デザイン契約）**:
+Claude Design Source を workflow が読める形に正規化した内部契約。layout vocabulary、visual component、CSS token、review 可能な style 制約を定義する。
+_Avoid_: user-authored design input, per-deck generated design system, ad hoc CSS template, style notes
+
+**Resolved Design Contract（解決済みデザイン契約）**:
+Claude Design Source を取り込み、source metadata と fingerprint を付与した workflow 実行時の Design Contract。
+_Avoid_: generated design-system.md, compose-local style decision, implicit design

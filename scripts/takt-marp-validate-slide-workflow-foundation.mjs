@@ -51,6 +51,7 @@ import {
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
+import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-source.mjs";
 import {
   FORBIDDEN_PACK_FILES,
   REQUIRED_PACK_FILES,
@@ -221,6 +222,46 @@ async function main() {
       assert(error.code === code, `${code} was not stored on the error`);
       assert(errorModule.formatError(error) === `${code}: ${message}`, `${code} formatted unexpectedly: ${errorModule.formatError(error)}`);
     }
+  });
+
+  await check("Claude Design zip reader rejects traversal and exposes safe entries", async () => {
+    const { ZipArchiveReader, createZipArchiveBuffer } = await import("./lib/takt-marp-zip-archive.mjs");
+    const archive = await ZipArchiveReader.fromBuffer(createZipArchiveBuffer({
+      "tokens/colors.css": ":root { --accent: #b0241d; }\n",
+      "nested/readme.txt": "safe\n",
+    }));
+    assert(
+      JSON.stringify(archive.entryNames()) === JSON.stringify(["nested/readme.txt", "tokens/colors.css"]),
+      `zip entry list was not deterministic: ${archive.entryNames().join(", ")}`,
+    );
+    assert((await archive.readText("tokens/colors.css")).includes("--accent"), "zip text entry read failed");
+
+    let caught;
+    try {
+      await ZipArchiveReader.fromBuffer(createZipArchiveBuffer({ "../escape.txt": "bad\n" }));
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "ZIP_ENTRY_PATH_INVALID", `expected ZIP_ENTRY_PATH_INVALID, got ${caught?.code ?? "success"}`);
+  });
+
+  await check("Claude Design fixture imports into a deterministic Resolved Design Contract", async () => {
+    const {
+      buildClaudeDesignSmokeFixtureZipBuffer,
+      importClaudeDesignSourceBuffer,
+    } = await import("./lib/takt-marp-claude-design-source.mjs");
+    const sourcePath = path.join(ROOT_DIR, "slides", "demo", "design", "Claude Design Smoke.zip");
+    const first = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    const second = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+
+    assert(first.source.kind === "claude-design-zip", `unexpected design source kind: ${first.source.kind}`);
+    assert(first.source.path === "slides/demo/design/Claude Design Smoke.zip", `source path must be project-relative: ${first.source.path}`);
+    assert(first.source.namespace === "ClaudeDesignSmoke", `namespace mismatch: ${first.source.namespace}`);
+    assert(first.token_counts.color >= 2, `color token count too small: ${JSON.stringify(first.token_counts)}`);
+    assert(first.token_counts.typography >= 2, `typography token count too small: ${JSON.stringify(first.token_counts)}`);
+    assert(first.token_counts.spacing >= 1, `spacing token count too small: ${JSON.stringify(first.token_counts)}`);
+    assert(first.adherence.available === true, "optional adherence metadata was not detected");
+    assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
   });
 
   await check("project template copy rejects prohibited workflow/facet entries before writing", async () => {
@@ -854,6 +895,14 @@ async function main() {
       `required package files must include shared error runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
     );
     assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-claude-design-source.mjs"),
+      `required package files must include Claude Design importer runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-zip-archive.mjs"),
+      `required package files must include zip archive runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
       !REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-project-init.mjs"),
       `init compatibility shim must not be mandatory package content: ${REQUIRED_PACK_FILES.join(", ")}`,
     );
@@ -1209,6 +1258,35 @@ async function main() {
       assert(source.includes("needs_input"), "plan optional context contract must describe non-blocking needs_input behavior");
       assert(source.includes("外部 web access"), "plan optional context contract must forbid external web access as a success condition");
       assert(source.includes("未解決"), "plan optional context contract must keep open questions unresolved");
+    }
+  });
+
+  await check("compose workflow and facets use Design Contract without design-system step", async () => {
+    for (const rootRelativePath of [".takt", "templates/project"]) {
+      const workflowPath = path.join(ROOT_DIR, rootRelativePath, "workflows", "takt-marp-slide-compose.yaml");
+      const workflowSource = await readFile(workflowPath, "utf8");
+      assert(workflowSource.includes("initial_step: compose_sections"), `${workflowPath} must start compose at compose_sections`);
+      assert(!workflowSource.includes("initial_step: design_system"), `${workflowPath} still starts with design_system`);
+      assert(!/^\s+design_system:/m.test(workflowSource), `${workflowPath} still declares a design_system step`);
+      assert(!workflowSource.includes("takt-marp-design-system"), `${workflowPath} still references takt-marp-design-system`);
+
+      const facetRoot = path.join(ROOT_DIR, rootRelativePath, "facets");
+      const facetFiles = await listFilesRecursively(facetRoot);
+      const violations = [];
+      for (const filePath of facetFiles) {
+        const source = await readFile(filePath, "utf8");
+        const relativePath = path.relative(ROOT_DIR, filePath);
+        source.split("\n").forEach((line, index) => {
+          const isAllowedLegacyNote = line.includes("既存 deck に `design-system.md` が残っていても");
+          if (line.includes("design-system.md") && !isAllowedLegacyNote) {
+            violations.push(`${relativePath}:${index + 1}: ${line.trim()}`);
+          }
+          if (line.includes("takt-marp-design-system") || line.includes("design_system")) {
+            violations.push(`${relativePath}:${index + 1}: ${line.trim()}`);
+          }
+        });
+      }
+      assert(violations.length === 0, `Design Contract facet migration violations:\n${violations.join("\n")}`);
     }
   });
 
@@ -1779,9 +1857,37 @@ async function main() {
     assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
     const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
     assert(marker.target === "slides/demo", `plan marker target changed unexpectedly: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `plan marker missing design_contract path: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.source?.path === "slides/demo/design/Claude Design Smoke.zip", `plan marker missing source path: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.fingerprint?.contract_sha256, `plan marker missing contract fingerprint: ${JSON.stringify(marker)}`);
+    assert(
+      existsSync(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json")),
+      "runner did not write resolved design contract",
+    );
     assert(!Object.hasOwn(marker, "research_brief_path"), `plan marker included research brief path: ${JSON.stringify(marker)}`);
     assert(!Object.hasOwn(marker, "research_output_dir"), `plan marker included research output dir: ${JSON.stringify(marker)}`);
     assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
+  });
+
+  await check("runner rejects missing Claude Design Source before TAKT for plan", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-missing-design-source-"));
+    const deckPath = path.join(root, "slides", "demo");
+    await mkdir(path.join(deckPath, "review"), { recursive: true });
+    await writeFile(path.join(deckPath, "brief.md"), "# Brief\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "runner unexpectedly accepted missing Claude Design Source");
+    assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
+    assert(result.stderr.includes("slides/demo/design"), `missing design source message did not identify design directory: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source");
   });
 
   await check("research runner requires research brief before TAKT", async () => {
@@ -3773,7 +3879,9 @@ async function makeDeck(root, deckName) {
   const deckPath = path.join(root, "slides", deckName);
   await mkdir(path.join(deckPath, "review"), { recursive: true });
   await writeFile(path.join(deckPath, "brief.md"), "# Brief\n");
-  return resolveDeckTarget(`slides/${deckName}`, { root });
+  const targetInfo = resolveDeckTarget(`slides/${deckName}`, { root });
+  await writeClaudeDesignSmokeFixture(targetInfo, { root });
+  return targetInfo;
 }
 
 async function makeSelectedWorkflowFile(command, options = {}) {
@@ -3792,15 +3900,18 @@ async function makeFakePackageRoot() {
   // Copy (not symlink) so ESM realpath resolution derives packageRoot from the fake package, not the repo.
   for (const relative of [
     "takt-marp-run-slide-workflow.mjs",
+    path.join("lib", "takt-marp-claude-design-source.mjs"),
     path.join("lib", "takt-marp-errors.mjs"),
     path.join("lib", "takt-marp-project-templates.mjs"),
     path.join("lib", "takt-marp-slide-workflow.mjs"),
     path.join("lib", "takt-marp-runtime-context.mjs"),
+    path.join("lib", "takt-marp-zip-archive.mjs"),
   ]) {
     const destination = path.join(packageRoot, "scripts", relative);
     await mkdir(path.dirname(destination), { recursive: true });
     await cp(path.join(SCRIPT_DIR, relative), destination);
   }
+  await cp(path.join(ROOT_DIR, "node_modules", "fflate"), path.join(packageRoot, "node_modules", "fflate"), { recursive: true });
   return {
     packageRoot,
     runnerScript: path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
@@ -3821,6 +3932,7 @@ async function makeFakeCliPackageRoot() {
   }
   await cp(path.join(SCRIPT_DIR, "lib"), path.join(packageRoot, "scripts", "lib"), { recursive: true });
   await cp(path.join(ROOT_DIR, "templates", "project"), path.join(packageRoot, "templates", "project"), { recursive: true });
+  await cp(path.join(ROOT_DIR, "node_modules", "fflate"), path.join(packageRoot, "node_modules", "fflate"), { recursive: true });
   const realPackageRoot = await realpath(packageRoot);
   return {
     binScript: path.join(realPackageRoot, "bin", "takt-marp.mjs"),

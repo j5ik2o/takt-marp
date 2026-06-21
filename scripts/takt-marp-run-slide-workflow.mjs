@@ -29,6 +29,7 @@ import {
   writeResearchReuseSidecar,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
+import { resolveAndSaveClaudeDesignContract } from "./lib/takt-marp-claude-design-source.mjs";
 
 function usage() {
   return [
@@ -100,6 +101,7 @@ async function main() {
   let runSnapshotBefore;
   let runDirectorySnapshotBefore;
   let preparedResearchReuseCandidate = null;
+  let resolvedDesignContract = null;
   try {
     const selectedWorkflowForTakt = researchReuseCandidate
       ? assertResearchReuseWorkflowAvailable(preparedWorkflow?.workflowFilePath ?? availableWorkflowPath)
@@ -107,7 +109,13 @@ async function main() {
     preparedResearchReuseCandidate = researchReuseCandidate
       ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
       : null;
-    await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate: preparedResearchReuseCandidate });
+    if (command === "plan" || command === "compose") {
+      resolvedDesignContract = await resolveAndSaveClaudeDesignContract(targetInfo);
+    }
+    await writeCurrentWorkflowTarget(command, targetInfo, {
+      researchReuseCandidate: preparedResearchReuseCandidate,
+      designContract: resolvedDesignContract?.markerPayload,
+    });
     runSnapshotBefore = await snapshotTaktRuns(command);
     runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
     const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
@@ -228,6 +236,9 @@ async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
     marker.research_source_report_path = projectRelativeMarkerPath(options.researchReuseCandidate.source_report_path);
     marker.research_source_report_origin = "builtin_deep_research";
     marker.research_source_run = options.researchReuseCandidate.source_run;
+  }
+  if (options.designContract) {
+    marker.design_contract = options.designContract;
   }
   await writeFile(
     markerPath,

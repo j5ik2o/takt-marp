@@ -1,11 +1,11 @@
 正規化されたbriefからスライド設計図を作成してください。
 
 **やること:**
-1. `brief.normalized.md`、`reference-analysis.md`、必要なSource Materialsを読んでください。deck-local `slides/<deck>/brief.normalized.md` / `slides/<deck>/reference-analysis.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` / `Report Directory/reference-analysis.md` を読んでください。primary input は引き続き `brief.md` / `brief.normalized.md` です。
+1. `brief.normalized.md`、`reference-analysis.md`、`.takt/workflow-current-target.json`、必要なSource Materialsを読んでください。deck-local `slides/<deck>/brief.normalized.md` / `slides/<deck>/reference-analysis.md` が存在しない場合は、この step の `Report Directory/brief.normalized.md` / `Report Directory/reference-analysis.md` を読んでください。primary input は引き続き `brief.md` / `brief.normalized.md` です。
 2. bindされている `takt-marp-slide-plan` と `takt-marp-slide-blueprint` の output contract に従って、`plan.md` と `slide-blueprint.md` を作成してください。古いdocsのplan記述とこのinstructionやoutput contractが矛盾する場合は、このinstructionとoutput contractを優先してください。
 3. compose用の詳細設計として `slide-blueprint.md` を作成してください。`plan.md` は講義全体の設計とcoverage、`slide-blueprint.md` は各slideのcontent atoms、visual strategy、section assembly manifestを担います。
 4. 各スライドに `Message`、`Layout`、`Content`、`Visual`、`Visual Strategy`、`Speaker note intent`、`Source` を必ず書いてください。
-5. `Layout` は knowledge `takt-marp-repo-conventions` の「Layout 語彙」表にある基本語彙のいずれかを選んでください。基本語彙で表現できない場合のみ `custom: <kebab-case-class> — <用途1行>` 句を使用してください(後続の design-system step が同名 class を定義します)。modifier を使う場合は `Layout` に基本 class と併記してください(例: `single profile`)。modifier 単独の指定は不可です。1列/2列の理由と比率を短く書いてください。
+5. `Layout` は knowledge `takt-marp-repo-conventions` の「Layout 語彙」表にある基本語彙のいずれかを選んでください。基本語彙で表現できない場合のみ `custom: <kebab-case-class> — <用途1行>` 句を使用してください。modifier を使う場合は `Layout` に基本 class と併記してください(例: `single profile`)。modifier 単独の指定は不可です。1列/2列の理由と比率を短く書いてください。
 6. visualは `none`、`html: ...`、`svg: ...`、`inline-svg: ...`、`existing: ...` のいずれかで明示してください。
    - `html:` はカード、比較、表、Before/After、軽量フロー、タイムライン、チェックリスト、コード注釈など section source 内HTML/CSSで構成できる場合に使い、`Visual Strategy` に `render_owner: compose_sections` を書いてください。
    - `svg:` と `inline-svg:` は座標制御、複雑な矢印、再利用図版、単体レビューが必要な場合に限定し、`Visual Strategy` に `render_owner: generate_visuals` とSVGを選ぶ理由を書いてください。
@@ -22,6 +22,8 @@
 15. `open-questions.md` は未解決前提または保留として扱い、推測で回答を埋めず、必要なら `Plan Findings` または `Non-blocking human review points` に残してください。
 16. plan command の成功条件として外部 web access や追加調査を要求しないでください。
 17. `Target slide count` と固定アウトライン・情報密度・講義本体要件が矛盾する場合は、勝手に圧縮しないでください。`Target slide count: 5` は5枚の概要版として計画し、講義本体を生成するには target を100〜140または期待値相当(例:119)へ修正する必要があることを `Plan Findings` に記録してください。
+18. marker の `design_contract` を読み、Resolved Design Contract の source path、namespace、fingerprint、token summary、adherence availability を `plan.md` と `slide-blueprint.md` に記録してください。`design_contract` がない、path が読めない、または brief の要求と token constraints が両立しない場合は、推測で補完せず finding または `needs_input` にしてください。
+19. plan artifact には CSS、front matter style、`_class` style 定義を書かないでください。layout / visual / density の制約だけを、後続 compose が実装できる指示として書いてください。
 
 **artifact 出力:**
 - この step には `Report Directory` / `Report File` が渡されます。`Report File` の `plan.md` を正本として必ず出力してください。
@@ -41,6 +43,7 @@
 - Slide blueprint:
 - Coverage matrix:
 - Visual rendering coverage:
+- Design contract:
 - Research context usage:
 - Plan findings:
 - Files changed:

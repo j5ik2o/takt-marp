@@ -13,7 +13,8 @@ slides/<deck>/
   reference-analysis.md
   plan.md
   slide-blueprint.md
-  design-system.md
+  design/
+    <claude-design-export>.zip
   sections/
     manifest.md
     *.md
@@ -42,11 +43,13 @@ font style には日本語優先フォールバックスタックを必ず指定
 推奨スタック: `"Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif`
 `@font-face` を宣言する場合は、`SLIDES.md` からの相対 path が実在するファイルのみを参照する(path が存在しない環境では `@font-face` を省略し、フォールバックスタックのみで描画する)。
 
-## Design System
+## Design Contract
 
-各deckは `design-system.md` を持つ。
-`design-system.md` は typography、spacing、layout、visual、color、QA rules のdeck-local tokenを定義する。
-`SLIDES.md` のfront matter CSSは、スライドごとの個別調整ではなく、design-system tokenと用途別classで構成する。
+各deckは `slides/<deck>/design/` に Claude Design Source の zip を1つ置く。
+workflow runner は Claude Design Source を `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`.takt/workflow-current-target.json` の `design_contract` で plan / compose へ渡す。
+`plan.md` と `slide-blueprint.md` は Design Contract metadata と fingerprint を記録するが、CSS、front matter style、`_class` style 定義は生成しない。
+`SLIDES.md` のfront matter CSSは、スライドごとの個別調整ではなく、Resolved Design Contract の token と用途別classで構成する。
+既存 deck に `design-system.md` が残っていても、Claude Design Source、override、compose 成功条件として扱わない。
 
 ## Section Source
 
@@ -82,7 +85,7 @@ HTML visualを使う場合は front matter に `html: true` を設定する。
 ## Layout 語彙
 
 以下は基本語彙であり、拡張可能な出発点である(閉じた enum ではない)。
-plan / compose は `_class:` にこの語彙を使用するか、命名規約に従い新 class を定義する。
+plan / compose は `_class:` にこの語彙を使用するか、命名規約に従い新 class を定義する。新 class の実装は Resolved Design Contract の token constraints に従う。
 
 ### 基本 class
 

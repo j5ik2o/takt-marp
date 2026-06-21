@@ -56,16 +56,18 @@ takt-marp plan "slides/<deck>"
 
 ```text
 slides/<deck>/
+  design/<claude-design-export>.zip
   brief.normalized.md
   plan.md
-  design-system.md
+  slide-blueprint.md
+  sections/*.md
   SLIDES.md
   images/*.svg
   research/*.md
   review/*.md
 ```
 
-`design-system.md` はデッキ単位のtypography、spacing、layout、visual、color、QA tokenを定義します。`SLIDES.md` はスライドごとの個別style調整ではなく、Marp class経由でそれらのtokenを使う前提です。
+`plan` と `compose` は `slides/<deck>/design/` 配下に Claude Design export zip が1つあることを前提にします。runner はこれを `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`plan` は metadata と fingerprint を記録し、`compose` は同じ token を `SLIDES.md` に適用します。
 
 ### 4. polishとdeliverの範囲
 
@@ -76,7 +78,7 @@ slides/<deck>/
 - layout選択と段組比率
 - typography consistency: 文字間、行間、サイズ階層
 - spatial balance: 上寄り、左寄り、大きな意図しない余白、視覚重心
-- design-system usage: token化されたCSS、スライドごとのstyle drift防止
+- Design Contract usage: token化されたCSS、スライドごとのstyle drift防止
 
 `deliver` は要求された成果物を生成し、delivery verification と supervision まで行います。
 単純なローカル生成や確認だけなら、workflow state を変更しない utility command を使います。

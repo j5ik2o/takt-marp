@@ -56,16 +56,18 @@ Human approval is recorded by `takt-marp approve` for `plan` and `compose` only.
 
 ```text
 slides/<deck>/
+  design/<claude-design-export>.zip
   brief.normalized.md
   plan.md
-  design-system.md
+  slide-blueprint.md
+  sections/*.md
   SLIDES.md
   images/*.svg
   research/*.md
   review/*.md
 ```
 
-`design-system.md` defines deck-local typography, spacing, layout, visual, color, and QA tokens. `SLIDES.md` should use those tokens through Marp classes instead of per-slide style tweaks.
+`plan` and `compose` require exactly one Claude Design export zip under `slides/<deck>/design/`. The runner normalizes it into `.takt/design-contracts/<deck>/resolved-design-contract.json`; `plan` records metadata and fingerprints, while `compose` applies the same tokens to `SLIDES.md`.
 
 ### 4. Polish and delivery scope
 
@@ -76,7 +78,7 @@ slides/<deck>/
 - layout choice and split ratios
 - typography consistency: letter spacing, line height, size hierarchy
 - spatial balance: top/left bias, large unintended blank areas, visual center of gravity
-- design-system usage: tokenized CSS, no per-slide style drift
+- Design Contract usage: tokenized CSS, no per-slide style drift
 
 `deliver` is responsible for requested artifacts, delivery verification, and final supervision.
 For simple local generation or inspection, use utility commands that do not change workflow state:

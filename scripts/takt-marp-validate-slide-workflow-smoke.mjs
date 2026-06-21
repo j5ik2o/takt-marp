@@ -26,6 +26,10 @@ import {
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 import { resolveTemplateSource, workflowFilePath } from "./lib/takt-marp-project-templates.mjs";
+import {
+  resolveAndSaveClaudeDesignContract,
+  writeClaudeDesignSmokeFixture,
+} from "./lib/takt-marp-claude-design-source.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(SCRIPT_DIR, "..");
@@ -383,6 +387,7 @@ async function assertPlanSourceArtifacts(targetInfo, { researchExpected = false 
   const referenceAnalysis = await readFile(artifactPaths[1], "utf8");
   const plan = await readFile(artifactPaths[2], "utf8");
   const blueprint = await readFile(artifactPaths[3], "utf8");
+  const designContract = await readSmokeResolvedDesignContract(targetInfo);
   for (const [label, source, artifactPath] of [
     ["normalized", normalized, artifactPaths[0]],
     ["plan", plan, artifactPaths[2]],
@@ -435,6 +440,10 @@ async function assertPlanSourceArtifacts(targetInfo, { researchExpected = false 
   }
   for (const phrase of [
     "# Slide Plan",
+    "## Design Contract",
+    designContract.source.path,
+    designContract.source.namespace,
+    designContract.fingerprint.contract_sha256,
     "Coverage Matrix",
     "Fixed Outline Coverage",
     "Visual Rendering Coverage",
@@ -448,6 +457,10 @@ async function assertPlanSourceArtifacts(targetInfo, { researchExpected = false 
   }
   for (const phrase of [
     "# Slide Blueprint",
+    "## Design Contract",
+    designContract.source.path,
+    designContract.source.namespace,
+    designContract.fingerprint.contract_sha256,
     "Slide Blueprint Table",
     "Section Assembly Manifest",
     "sections/01-intro.md",
@@ -461,6 +474,25 @@ async function assertPlanSourceArtifacts(targetInfo, { researchExpected = false 
     assert(plan.includes(item.label), `sequence:plan-source-artifacts plan coverage missing fixed outline leaf '${item.label}'`);
   }
   return Object.freeze(artifactPaths);
+}
+
+function smokeResolvedDesignContractPath(targetInfo) {
+  return path.join(ROOT, ".takt", "design-contracts", targetInfo.deckName, "resolved-design-contract.json");
+}
+
+async function readSmokeResolvedDesignContract(targetInfo) {
+  const contractPath = smokeResolvedDesignContractPath(targetInfo);
+  await assertReadableFile(contractPath, "sequence:design-contract-artifact");
+  const contract = JSON.parse(await readFile(contractPath, "utf8"));
+  assert(contract.source?.kind === "claude-design-zip", `sequence:design-contract-artifact unexpected source kind: ${JSON.stringify(contract.source)}`);
+  assert(contract.source?.path === `${targetInfo.target}/design/Claude Design Smoke.zip`, `sequence:design-contract-artifact source path mismatch: ${contract.source?.path}`);
+  assert(contract.source?.namespace === "ClaudeDesignSmoke", `sequence:design-contract-artifact namespace mismatch: ${contract.source?.namespace}`);
+  assert(contract.fingerprint?.source_sha256, "sequence:design-contract-artifact missing source fingerprint");
+  assert(contract.fingerprint?.contract_sha256, "sequence:design-contract-artifact missing contract fingerprint");
+  assert(contract.token_counts?.total === 6, `sequence:design-contract-artifact token count mismatch: ${JSON.stringify(contract.token_counts)}`);
+  assert(contract.components?.empty === true, `sequence:design-contract-artifact empty components must be valid: ${JSON.stringify(contract.components)}`);
+  assert(contract.adherence?.available === true, "sequence:design-contract-artifact adherence metadata must be available");
+  return contract;
 }
 
 function assertNoExternalSourceReferences(source, filePath) {
@@ -1022,6 +1054,8 @@ async function makeSmokeResearchRunnerPackage() {
   await cp(RUNNER_SCRIPT, path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"));
   await cp(path.join(SCRIPT_DIR, "lib"), path.join(packageRoot, "scripts", "lib"), { recursive: true });
   await cp(path.join(PACKAGE_ROOT, "templates", "project"), path.join(packageRoot, "templates", "project"), { recursive: true });
+  await mkdir(path.join(packageRoot, "node_modules"), { recursive: true });
+  await cp(path.join(PACKAGE_ROOT, "node_modules", "fflate"), path.join(packageRoot, "node_modules", "fflate"), { recursive: true });
   const deepResearchWorkflowPath = path.join(packageRoot, "node_modules", "takt", "builtins", "ja", "workflows", "deep-research.yaml");
   await mkdir(path.dirname(deepResearchWorkflowPath), { recursive: true });
   await writeFile(deepResearchWorkflowPath, "name: deep-research\n", "utf8");
@@ -1203,7 +1237,7 @@ async function runPlanSequenceChecks(targetInfo, options) {
   const composeArtifactPaths = await assertComposeSourceArtifacts(targetInfo);
   observedPaths.push(...composeArtifactPaths.map(relativePath));
   checks.push(pass("sequence:compose-command", "slide:compose completed for the smoke deck after plan approval."));
-  checks.push(pass("sequence:compose-source-artifacts", "compose source artifacts exist: design-system.md, SLIDES.md, and declared visual sources."));
+  checks.push(pass("sequence:compose-source-artifacts", "compose source artifacts exist with Resolved Design Contract tokens applied to SLIDES.md."));
 
   const composeSupervision = await readSupervision(targetInfo, "compose");
   assert(composeSupervision.data.state === "composed", `sequence:compose-supervision-state expected composed, got ${composeSupervision.data.state}`);
@@ -1496,9 +1530,9 @@ async function runForceInvalidationChecks(targetInfo, options) {
     path.join(targetInfo.deckPath, "reference-analysis.md"),
     path.join(targetInfo.deckPath, "plan.md"),
     path.join(targetInfo.deckPath, "slide-blueprint.md"),
-    path.join(targetInfo.deckPath, "design-system.md"),
     path.join(targetInfo.deckPath, "sections", "manifest.md"),
     path.join(targetInfo.deckPath, "SLIDES.md"),
+    smokeResolvedDesignContractPath(targetInfo),
   ];
   await assertSourceArtifactsPresent("failure-path:force-source-retention-before", sourceArtifactPaths);
   const expectedArchivedBasenames = [
@@ -1557,7 +1591,7 @@ async function runForceInvalidationChecks(targetInfo, options) {
   checks.push(pass("failure-path:force-command", "slide:plan --force completed after archiving command state."));
   checks.push(pass("failure-path:force-archive", "force archived plan and downstream supervision/approval files to review/history."));
   checks.push(pass("failure-path:force-generated-cleanup", "force cleaned stale dist and render generated output roots."));
-  checks.push(pass("failure-path:force-source-retention", "force retained deck source artifacts such as brief, plan, blueprint, sections, design-system, and SLIDES.md."));
+  checks.push(pass("failure-path:force-source-retention", "force retained deck source artifacts such as brief, plan, blueprint, sections, Resolved Design Contract, and SLIDES.md."));
   checks.push(pass("failure-path:force-new-plan-supervision", "force rerun generated a new passed canonical plan supervision report."));
 
   return Object.freeze({
@@ -1755,14 +1789,17 @@ async function writeMockCommandResult(targetInfo, command) {
   const reportsPath = path.join(ROOT, ".takt", "runs", `mock-${targetInfo.deckName}-${command}`, "reports");
   await rm(path.dirname(reportsPath), { recursive: true, force: true });
   await mkdir(reportsPath, { recursive: true });
+  const designContractResult = command === "plan" || command === "compose"
+    ? await resolveAndSaveClaudeDesignContract(targetInfo, { root: ROOT })
+    : null;
 
   if (command === "research") {
     await writeMockResearchArtifacts(targetInfo, workflowRunId, reportsPath);
     return;
   } else if (command === "plan") {
-    await writeMockPlanArtifacts(targetInfo);
+    await writeMockPlanArtifacts(targetInfo, designContractResult.contract);
   } else if (command === "compose") {
-    await writeMockComposeArtifacts(targetInfo);
+    await writeMockComposeArtifacts(targetInfo, designContractResult.contract);
   } else if (command === "polish") {
     await writeMockRenderEvidence(targetInfo, 1);
   } else if (command === "deliver") {
@@ -1845,10 +1882,24 @@ async function writeReportCopies(reviewPath, reportsPath, reportName, content) {
   await writeFile(path.join(reportsPath, reportName), content, "utf8");
 }
 
-async function writeMockPlanArtifacts(targetInfo) {
+function smokeDesignContractLines(designContract) {
+  return [
+    `- Source: ${designContract.source.path}`,
+    `- Namespace: ${designContract.source.namespace}`,
+    `- Source fingerprint: ${designContract.fingerprint.source_sha256}`,
+    `- Contract fingerprint: ${designContract.fingerprint.contract_sha256}`,
+    `- Token counts: total=${designContract.token_counts.total}, color=${designContract.token_counts.color}, typography=${designContract.token_counts.typography}, spacing=${designContract.token_counts.spacing}`,
+    `- Brand fonts: ${designContract.brand_fonts.join(", ")}`,
+    `- Component count: ${designContract.components.count}`,
+    `- Adherence metadata: ${designContract.adherence.available ? "available" : "not available"}`,
+  ];
+}
+
+async function writeMockPlanArtifacts(targetInfo, designContract) {
   const brief = await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8");
   const outline = parseSmokeFixedOutline(brief);
   const researchContext = await readMockResearchPlanContext(targetInfo);
+  const designContractLines = smokeDesignContractLines(designContract);
   const coverageRows = outline.leaves.map((item, index) => {
     const slideId = `S${String(Math.min(index + 1, 5)).padStart(3, "0")}`;
     return `| ${item.chapter} | ${item.section} | ${item.label} | ${slideId} | covered |`;
@@ -1906,6 +1957,7 @@ async function writeMockPlanArtifacts(targetInfo) {
       "",
       "## Design Requirements",
       "- 白基調だが白黒ではない。",
+      "- Claude Design Source の Resolved Design Contract を視覚制約として使う。",
       "",
       "## Example Policy",
       `- 共通題材: ${SMOKE_COMMON_EXAMPLE}`,
@@ -1965,6 +2017,9 @@ async function writeMockPlanArtifacts(targetInfo) {
       "- Deck mode: overview",
       "deliverables: [html, pdf]",
       "",
+      "## Design Contract",
+      ...designContractLines,
+      "",
       "## Slides",
       "- S001: Title | Visual: none | Visual Strategy: render_owner: compose_sections; text only",
       "- S002: Workflow overview | Visual: html: cards | Visual Strategy: render_owner: compose_sections; lightweight cards",
@@ -2005,6 +2060,9 @@ async function writeMockPlanArtifacts(targetInfo) {
       `- Speaker Affiliation: ${SMOKE_SPEAKER_AFFILIATION}`,
       `- Common example: ${SMOKE_COMMON_EXAMPLE}`,
       "- Planned slide count: 5",
+      "",
+      "## Design Contract",
+      ...designContractLines,
       "",
       "## Slide Blueprint Table",
       "| Slide ID | Section | Message | Content atoms | Visual | Visual Strategy | Speaker note intent | Source | Coverage IDs |",
@@ -2064,23 +2122,10 @@ async function readMockResearchPlanContext(targetInfo) {
   });
 }
 
-async function writeMockComposeArtifacts(targetInfo) {
+async function writeMockComposeArtifacts(targetInfo, designContract) {
   const sectionsPath = path.join(targetInfo.deckPath, "sections");
   await mkdir(sectionsPath, { recursive: true });
-  await writeFile(
-    path.join(targetInfo.deckPath, "design-system.md"),
-    [
-      "# Design System",
-      "",
-      "Mock smoke design system.",
-      "",
-      "## Visual Components",
-      "- `.visual-grid`: HTML/CSS visual container for lightweight workflow cards.",
-      "- `.visual-card`: card item used by compose_sections for `html:` visuals.",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
+  const tokenLines = designContract.tokens.map((token) => `    ${token.name}: ${token.value};`);
   await writeFile(
     path.join(sectionsPath, "manifest.md"),
     [
@@ -2180,9 +2225,12 @@ async function writeMockComposeArtifacts(targetInfo) {
       "html: true",
       "title: Workflow smoke test",
       "style: |",
-      "  section { font-family: \"Noto Sans JP\", \"Hiragino Sans\", \"Yu Gothic\", sans-serif; }",
-      "  .visual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }",
-      "  .visual-card { border: 1px solid #cbd5e1; border-radius: 6px; padding: 16px; background: #f8fafc; }",
+      "  :root {",
+      ...tokenLines,
+      "  }",
+      "  section { background: var(--bg-page); font-family: var(--font-body); }",
+      "  .visual-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-4); }",
+      "  .visual-card { border: 1px solid var(--accent); border-radius: var(--radius-md); padding: var(--space-4); background: color-mix(in srgb, var(--bg-page) 92%, white); }",
       "---",
       "",
       "<!-- slide_id: S001 -->",
@@ -2488,11 +2536,10 @@ function assertApprovalFileAbsent(targetInfo, command, name) {
 }
 
 async function assertComposeSourceArtifacts(targetInfo) {
-  const designSystemPath = path.join(targetInfo.deckPath, "design-system.md");
   const sectionManifestPath = path.join(targetInfo.deckPath, "sections", "manifest.md");
   const slidesPath = path.join(targetInfo.deckPath, "SLIDES.md");
   const imagesPath = path.join(targetInfo.deckPath, "images");
-  await assertReadableFile(designSystemPath, "sequence:compose-source-artifacts");
+  const designContract = await readSmokeResolvedDesignContract(targetInfo);
   await assertReadableFile(sectionManifestPath, "sequence:compose-source-artifacts");
   await assertReadableFile(slidesPath, "sequence:compose-source-artifacts");
   const sectionsPath = path.join(targetInfo.deckPath, "sections");
@@ -2507,6 +2554,27 @@ async function assertComposeSourceArtifacts(targetInfo) {
     sectionSource += await readFile(sectionPath, "utf8");
   }
   const slidesSource = await readFile(slidesPath, "utf8");
+  for (const phrase of [
+    "--accent: #b0241d;",
+    "--bg-page: #faf7f1;",
+    "--font-body: 'Noto Sans JP', sans-serif;",
+    "--space-4: 16px;",
+    "var(--accent)",
+    "var(--bg-page)",
+    "var(--font-body)",
+    "var(--space-4)",
+    "var(--radius-md)",
+  ]) {
+    assert(slidesSource.includes(phrase), `sequence:compose-source-artifacts SLIDES.md missing design token usage '${phrase}'`);
+  }
+  assert(
+    !existsSync(path.join(targetInfo.deckPath, "design-system.md")),
+    "sequence:compose-source-artifacts mock compose must not generate design-system.md",
+  );
+  assert(
+    designContract.fingerprint?.contract_sha256,
+    "sequence:compose-source-artifacts missing design contract fingerprint",
+  );
   for (const marker of ["【30分 / 累計 30:00】", "【90分 / 累計 120:00】", "【80分 / 累計 200:00】", "【80分 / 累計 280:00】", "【80分 / 累計 360:00】"]) {
     assert(sectionSource.includes(marker), `sequence:compose-source-artifacts section source missing duration marker '${marker}'`);
     assert(slidesSource.includes(marker), `sequence:compose-source-artifacts SLIDES.md missing duration marker '${marker}'`);
@@ -2520,7 +2588,7 @@ async function assertComposeSourceArtifacts(targetInfo) {
   for (const svgPath of svgPaths) {
     await assertReadableFile(svgPath, "sequence:compose-source-artifacts");
   }
-  return Object.freeze([designSystemPath, sectionManifestPath, ...sectionPaths, slidesPath, ...svgPaths]);
+  return Object.freeze([smokeResolvedDesignContractPath(targetInfo), sectionManifestPath, ...sectionPaths, slidesPath, ...svgPaths]);
 }
 
 async function setupSyntheticRenderEvidenceDeck(targetPath) {
@@ -2975,6 +3043,7 @@ async function setupSmokeDeckUnchecked(target) {
 
   const sourcePaths = await copyFixtureSources(FIXTURE_PATH, targetPath);
   const targetInfo = resolveDeckTarget(target, { root: ROOT });
+  const designSourcePath = await writeClaudeDesignSmokeFixture(targetInfo, { root: ROOT });
   await cleanGeneratedOutputs(targetInfo, { root: ROOT });
   await mkdir(targetInfo.reviewPath, { recursive: true });
 
@@ -2982,6 +3051,7 @@ async function setupSmokeDeckUnchecked(target) {
     targetInfo,
     observedPaths: Object.freeze([
       ...sourcePaths.map(relativePath),
+      relativePath(designSourcePath),
       relativePath(path.join(ROOT, "dist", targetInfo.deckName)),
       relativePath(path.join(ROOT, ".takt", "render", targetInfo.deckName)),
     ]),

@@ -15,8 +15,14 @@ Marp スライドを、入力整理、構成、本文、SVG 図解、render poli
 slides/<deck>/
   brief.md
   brief.normalized.md
+  reference-analysis.md
   plan.md
-  design-system.md
+  slide-blueprint.md
+  design/
+    <claude-design-export>.zip
+  sections/
+    manifest.md
+    *.md
   SLIDES.md
   images/
     *.svg
@@ -36,11 +42,17 @@ slides/<deck>/
     deliver-supervision.md
 ```
 
+```text
+.takt/design-contracts/<deck>/
+  resolved-design-contract.json
+```
+
 ## 入力契約
 
 workflow target は常に `slides/<deck>` とする。`slides/<deck>/brief.md` を人間入力の正とするが、CLI target として `brief.md` を直接渡してはいけない。
 `brief.md` が存在しない場合、plan workflow はテンプレートを作成して停止する。
 `plan` 後と `compose` 後の human approval 待ちは workflow の失敗として扱わない。
+`plan` と `compose` は `slides/<deck>/design/` に `_ds_manifest.json` を含む Claude Design export zip が1つあることを前提にする。`design-system.md`、手書き `design-contract.md`、package default は代替入力にしない。
 
 必須項目:
 
@@ -159,7 +171,7 @@ takt-marp research slides/<deck>
 
 **custom 拡張句**
 
-基本語彙で表現できない場合のみ、`custom: <kebab-case-class> — <用途1行>` の形式で指定する。後続の design-system step が同名 class を定義する。
+基本語彙で表現できない場合のみ、`custom: <kebab-case-class> — <用途1行>` の形式で指定する。後続の compose は Resolved Design Contract の token constraints に従って同名 class を実装する。
 
 ```md
 # Slide Plan
@@ -185,19 +197,27 @@ takt-marp research slides/<deck>
 - Source:
 ```
 
-## design-system.md 契約
+## Design Contract 契約
 
-`design-system.md` はdeck-localな軽量デザインシステムである。
-`SLIDES.md` のfront matter CSSはこのtokenをもとに構成し、スライドごとの個別調整を避ける。
+Claude Design Source は `slides/<deck>/design/` に置く Claude Design export zip である。
+Runner は `plan` / `compose` の開始前に Claude Design Source を読み、`.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化する。
+`plan.md` と `slide-blueprint.md` は source path、namespace、fingerprint、token summary、adherence availability を記録するが、CSS、front matter style、`_class` style 定義は生成しない。
+`SLIDES.md` のfront matter CSSは Resolved Design Contract の token をもとに構成し、スライドごとの個別調整を避ける。
 
 必須項目:
 
-- Typography tokens
-- Spacing tokens
-- Layout classes
-- Visual tokens
-- Color tokens
-- QA rules
+- `_ds_manifest.json`
+- `styles.css`
+- `tokens/colors.css`
+- `tokens/typography.css`
+- `tokens/spacing.css`
+
+任意項目:
+
+- `_adherence.oxlintrc.json`
+- `tokens/fonts.css`
+- `_ds_bundle.js`
+- `.thumbnail`
 
 ## Workflow 一覧
 
@@ -261,22 +281,24 @@ Steps:
 
 ### takt-marp-slide-compose
 
-承認済みの `plan.md` から `design-system.md`、`SLIDES.md`、SVG 初稿を生成する。
+承認済みの `plan.md` と Resolved Design Contract から、section source、`SLIDES.md`、必要な visual source を生成する。
 
 Steps:
 
-1. `design_system`
-2. `compose_slides`
+1. `compose_sections`
+2. `assemble_slides`
 3. `generate_visuals`
 4. `summarize_compose_work`
-5. `review_compose`
-6. `fix_compose`
-7. `supervise_compose`
+5. `ai_quality_gate_compose`
+6. `review_compose`
+7. `fix_compose`
+8. `supervise_compose`
 
 成果物:
 
 - `slides/<deck>/SLIDES.md`
-- `slides/<deck>/design-system.md`
+- `slides/<deck>/sections/manifest.md`
+- `slides/<deck>/sections/*.md`
 - `slides/<deck>/images/*.svg`
 - `slides/<deck>/review/compose-work.md`
 - `slides/<deck>/review/compose-review.md`
@@ -432,4 +454,4 @@ npm run slide:deliver -- "slides/<deck>"
 
 `research` は必要な場合だけ実行する。global CLI では `takt-marp research slides/<deck>` が同じ workflow を起動する。
 
-`plan` と `compose` の後に、人間が生成物を確認し、必要なら `brief.md`、`plan.md`、`SLIDES.md`、SVG を編集してから承認コマンドを実行する。
+`plan` と `compose` の後に、人間が生成物を確認し、必要なら `brief.md`、`plan.md`、Claude Design Source、`SLIDES.md`、SVG を編集してから承認コマンドを実行する。

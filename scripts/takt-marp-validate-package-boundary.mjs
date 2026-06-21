@@ -42,12 +42,14 @@ export const REQUIRED_PACK_FILES = [
   "marp.config.mjs",
   "scripts/takt-marp-run-slide-workflow.mjs",
   "scripts/takt-marp-validate-slide-workflow-smoke.mjs",
+  "scripts/lib/takt-marp-claude-design-source.mjs",
   "scripts/lib/takt-marp-cli.mjs",
   "scripts/lib/takt-marp-errors.mjs",
   "scripts/lib/takt-marp-project-eject.mjs",
   "scripts/lib/takt-marp-project-templates.mjs",
   "scripts/lib/takt-marp-runtime-context.mjs",
   "scripts/lib/takt-marp-slide-workflow.mjs",
+  "scripts/lib/takt-marp-zip-archive.mjs",
 ];
 const SMOKE_FIXTURE_PREFIX = "fixtures/marp-slide-workflow/_workflow-smoke/";
 
@@ -55,7 +57,7 @@ const EXPECTED_FILES_ALLOWLIST = ["bin/", "scripts/", "templates/", "fixtures/ma
 const EXPECTED_BIN_NAME = "takt-marp";
 const EXPECTED_BIN_TARGET = "bin/takt-marp.mjs";
 const EXPECTED_ENGINES_NODE = ">=24";
-const REQUIRED_DEPENDENCIES = ["takt", "@marp-team/marp-cli"];
+const REQUIRED_DEPENDENCIES = ["takt", "@marp-team/marp-cli", "fflate"];
 
 function runNpmPackDryRun(packageRoot) {
   const npmCli = process.platform === "win32" ? "npm.cmd" : "npm";

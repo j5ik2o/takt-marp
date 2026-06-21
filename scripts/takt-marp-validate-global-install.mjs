@@ -21,6 +21,7 @@ import path from "node:path";
 import { assertNoProhibitedEntries, listTemplateEntries } from "./lib/takt-marp-project-templates.mjs";
 import { resolveRuntimeContext, runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 import { SlideWorkflowError, formatError } from "./lib/takt-marp-slide-workflow.mjs";
+import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-source.mjs";
 
 const CLI_COMMANDS = [
   "eject",
@@ -327,6 +328,7 @@ async function prepareWorkflowProject(projectDir, deckName = "demo") {
     "utf8",
   );
   await writeFile(path.join(deckDir, "brief.md"), fixtureBrief, "utf8");
+  await writeClaudeDesignSmokeFixture({ deckName }, { root: projectDir });
 }
 
 // Phase 1 (8.1): real tarball -> temp global prefix; later phases run the CLI
