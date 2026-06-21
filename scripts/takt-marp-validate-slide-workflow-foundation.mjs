@@ -1413,6 +1413,12 @@ async function main() {
         assert(source.includes("contract_sha256"), `${rootRelativePath}/${fileName} must compare artifact contract_sha256`);
         assert(source.includes("guidance") || source.includes("source_catalog"), `${rootRelativePath}/${fileName} must read Design System guidance or source_catalog`);
       }
+
+      const polishInspect = await readFile(path.join(facetRoot, "instructions", "takt-marp-polish-inspect.md"), "utf8");
+      assert(polishInspect.includes("design_contract.path"), `${rootRelativePath}/takt-marp-polish-inspect.md must branch on design_contract.path`);
+      assert(polishInspect.includes("fingerprint.contract_sha256"), `${rootRelativePath}/takt-marp-polish-inspect.md must compare contract fingerprints when present`);
+      assert(polishInspect.includes("token drift"), `${rootRelativePath}/takt-marp-polish-inspect.md must report token drift when Design Contract is present`);
+      assert(polishInspect.includes("legacy path"), `${rootRelativePath}/takt-marp-polish-inspect.md must preserve legacy path without Design Contract`);
     }
   });
 
