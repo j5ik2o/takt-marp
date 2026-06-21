@@ -2209,6 +2209,38 @@ async function main() {
     assert(!marker.design_contract, `polish marker kept corrupt stored design_contract: ${JSON.stringify(marker)}`);
   });
 
+  await check("runner validates existing Design Contract marker payload before polish", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-corrupt-existing-design-marker-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const fakePackage = await makeFakePackageRoot();
+    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
+    let result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `plan runner failed before corrupt existing marker test: ${result.stderr}`);
+    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
+    await writeFile(path.join(root, planMarker.design_contract.path), "{not json\n", "utf8");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
+    await writeApproval(targetInfo, "compose", "foundation-test");
+
+    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
+    result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `polish runner failed with corrupt existing marker payload: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.command === "polish", `polish marker command mismatch after corrupt existing marker fallback: ${JSON.stringify(marker)}`);
+    assert(!marker.design_contract, `polish marker kept corrupt existing design_contract: ${JSON.stringify(marker)}`);
+  });
+
   await check("runner ignores stale Design Contract marker for polish", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-stale-design-marker-"));
     const targetInfo = await makeDeck(root, "demo");

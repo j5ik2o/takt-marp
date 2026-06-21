@@ -268,6 +268,11 @@ export async function saveResolvedDesignContract(contract, targetInfo, options =
 export async function loadResolvedDesignContractMarker(targetInfo, options = {}) {
   const root = options.root ?? process.cwd();
   const contractPath = path.join(root, ".takt", "design-contracts", targetInfo.deckName, "resolved-design-contract.json");
+  return loadDesignContractMarkerPayloadFromPath(contractPath, { root });
+}
+
+export async function loadDesignContractMarkerPayloadFromPath(contractPath, options = {}) {
+  const root = options.root ?? process.cwd();
   if (!existsSync(contractPath)) {
     return null;
   }

@@ -580,6 +580,7 @@ interface ResolvedDesignContract {
 - `polish`、`deliver`、`research` のように新しい Design Contract を生成しない command では、同一 target の既存 marker または `.takt/design-contracts/<deck>/resolved-design-contract.json` から `design_contract` を引き継ぐ。
 - 既存 marker が malformed JSON の場合は marker を読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く。
 - 既存 marker の target が一致しても `design_contract.path` が存在しない場合は stale marker として扱い、その marker の `design_contract` を引き継がない。保存済み Resolved Design Contract が存在すればそこから復旧し、存在しなければ `null` にフォールバックする。
+- 既存 marker の target が一致し `design_contract.path` が存在する場合でも、その path の Resolved Design Contract を読み直して marker payload を作れない場合は、その marker の `design_contract` を引き継がない。
 - 保存済み Resolved Design Contract が malformed JSON または marker payload を作れない shape の場合は corrupt marker として扱い、`design_contract` を省略して Legacy Polish Path へフォールバックする。
 
 ### PlanFacetContract
@@ -642,7 +643,7 @@ interface ResolvedDesignContract {
 - plan / blueprint が `contract_sha256` を記録し、CSS を含まないことを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker の破棄を検証する。
+- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload の破棄を検証する。
 - `polish-inspect` / `polish-fix` が通常 path で `design_contract.path`、`fingerprint.contract_sha256`、token drift、`guidance`、`source_catalog` を確認し、Design Contract なしの legacy path だけ fingerprint / token drift 判定をスキップすることを facet 文言として検証する。
 
 ### package / global install / no-copy validation

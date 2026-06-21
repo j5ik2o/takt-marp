@@ -30,6 +30,7 @@ import {
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
 import {
+  loadDesignContractMarkerPayloadFromPath,
   loadResolvedDesignContractMarker,
   resolveAndSaveClaudeDesignContract,
   resolveClaudeDesignContract,
@@ -274,7 +275,10 @@ async function existingDesignContractMarker(targetInfo) {
     try {
       const marker = JSON.parse(await readFile(markerPath, "utf8"));
       if (marker.target === targetInfo.target && marker.design_contract && designContractMarkerPathExists(marker.design_contract)) {
-        return marker.design_contract;
+        const existingMarker = await loadDesignContractMarkerPayloadFromPath(designContractMarkerAbsolutePath(marker.design_contract));
+        if (existingMarker) {
+          return existingMarker;
+        }
       }
     } catch (error) {
       if (!(error instanceof SyntaxError) && error.code !== "ENOENT") {
@@ -289,10 +293,13 @@ function designContractMarkerPathExists(designContract) {
   if (typeof designContract.path !== "string" || !designContract.path) {
     return false;
   }
-  const contractPath = path.isAbsolute(designContract.path)
+  return existsSync(designContractMarkerAbsolutePath(designContract));
+}
+
+function designContractMarkerAbsolutePath(designContract) {
+  return path.isAbsolute(designContract.path)
     ? designContract.path
     : path.join(process.cwd(), designContract.path);
-  return existsSync(contractPath);
 }
 
 function projectRelativeMarkerPath(filePath) {
