@@ -357,7 +357,8 @@ async function readAdherenceMetadata(archive) {
 function classifyToken(token) {
   const name = token.name.toLowerCase();
   const definedIn = token.defined_in.toLowerCase();
-  if (definedIn.includes("colors") || /^#[0-9a-f]{3,8}$/i.test(token.value) || name.includes("color") || name.includes("accent") || name.includes("bg-") || name.includes("text-")) {
+  const kind = token.kind.toLowerCase();
+  if (definedIn.includes("colors")) {
     return "color";
   }
   if (name.includes("radius")) return "radius";
@@ -368,8 +369,18 @@ function classifyToken(token) {
   if (definedIn.includes("spacing") || name.startsWith("--space") || name.startsWith("--bw") || name.startsWith("--slide") || name.startsWith("--dur") || name.startsWith("--ease")) {
     return "spacing";
   }
-  if (token.kind === "font") return "font";
+  if (kind === "color" || /^#[0-9a-f]{3,8}$/i.test(token.value) || isSemanticColorTokenName(name)) return "color";
+  if (kind === "spacing") return "spacing";
+  if (kind === "font") return "font";
   return "other";
+}
+
+function isSemanticColorTokenName(name) {
+  return name === "--accent" ||
+    name.startsWith("--accent-") ||
+    name.startsWith("--color") ||
+    name.startsWith("--bg-") ||
+    name.startsWith("--text-");
 }
 
 function tokenCounts(tokens) {

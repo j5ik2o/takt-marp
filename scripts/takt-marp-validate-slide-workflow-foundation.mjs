@@ -243,6 +243,22 @@ async function main() {
       caught = error;
     }
     assert(caught?.code === "ZIP_ENTRY_PATH_INVALID", `expected ZIP_ENTRY_PATH_INVALID, got ${caught?.code ?? "success"}`);
+
+    await expectFailure(
+      () => ZipArchiveReader.fromBuffer(createZipArchiveBuffer({
+        "a.txt": "a\n",
+        "b.txt": "b\n",
+      }), { limits: { maxEntries: 1 } }),
+      "ZIP_ARCHIVE_LIMIT_EXCEEDED",
+    );
+    await expectFailure(
+      () => ZipArchiveReader.fromBuffer(createZipArchiveBuffer({ "large.txt": "1234\n" }), { limits: { maxTotalUncompressedBytes: 4 } }),
+      "ZIP_ARCHIVE_LIMIT_EXCEEDED",
+    );
+    await expectFailure(
+      () => ZipArchiveReader.fromBuffer(createZipArchiveBuffer({ "archive.txt": "ok\n" }), { limits: { maxArchiveBytes: 1 } }),
+      "ZIP_ARCHIVE_LIMIT_EXCEEDED",
+    );
   });
 
   await check("Claude Design fixture imports into a deterministic Resolved Design Contract", async () => {
@@ -279,6 +295,27 @@ async function main() {
       }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
       "CLAUDE_DESIGN_SOURCE_INVALID",
     );
+
+    const compoundManifest = {
+      namespace: "ClaudeDesignCompoundTokens",
+      globalCssPaths: ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
+      tokens: [
+        { name: "--text-body", value: "16px", kind: "font", definedIn: "tokens/typography.css" },
+        { name: "--button-text-size", value: "12px", kind: "spacing", definedIn: "tokens/spacing.css" },
+        { name: "--bg-page", value: "#ffffff", kind: "color", definedIn: "tokens/colors.css" },
+      ],
+    };
+    const classified = await importClaudeDesignSourceBuffer(createZipArchiveBuffer({
+      "_ds_manifest.json": `${JSON.stringify(compoundManifest)}\n`,
+      "styles.css": "",
+      "tokens/colors.css": ":root { --bg-page: #ffffff; }\n",
+      "tokens/typography.css": ":root { --text-body: 16px; }\n",
+      "tokens/spacing.css": ":root { --button-text-size: 12px; }\n",
+    }), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    const categories = Object.fromEntries(classified.tokens.map((token) => [token.name, token.category]));
+    assert(categories["--text-body"] === "typography", `typography path token misclassified: ${JSON.stringify(categories)}`);
+    assert(categories["--button-text-size"] === "spacing", `spacing path token with text in name misclassified: ${JSON.stringify(categories)}`);
+    assert(categories["--bg-page"] === "color", `color path token misclassified: ${JSON.stringify(categories)}`);
   });
 
   await check("project template copy rejects prohibited workflow/facet entries before writing", async () => {
