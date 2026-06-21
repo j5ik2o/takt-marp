@@ -30,6 +30,8 @@
 
 1.5. `plan` または `compose` が design input を解決するとき、slide workflow は `design-system.md`、手書き `design-contract.md`、または package-bundled default を Claude Design Source の代替として扱ってはならない。
 
+1.6. `slides/<deck>/design/` に valid な Claude Design zip と invalid な `.zip` が同居する場合、slide workflow は valid な 1 件を暗黙採用せず、`CLAUDE_DESIGN_SOURCE_INVALID` と invalid / valid 候補の情報を表示しなければならない。
+
 ### 要件 2: Claude Design zip を Design Contract へ正規化する
 
 **目的:** maintainer と deck 作成者として、Claude Design export の token 情報を workflow が安定して読める内部契約に変換したい
@@ -40,7 +42,7 @@
 
 2.2. Claude Design Source に `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md` / `README.md`、`components/**/*.prompt.md`、`guidelines/*.card.html`、`slides/*.html`、`templates/**/*.dc.html`、または `assets/*` が含まれる場合、slide workflow はそれらを optional metadata、guidance、source catalog として取り込み、存在しないことだけを理由に import を失敗させてはならない。
 
-2.3. `_ds_manifest.json` が `namespace`、`globalCssPaths`、または `tokens` を欠く場合、slide workflow は Resolved Design Contract を生成せず、`CLAUDE_DESIGN_SOURCE_INVALID` と不足 field を表示しなければならない。
+2.3. `_ds_manifest.json` が JSON object ではない場合、または `namespace`、`globalCssPaths`、`tokens` を欠く場合、slide workflow は Resolved Design Contract を生成せず、`CLAUDE_DESIGN_SOURCE_INVALID` と原因または不足 field を表示しなければならない。
 
 2.4. manifest の token list が空の場合、slide workflow は Resolved Design Contract を生成せず、token が空であることを利用者が確認できる失敗情報を残さなければならない。
 
@@ -65,6 +67,10 @@
 3.4. Resolved Design Contract の生成に失敗した場合、slide workflow は古い Resolved Design Contract を fallback として使ってはならない。
 
 3.5. `research` artifacts が存在する場合でも、slide workflow は Claude Design Source metadata を research metadata と別 field に記録し、Plan Optional Context と混同してはならない。
+
+3.6. `plan` または `compose` を `--force` で再実行する場合、slide workflow は既存成果物の archive / clean より前に Claude Design Source を import / validation しなければならない。ただし Resolved Design Contract の保存は archive / clean が成功した後に行い、archive / clean が失敗した場合は旧成果物と旧 Resolved Design Contract を不整合な状態にしてはならない。
+
+3.7. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 `.takt/workflow-current-target.json` が malformed でも停止せず読み捨て、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
 
 ### 要件 4: plan は Design Contract を使って実現可能な構成を計画する
 
@@ -92,7 +98,7 @@
 
 5.1. `compose` が実行されたとき、slide workflow は marker の Resolved Design Contract fingerprint と `plan.md` / `slide-blueprint.md` に記録された fingerprint を照合しなければならない。
 
-5.2. fingerprint が一致しない場合、slide workflow は `DESIGN_CONTRACT_FINGERPRINT_MISMATCH` を報告し、`SLIDES.md` や `sections/*` の生成を成功扱いしてはならない。
+5.2. fingerprint が一致しない場合、slide workflow は compose の `needs_input` または review blocker として不一致を報告し、`SLIDES.md` や `sections/*` の生成を成功扱いしてはならない。
 
 5.3. fingerprint が一致したとき、slide workflow は Resolved Design Contract の token constraints から `SLIDES.md` front matter CSS、layout class、section HTML/CSS、必要な visual source を生成しなければならない。
 
@@ -118,7 +124,7 @@
 
 6.3. `compose-review` が実行されたとき、slide workflow は HTML visual component が Resolved Design Contract の token constraints と既存 visual vocabulary に従っていることを確認しなければならない。
 
-6.4. `_adherence.oxlintrc.json` が Claude Design Source に含まれる場合、slide workflow は raw hex color、raw px value、未提供 font-family の混入を review finding として報告しなければならない。
+6.4. `_adherence.oxlintrc.json` が Claude Design Source に含まれる場合、slide workflow は raw hex color、raw px value、未提供 font-family の混入を review finding として報告しなければならない。ただし Resolved Design Contract 由来の custom property 定義そのものは正当な token 定義として扱い、finding 対象にしてはならない。
 
 6.5. Design Contract に対応しない `Layout`、`_class`、style 定義、または visual component が見つかった場合、slide workflow は compose review の finding として報告しなければならない。
 
@@ -158,6 +164,8 @@
 
 8.6. Claude Design Source の検証が失敗した場合、slide workflow は失敗した source file、対象 command、確認すべき artifact を利用者またはメンテナが特定できる結果を表示しなければならない。
 
+8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧を検証しなければならない。
+
 ### 要件 9: 既存 deck と既存成果物への影響を限定する
 
 **目的:** maintainer と deck 作成者として、Claude Design Source 導入が既存 deck の不要な全面移行や再生成を強制しない状態にしたい
@@ -171,3 +179,5 @@
 9.3. 既存 deck が Claude Design Source へ移行していない場合、slide workflow は missing source を明確に報告し、`design-system.md` から暗黙移行してはならない。
 
 9.4. 既存 deck が Claude Design Source へ移行する場合、slide workflow は配置先が `slides/<deck>/design/` であることを利用者が確認できる案内または finding を残さなければならない。
+
+9.5. 既存 deck が Claude Design Source 導入前に compose 済みで Resolved Design Contract を持たない場合でも、`polish` は render evidence と既存 source artifact で検査・修正できる visual/layout/render finding を扱えるようにしなければならない。Design Contract 不在そのものを blocked finding または blocked fix 理由にしてはならない。

@@ -3,9 +3,10 @@
 - [x] 1. 基盤: zip import の実行土台を作る
 - [x] 1.1 zip read/write dependency と ZipArchiveReader を追加する
   - `fflate 0.8.3` を package dependency として追加し、zip entry の列挙と entry byte read を runner library から利用できるようにする。
-  - zip entry name の absolute path、`..` segment、NUL byte を invalid として扱い、path traversal が importer へ到達しない。
-  - 完了条件: zip entry list / read / invalid entry の fixture が単体検証で確認でき、外部 `unzip` command に依存していない。
-  - _Requirements:_ 1.4, 2.1, 8.4
+  - zip entry name の absolute path、`..` segment、NUL byte を invalid として扱い、path traversal が importer へ到達しない。leading `./` は common zip convention として正規化する。
+  - archive byte size、entry count、total uncompressed size に上限を設け、zip bomb による local / CI の availability 低下を防ぐ。
+  - 完了条件: zip entry list / read / invalid entry / dot-prefixed entry / archive limit の fixture が単体検証で確認でき、外部 `unzip` command に依存していない。
+  - _Requirements:_ 1.4, 2.1, 8.4, 8.7
   - _Boundary:_ ZipArchiveReader
   - _Depends:_ none
 
@@ -20,15 +21,15 @@
 - [x] 2. コア: Claude Design Source を Resolved Design Contract に変換する
 - [x] 2.1 Claude Design Source resolver を実装する
   - target deck の `slides/<deck>/design/` から `_ds_manifest.json` を含む `.zip` を一意に解決する。
-  - missing、ambiguous、unreadable、malformed、manifest 不在の各失敗で、source path と原因が分かる error code を返す。
+  - missing、ambiguous、unreadable、malformed、manifest 不在、valid zip と invalid sibling zip の同居の各失敗で、source path と原因が分かる error code を返す。
   - `design-system.md`、手書き `design-contract.md`、package default を代替入力として扱わない。
   - 完了条件: valid / missing / ambiguous / invalid / legacy file only の各 fixture で resolver の成否と error code を確認できる。
-  - _Requirements:_ 1.1, 1.2, 1.3, 1.4, 1.5, 7.4, 9.3, 9.4
+  - _Requirements:_ 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 7.4, 9.3, 9.4
   - _Boundary:_ ClaudeDesignSourceResolver
   - _Depends:_ 1.1
 
 - [x] 2.2 Claude Design importer を実装する
-  - required files と required manifest fields を検証し、token list が空または manifest token と CSS custom property が一致しない場合は import を成功扱いしない。
+  - required files と required manifest fields を検証し、manifest が JSON object ではない、token list が空、または manifest token と CSS custom property の名前・値が一致しない場合は import を成功扱いしない。
   - optional files、brand fonts、empty/non-empty `components`、adherence metadata、guidance documents、component prompts、cards、sample slides、templates、assets を取り込み、存在しない optional file だけで失敗しない。
   - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで分類する。
   - 完了条件: sample zip から token counts、brand fonts、component count/names、adherence rule summary、guidance、source catalog が Resolved Design Contract 候補として確認できる。
@@ -40,8 +41,9 @@
   - normalized JSON を `.takt/design-contracts/<deck>/resolved-design-contract.json` に保存し、source zip SHA-256 と contract SHA-256 を分けて記録する。
   - source path、manifest namespace、token counts、brand fonts、component count、adherence availability、guidance、source catalog を report 可能な metadata として保持する。
   - import failure 時に古い Resolved Design Contract へ fallback しない。
-  - 完了条件: 同じ source から同じ contract fingerprint が再現し、source 変更時に fingerprint が変わることを検証できる。
-  - _Requirements:_ 3.1, 3.2, 3.4
+  - `--force` 再実行では import / validation と保存を分け、archive / clean 成功後にだけ新しい Resolved Design Contract を保存する。
+  - 完了条件: 同じ source から同じ contract fingerprint が再現し、source 変更時に fingerprint が変わり、archive / clean 失敗時に新しい contract が保存されないことを検証できる。
+  - _Requirements:_ 3.1, 3.2, 3.4, 3.6
   - _Boundary:_ ClaudeDesignImporter
   - _Depends:_ 2.2
 
@@ -50,8 +52,9 @@
   - `plan` と `compose` の実行前に Claude Design Source resolver/importer を呼び、`.takt/workflow-current-target.json` に `design_contract` summary を記録する。
   - research metadata と design metadata を別 field に保ち、Plan Optional Context と混同しない。
   - 通常実行で `.takt/workflows`、`.takt/facets`、package template asset を consumer workspace へ自動コピーしない。
-  - 完了条件: runner fixture で marker に `design_contract` が入り、research marker と共存しても field が混ざらず、template copy が発生しない。
-  - _Requirements:_ 3.3, 3.5, 7.1, 7.2, 7.3, 7.4
+  - `polish` / `deliver` / `research` では、同一 target の既存 marker または保存済み Resolved Design Contract から `design_contract` を引き継ぐ。既存 marker が malformed の場合は読み捨て、保存済み marker または `null` へフォールバックする。
+  - 完了条件: runner fixture で marker に `design_contract` が入り、research marker と共存しても field が混ざらず、template copy が発生せず、malformed marker から復旧できる。
+  - _Requirements:_ 3.3, 3.5, 3.6, 3.7, 7.1, 7.2, 7.3, 7.4
   - _Boundary:_ WorkflowHandoffMarker
   - _Depends:_ 2.3
 
@@ -85,10 +88,11 @@
 
 - [x] 4.3 compose review / fix / summary を Design Contract review へ更新する
   - compose review が plan、blueprint、marker の fingerprint 一致、`_class` / style 定義、HTML visual の token constraint 適合を確認する。
-  - `_adherence.oxlintrc.json` がある場合、raw hex color、raw px value、未提供 font-family を review finding として扱う。
+  - `_adherence.oxlintrc.json` がある場合、raw hex color、raw px value、未提供 font-family を review finding として扱う。ただし Resolved Design Contract 由来の custom property 定義は正当な token 定義として除外する。
   - compose fix と work summary は `design-system.md` を修正対象や成功条件にせず、re-plan または Claude Design Source 更新が必要な場合を報告できる。
-  - 完了条件: review fixture で approved / needs_fix / blocked の各結果が Design Contract metadata と finding evidence から判定できる。
-  - _Requirements:_ 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 9.2
+  - polish inspect / fix は Design Contract がない既存 deck を legacy path として扱い、token drift 判定だけをスキップして render evidence と既存 source artifact の visual/layout/render 修正を許可する。
+  - 完了条件: review fixture で approved / needs_fix / blocked の各結果が Design Contract metadata と finding evidence から判定でき、legacy polish が Design Contract 不在だけで blocked にならない。
+  - _Requirements:_ 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 9.2, 9.5
   - _Boundary:_ ComposeFacetContract
   - _Depends:_ 4.2
 
@@ -96,8 +100,9 @@
 - [x] 5.1 foundation validation を Design Contract 契約へ拡張する
   - marker shape、plan metadata、compose fingerprint check、legacy `design-system.md` 非依存を static assertion として検証する。
   - compose workflow から `design_system` step が消えていることと、facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-  - 完了条件: foundation validation が marker / plan / compose / facet 文言の regression を path 付きで検出できる。
-  - _Requirements:_ 5.6, 5.7, 8.3, 9.2
+  - invalid sibling zip、JSON object ではない manifest、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、legacy polish path を検証する。
+  - 完了条件: foundation validation が marker / plan / compose / facet 文言 / hardening regression を path 付きで検出できる。
+  - _Requirements:_ 5.6, 5.7, 8.3, 8.7, 9.2, 9.5
   - _Boundary:_ ValidationSurface
   - _Depends:_ 4.3
 

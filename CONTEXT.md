@@ -69,13 +69,13 @@ _Avoid_: review validator, human approval, report formatter
 _Avoid_: research prerequisite, mandatory research, plan input replacement
 
 **Claude Design Source（Claude Designソース）**:
-Claude Design から export または handoff された、slide workflow が受け付ける唯一の user-facing design system 入力。
+Claude Design から export または handoff された、slide workflow が受け付ける唯一の user-facing design system 入力。deck ごとに異なる Design System が来る前提で扱い、固定ドメインや固定 component 語彙を仮定しない。
 _Avoid_: manual design-contract.md, bundled design profile, generated design-system.md
 
 **Design Contract（デザイン契約）**:
-Claude Design Source を workflow が読める形に正規化した内部契約。layout vocabulary、visual component、CSS token、review 可能な style 制約に加え、`SKILL.md` / `readme.md` などの guidance と source catalog を定義する。
+Claude Design Source を workflow が読める形に正規化した内部契約。layout vocabulary、visual component、CSS token、review 可能な style 制約に加え、Design System 固有の guidance と source catalog を汎用構造として定義する。
 _Avoid_: user-authored design input, per-deck generated design system, ad hoc CSS template, style notes
 
 **Resolved Design Contract（解決済みデザイン契約）**:
-Claude Design Source を取り込み、source metadata、fingerprint、token、guidance、source catalog を付与した workflow 実行時の Design Contract。
+Claude Design Source を取り込み、source metadata、fingerprint、token、guidance、source catalog を付与した workflow 実行時の Design Contract。`plan` と `compose` が同じ design input を参照したことを検証するための snapshot である。
 _Avoid_: generated design-system.md, compose-local style decision, implicit design

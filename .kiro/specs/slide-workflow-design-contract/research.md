@@ -153,8 +153,33 @@
   - Optional files: `.thumbnail`, `_ds_bundle.js`, `_adherence.oxlintrc.json`, `tokens/fonts.css`, `SKILL.md`, `readme.md` / `README.md`, `components/**/*.prompt.md`, `guidelines/*.card.html`, `slides/*.html`, `templates/**/*.dc.html`, `assets/*`.
   - Required manifest fields: `namespace`, `globalCssPaths`, `tokens`.
   - Optional manifest fields: `components`, `startingPoints`, `cards`, `templates`, `themes`, `fonts`, `brandFonts`, `source`.
-  - Failure cases: missing manifest, malformed JSON, missing required token CSS file, empty token list, manifest/CSS token mismatch, unreadable zip.
-  - Report fields: namespace, source, source fingerprint, file fingerprints, token counts by kind/file, brand fonts, component count/name summary, adherence availability, guidance documents, component prompts, source catalog counts.
+  - Failure cases: missing manifest, malformed JSON, JSON object ではない manifest、missing required token CSS file、empty token list、manifest/CSS token name/value mismatch、unreadable zip、valid zip と invalid sibling zip の同居。
+  - Report fields: namespace, source, source fingerprint、contract fingerprint、global CSS paths、required files、optional files present、token counts、brand fonts、component count/name summary、adherence availability、guidance documents、component prompts、source catalog counts。
+
+### 実装 close-out: PR review 後の hardening
+
+- **背景**: Claude Design Source import 実装後のPR reviewで、実運用時に古い Design System を誤採用したり、`--force` 時に古い成果物と新しい Resolved Design Contract が混在したりする failure mode が見つかった。
+- **参照した情報源**:
+  - `scripts/lib/takt-marp-claude-design-source.mjs`
+  - `scripts/takt-marp-run-slide-workflow.mjs`
+  - `scripts/takt-marp-validate-slide-workflow-foundation.mjs`
+  - `.takt/facets/instructions/takt-marp-polish-inspect.md`
+  - `.takt/facets/instructions/takt-marp-polish-fix.md`
+- **発見**:
+  - `slides/<deck>/design/` に valid zip と invalid zip が同居する場合、valid zip を暗黙採用すると壊れた新規 export を無視して古い Design System で進んでしまう。最終実装では invalid sibling zip が 1 件でもあれば `CLAUDE_DESIGN_SOURCE_INVALID` として停止する。
+  - `_ds_manifest.json` が JSON としては valid でも `null`、文字列、配列の場合、field access ではなく `CLAUDE_DESIGN_SOURCE_INVALID` として扱う必要がある。
+  - `plan` / `compose --force` では、source validation は archive / clean 前に必要だが、Resolved Design Contract の保存まで先に行うと archive / clean 失敗時に旧成果物と新契約が混在する。最終実装では import / validation と保存を分け、保存は archive / clean 成功後に遅延する。
+  - `polish`、`deliver`、`research` は新しい Design Contract を生成しないため、既存 marker が malformed の場合は読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く必要がある。
+  - Claude Design Source 導入前に compose 済みの既存 deck には Resolved Design Contract がない。`polish-inspect` / `polish-fix` は Design Contract 不在そのものを blocked にせず、render evidence と既存 source artifact の範囲で legacy visual/layout/render 修正を許可する。
+- **含意**:
+  - Claude Design Source resolver は「valid が 1 件あるか」ではなく「design directory 全体が exactly one valid source として整理されているか」を検証する。
+  - Resolved Design Contract は workflow-managed artifact だが、`--force` invalidation が成功するまで旧成果物と整合する旧 contract を保つ。
+  - `polish` の migration path は `plan` / `compose` の migration path と異なる。`plan` / `compose` は Claude Design Source 必須、`polish` は既存 deck を壊さないため Design Contract なし legacy path を許可する。
+- **追加 validation**:
+  - invalid sibling zip で runner が TAKT を起動しない。
+  - manifest `null` で importer が `CLAUDE_DESIGN_SOURCE_INVALID` を返す。
+  - `--force` archive 失敗時に新しい Resolved Design Contract を保存しない。
+  - malformed marker から `polish` marker が保存済み Resolved Design Contract を復旧する。
 
 ## アーキテクチャパターン評価
 

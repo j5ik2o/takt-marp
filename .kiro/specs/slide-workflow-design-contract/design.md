@@ -4,7 +4,7 @@
 
 この機能は、Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力として受け取り、workflow が読める Resolved Design Contract（解決済みデザイン契約）へ正規化する。
 
-利用者は Claude Design から export した `.zip` を `slides/<deck>/design/` に配置する。Workflow Runner（ワークフローランナー）は `plan` / `compose` 実行前に zip を解決し、manifest と token CSS を検証し、`.takt/design-contracts/<deck>/resolved-design-contract.json` を生成する。`plan` はこの契約を layout / visual / density の制約として参照するだけで CSS を生成しない。`compose` は `plan` が記録した contract fingerprint と現在の fingerprint を照合し、一致した場合だけ `SLIDES.md` front matter CSS、`_class`、section HTML/CSS、visual source を生成する。
+利用者は Claude Design から export した `.zip` を `slides/<deck>/design/` に配置する。Workflow Runner（ワークフローランナー）は `plan` / `compose` 実行前に zip を解決し、manifest と token CSS を検証し、`.takt/design-contracts/<deck>/resolved-design-contract.json` を生成する。`--force` 再実行では、既存成果物の archive / clean 前に import / validation だけを行い、Resolved Design Contract の保存は archive / clean 成功後に遅延する。`plan` はこの契約を layout / visual / density の制約として参照するだけで CSS を生成しない。`compose` は `plan` が記録した contract fingerprint と現在の fingerprint を照合し、一致した場合だけ `SLIDES.md` front matter CSS、`_class`、section HTML/CSS、visual source を生成する。
 
 ### 目標
 
@@ -32,8 +32,11 @@
 - `slides/<deck>/design/` から Claude Design zip を一意に解決する規則。
 - Claude Design zip の required / optional files、manifest fields、token consistency の validation。
 - Resolved Design Contract の JSON shape、path、fingerprint、marker payload。
+- `--force` 再実行時に、source validation と Resolved Design Contract 保存を分離する preflight / invalidation 順序。
+- malformed な既存 marker を読み捨て、保存済み Resolved Design Contract marker へ復旧する規則。
 - `plan.md` / `slide-blueprint.md` に Design Contract metadata を記録し、`compose` で fingerprint を照合する契約。
 - `compose` workflow から `design_system` step と `design-system.md` canonical artifact を除外する workflow / facet / docs 更新。
+- Design Contract を持たない既存 deck でも `polish` が render evidence と source artifact の範囲で検査・修正できる legacy path。
 - smoke / foundation / package / no-copy validation の success criteria 更新。
 
 ### 境界外
@@ -57,8 +60,11 @@
 ### 再検証トリガー
 
 - Claude Design zip の accepted file set、required manifest fields、token consistency rule を変える場合。
+- invalid sibling zip や malformed manifest の扱いを変える場合。
 - Resolved Design Contract JSON shape、path、fingerprint 算出方法を変える場合。
 - marker の `design_contract` shape、path 形式、source enum を変える場合。
+- `--force` 時の source validation、artifact invalidation、Resolved Design Contract 保存の順序を変える場合。
+- Design Contract なし legacy deck に対する `polish` の許容範囲を変える場合。
 - `plan.md` / `slide-blueprint.md` に記録する contract metadata を変える場合。
 - compose source artifact、review finding、smoke assertion の成功条件を変える場合。
 - no-copy または `eject` の user-facing contract を変える場合。
@@ -264,58 +270,51 @@ Optional manifest fields:
     "export_source": "spa"
   },
   "fingerprint": {
-    "contract_sha256": "normalized-json-sha256",
-    "generated_at": "2026-06-21T00:00:00.000Z"
+    "source_sha256": "source-zip-sha256",
+    "contract_sha256": "normalized-json-sha256"
   },
-  "files": {
-    "_ds_manifest.json": "sha256",
-    "styles.css": "sha256",
-    "tokens/colors.css": "sha256",
-    "tokens/typography.css": "sha256",
-    "tokens/spacing.css": "sha256",
-    "tokens/fonts.css": "sha256"
-  },
-  "tokens": {
-    "counts": {
-      "total": 119,
-      "color": 49,
-      "typography": 31,
-      "spacing": 32,
-      "radius": 5,
-      "shadow": 4,
-      "font": 14,
-      "other": 15
-    },
-    "by_file": {
-      "tokens/colors.css": 56,
-      "tokens/typography.css": 31,
-      "tokens/spacing.css": 32
-    },
-    "css_custom_properties": [
-      {
-        "name": "--color-background",
-        "value": "#ffffff",
-        "category": "color",
-        "source_file": "tokens/colors.css"
-      }
-    ]
+  "global_css_paths": [
+    "tokens/fonts.css",
+    "tokens/colors.css",
+    "tokens/typography.css",
+    "tokens/spacing.css",
+    "styles.css"
+  ],
+  "required_files": [
+    "_ds_manifest.json",
+    "styles.css",
+    "tokens/colors.css",
+    "tokens/typography.css",
+    "tokens/spacing.css"
+  ],
+  "optional_files_present": [
+    "_adherence.oxlintrc.json",
+    "tokens/fonts.css"
+  ],
+  "token_counts": {
+    "total": 119,
+    "color": 56,
+    "typography": 31,
+    "spacing": 23,
+    "radius": 5,
+    "shadow": 4,
+    "font": 0,
+    "other": 0
   },
   "brand_fonts": [
-    {
-      "family": "Noto Sans JP",
-      "status": "ok"
-    }
+    "Noto Sans JP",
+    "Noto Serif JP",
+    "JetBrains Mono"
   ],
   "components": {
     "count": 2,
     "empty": false,
-    "names": ["Callout", "Metric"]
+    "names": ["ExampleComponent", "ExampleVisual"]
   },
   "adherence": {
     "available": true,
-    "token_count": 119,
-    "component_count": 0,
-    "rules": ["raw-hex-color", "raw-px-value", "unsupported-font-family"]
+    "rule_messages": ["Raw hex color -- use a design-system color token via var()."],
+    "x_omelette_token_count": 119
   },
   "guidance": {
     "available": true,
@@ -331,7 +330,7 @@ Optional manifest fields:
     ],
     "component_prompts": [
       {
-        "path": "components/ui/Callout.prompt.md",
+        "path": "components/example/ExampleComponent.prompt.md",
         "kind": "component_prompt",
         "sha256": "sha256",
         "size_bytes": 512,
@@ -353,10 +352,10 @@ Optional manifest fields:
     },
     "components": [
       {
-        "name": "Callout",
-        "sourcePath": "components/ui/Callout.jsx",
-        "prompt_path": "components/ui/Callout.prompt.md",
-        "related_files": ["components/ui/Callout.jsx", "components/ui/Callout.prompt.md"]
+        "name": "ExampleComponent",
+        "sourcePath": "components/example/ExampleComponent.jsx",
+        "prompt_path": "components/example/ExampleComponent.prompt.md",
+        "related_files": ["components/example/ExampleComponent.jsx", "components/example/ExampleComponent.prompt.md"]
       }
     ],
     "cards": [],
@@ -364,7 +363,16 @@ Optional manifest fields:
     "sample_slides": [],
     "guidelines": [],
     "assets": []
-  }
+  },
+  "tokens": [
+    {
+      "name": "--color-background",
+      "value": "#ffffff",
+      "kind": "color",
+      "defined_in": "tokens/colors.css",
+      "category": "color"
+    }
+  ]
 }
 ```
 
@@ -377,11 +385,18 @@ Optional manifest fields:
 ```json
 {
   "design_contract": {
-    "source_kind": "claude-design-zip",
-    "source_path": "slides/example/design/Example Design System.zip",
-    "source_sha256": "source-zip-sha256",
-    "resolved_contract_path": ".takt/design-contracts/example/resolved-design-contract.json",
-    "contract_sha256": "normalized-json-sha256",
+    "source": {
+      "kind": "claude-design-zip",
+      "path": "slides/example/design/Example Design System.zip",
+      "sha256": "source-zip-sha256",
+      "namespace": "ExampleDesignSystem_abcdef",
+      "export_source": "spa"
+    },
+    "path": ".takt/design-contracts/example/resolved-design-contract.json",
+    "fingerprint": {
+      "source_sha256": "source-zip-sha256",
+      "contract_sha256": "normalized-json-sha256"
+    },
     "namespace": "ExampleDesignSystem_abcdef",
     "token_counts": {
       "total": 119,
@@ -389,15 +404,14 @@ Optional manifest fields:
       "typography": 31,
       "spacing": 32
     },
+    "brand_fonts": ["Noto Sans JP", "Noto Serif JP", "JetBrains Mono"],
     "component_count": 2,
-    "adherence": {
-      "available": true
-    }
+    "adherence_available": true
   }
 }
 ```
 
-`source_path` と `resolved_contract_path` は repo root relative path とする。worker が直接読む必要がある場合は runner が existing marker の path resolution pattern に合わせて absolute path も追加できるが、report には relative path を優先する。
+`source.path` と `path` は repo root relative path とする。worker は marker の `design_contract.path` が指す JSON を開き、詳細 token、guidance、source catalog を読む。
 
 ### plan metadata
 
@@ -419,7 +433,7 @@ design_contract:
   adherence_available: true
 ```
 
-`compose` は marker の `design_contract.contract_sha256` と plan metadata の `contract_sha256` を照合する。不一致の場合、source artifact 生成を成功扱いせず、re-plan または Claude Design Source 更新が必要な finding を残す。
+`compose` は marker の `design_contract.fingerprint.contract_sha256` と plan metadata の `contract_sha256` を照合する。不一致の場合、source artifact 生成を成功扱いせず、re-plan または Claude Design Source 更新が必要な finding を残す。
 
 ## コンポーネントとインターフェース
 
@@ -439,7 +453,7 @@ design_contract:
 
 - target deck の `slides/<deck>/design/` を見る。
 - `.zip` file を列挙し、0 件なら `CLAUDE_DESIGN_SOURCE_MISSING` とする。
-- `.zip` file が unreadable、malformed、または `_ds_manifest.json` を含まない場合は `CLAUDE_DESIGN_SOURCE_INVALID` とする。
+- `.zip` file が unreadable、malformed、または `_ds_manifest.json` を含まない場合は `CLAUDE_DESIGN_SOURCE_INVALID` とする。valid zip が 1 件あっても invalid sibling zip が同居する場合は、壊れた新規 export を無視して古い valid export を使わないため invalid とする。
 - `_ds_manifest.json` を含む zip が 2 件以上ある場合は `CLAUDE_DESIGN_SOURCE_AMBIGUOUS` とする。
 - `design-system.md`、`design-contract.md`、package default は候補にしない。
 - consumer workspace へ template assets をコピーしない。
@@ -470,6 +484,8 @@ interface ClaudeDesignSource {
 
 - `fflate` dependency を `scripts/lib/takt-marp-zip-archive.mjs` 内へ閉じる。
 - path traversal を防ぐため、entry name に absolute path、`..` segment、NUL byte が含まれる zip は invalid とする。
+- leading `./` は common zip convention として正規化し、`tokens/colors.css` のように参照可能にする。
+- archive byte size、entry count、total uncompressed size には上限を設け、zip bomb による local / CI の availability 低下を防ぐ。
 - entry read は Buffer を返し、text decode は importer 側で UTF-8 として行う。
 - `.thumbnail` の binary content は hash と existence だけ扱い、report に binary body を出さない。
 
@@ -487,7 +503,8 @@ interface ZipArchiveReader {
 **責務と制約**
 
 - required files と required manifest fields を検証する。
-- manifest token と CSS custom property の一致を検証する。
+- `_ds_manifest.json` は JSON object であることを検証し、`null`、文字列、配列などは `CLAUDE_DESIGN_SOURCE_INVALID` とする。
+- manifest token と CSS custom property の名前と値の一致を検証する。
 - `_adherence.oxlintrc.json` がある場合は `x-omelette.tokens` / `x-omelette.components` の counts と review rule names を取り込む。
 - `SKILL.md` / `readme.md` / component prompt がある場合は `guidance` として取り込む。
 - components / cards / templates / sample slides / guidelines / assets がある場合は `source_catalog` として取り込む。
@@ -507,19 +524,42 @@ interface ClaudeDesignImporter {
 }
 
 interface ResolvedDesignContract {
-  schemaVersion: 1;
+  schema_version: 1;
   source: {
     kind: "claude-design-zip";
     path: string;
     sha256: string;
     namespace: string;
-    exportSource: string | null;
+    export_source: string | null;
   };
-  contractSha256: string;
-  resolvedContractPath: string;
-  tokenCounts: Record<string, number>;
-  componentCount: number;
-  adherenceAvailable: boolean;
+  fingerprint: {
+    source_sha256: string;
+    contract_sha256: string;
+  };
+  global_css_paths: string[];
+  required_files: string[];
+  optional_files_present: string[];
+  token_counts: Record<string, number>;
+  brand_fonts: string[];
+  components: {
+    count: number;
+    empty: boolean;
+    names: string[];
+  };
+  adherence: {
+    available: boolean;
+    rule_messages: string[];
+    x_omelette_token_count: number;
+  };
+  guidance: {
+    available: boolean;
+    documents: unknown[];
+    component_prompts: unknown[];
+  };
+  source_catalog: {
+    counts: Record<string, number>;
+  };
+  tokens: unknown[];
 }
 ```
 
@@ -529,13 +569,17 @@ interface ResolvedDesignContract {
 
 - `plan` と `compose` で `design_contract` を marker に書く。
 - `research` metadata と同じ marker に共存させるが、research input とは別 field とする。
-- marker payload は report と facet が読める summary に絞り、詳細 token list は `resolved_contract_path` の JSON へ置く。
+- marker payload は report と facet が読める summary に絞り、詳細 token list は `design_contract.path` の JSON へ置く。
+- `plan` / `compose --force` では Claude Design Source の import / validation を force invalidation 前に済ませるが、Resolved Design Contract の保存は `archiveCommandArtifacts` と `cleanGeneratedOutputs` が成功した後に行う。
+- force invalidation が失敗した場合は、旧 supervision / approval / generated output と旧 Resolved Design Contract を残し、古い source artifact と新しい contract だけが混在する状態を作らない。
+- `polish`、`deliver`、`research` のように新しい Design Contract を生成しない command では、同一 target の既存 marker または `.takt/design-contracts/<deck>/resolved-design-contract.json` から `design_contract` を引き継ぐ。
+- 既存 marker が malformed JSON の場合は marker を読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く。
 
 ### PlanFacetContract
 
 **責務と制約**
 
-- `takt-marp-plan.md` は `.takt/workflow-current-target.json` を読み、`design_contract.resolved_contract_path` の JSON を参照する。
+- `takt-marp-plan.md` は `.takt/workflow-current-target.json` を読み、`design_contract.path` の JSON を参照する。
 - `Layout` は既存 slide workflow の layout vocabulary または許可された `custom:` 拡張形式だけを使う。
 - `Visual Strategy` は token constraints、density hints、adherence rules、既存 visual vocabulary に従う。
 - Claude Design zip の `components` が空でも plan を失敗させない。
@@ -551,6 +595,16 @@ interface ResolvedDesignContract {
 - `design_system` step は削除し、`design-system.md` は compose source artifact に含めない。
 - `compose` は `contract_sha256` mismatch を blocker として扱う。
 - raw hex color、raw px value、unsupported font-family は `_adherence.oxlintrc.json` がある場合に review finding として扱う。
+- Resolved Design Contract 由来の `:root { --token: raw-value; }` 形式の custom property 定義は正当な token 定義として扱い、raw value finding から除外する。token 定義外の直書きだけを finding 対象にする。
+
+### PolishFacetContract
+
+**責務と制約**
+
+- `polish-inspect` と `polish-fix` は marker に `design_contract.path` がある場合、Resolved Design Contract を読み token drift / Design Contract 不一致を確認する。
+- `design_contract` がない既存 deck は legacy path として扱い、Design Contract fingerprint や token drift の判定をスキップする。
+- legacy path でも render evidence と既存 source artifact から判断できる visual/layout/render finding は記録・修正できる。
+- Design Contract 不在そのものを blocked finding または blocked fix 理由にしない。
 
 ## エラー設計
 
@@ -558,9 +612,9 @@ interface ResolvedDesignContract {
 |------|------|----------------------------|
 | `CLAUDE_DESIGN_SOURCE_MISSING` | `slides/<deck>/design/` に `.zip` file がない | Claude Design zip の配置先を示す |
 | `CLAUDE_DESIGN_SOURCE_AMBIGUOUS` | valid zip 候補が複数ある | 候補一覧と 1 件に絞る必要を示す |
-| `CLAUDE_DESIGN_SOURCE_INVALID` | zip / manifest / token CSS が invalid | 欠けた file / field / token mismatch を示す |
-| `DESIGN_CONTRACT_WRITE_FAILED` | Resolved Design Contract を `.takt/` に書けない | path と OS error を示す |
-| `DESIGN_CONTRACT_FINGERPRINT_MISMATCH` | plan metadata と current contract の fingerprint が違う | re-plan または source 更新確認が必要と示す |
+| `CLAUDE_DESIGN_SOURCE_INVALID` | zip / manifest / token CSS が invalid、または invalid sibling zip が同居する | 欠けた file / field、非 object manifest、token mismatch、invalid zip path を示す |
+| OS write error | Resolved Design Contract を `.takt/` に書けない | path と OS error を表示し、TAKT 起動前に停止する |
+| compose `needs_input` / review blocker | plan metadata と current contract の fingerprint が違う | re-plan または source 更新確認が必要と示す |
 
 すべての error は `SlideWorkflowError` の既存表示経路に乗せる。error message には absolute path より repo-relative path を優先し、debug detail が必要な場合だけ cause に保持する。
 
@@ -579,6 +633,8 @@ interface ResolvedDesignContract {
 - plan / blueprint が `contract_sha256` を記録し、CSS を含まないことを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
+- invalid sibling zip、JSON object ではない manifest、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧を検証する。
+- Design Contract なしの legacy polish path で inspect / fix が blocked にならないことを facet 文言として検証する。
 
 ### package / global install / no-copy validation
 
@@ -593,6 +649,7 @@ interface ResolvedDesignContract {
 - 既存 deck に Claude Design Source がない場合は missing source として失敗する。`design-system.md` から暗黙移行しない。
 - 既存 `SLIDES.md`、`sections/*`、`images/*` は自動全面再生成しない。
 - 移行案内は `slides/<deck>/design/` に Claude Design zip を 1 件置くことに限定する。
+- Claude Design Source 導入前に compose 済みで Resolved Design Contract を持たない deck でも、`polish` は legacy path として render evidence と既存 source artifact の範囲で検査・修正できる。
 
 ## 要件トレーサビリティ
 
@@ -603,6 +660,7 @@ interface ResolvedDesignContract {
 | 1.3 | `CLAUDE_DESIGN_SOURCE_AMBIGUOUS` |
 | 1.4 | ZipArchiveReader, `CLAUDE_DESIGN_SOURCE_INVALID` |
 | 1.5 | resolver exclusion rule, Migration / Compatibility |
+| 1.6 | invalid sibling zip handling |
 | 2.1 | Claude Design Source required files |
 | 2.2 | optional files import |
 | 2.3 | required manifest fields |
@@ -615,6 +673,8 @@ interface ResolvedDesignContract {
 | 3.3 | marker payload |
 | 3.4 | importer failure semantics |
 | 3.5 | marker field separation |
+| 3.6 | force validation/save ordering |
+| 3.7 | malformed marker recovery |
 | 4.1 | PlanFacetContract |
 | 4.2 | existing layout vocabulary fallback |
 | 4.3 | catalog-aware visual planning |
@@ -622,7 +682,7 @@ interface ResolvedDesignContract {
 | 4.5 | plan metadata |
 | 4.6 | plan finding semantics |
 | 5.1 | compose fingerprint check |
-| 5.2 | `DESIGN_CONTRACT_FINGERPRINT_MISMATCH` |
+| 5.2 | compose `needs_input` / review blocker |
 | 5.3 | ComposeFacetContract |
 | 5.4 | token-driven CSS generation |
 | 5.5 | HTML visual token constraints |
@@ -646,10 +706,12 @@ interface ResolvedDesignContract {
 | 8.4 | package boundary validation |
 | 8.5 | no-copy validation |
 | 8.6 | validation error reporting |
+| 8.7 | hardening regression validation |
 | 9.1 | Migration / Compatibility |
 | 9.2 | legacy `design-system.md` non-failure |
 | 9.3 | no implicit migration |
 | 9.4 | migration guidance |
+| 9.5 | legacy polish without Design Contract |
 
 ## リスクと緩和策
 

@@ -28,7 +28,7 @@ workflow 利用者は、資料ごとに `design-system.md` を作り直したく
 
 ## Approach
 
-Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.zip` export に絞る。runner は `plan` / `compose` 実行前に `slides/<deck>/design/` から Claude Design zip を 1 件だけ解決し、manifest と token CSS を検証して Resolved Design Contract を `.takt/` 配下へ生成する。
+Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.zip` export に絞る。runner は `plan` / `compose` 実行前に `slides/<deck>/design/` が exactly one valid Claude Design Source として整理されていることを確認し、manifest と token CSS を検証して Resolved Design Contract を `.takt/` 配下へ生成する。valid zip と invalid sibling zip が同居する場合は、古い valid export を暗黙採用せず失敗する。
 
 `plan` は marker 経由で Resolved Design Contract を読み、CSS を出さずに layout / visual / density の制約として使う。`components`、cards、templates、sample slides、component prompts が存在する場合は brief に合うものだけを選定し、存在しない場合でも token constraints と既存 slide workflow の layout vocabulary で計画を継続する。
 
@@ -36,12 +36,14 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 
 この approach は、新しい top-level `design` command を追加せず、既存 ADR の `plan / compose / polish / deliver` command surface を維持する。通常実行で consumer workspace へ `.takt/workflows` / `.takt/facets` をコピーしない no-copy contract とも整合する。
 
+`--force` 再実行では、Claude Design Source の import / validation は既存成果物の invalidation 前に行うが、Resolved Design Contract の保存は archive / clean 成功後に遅延する。Claude Design Source 導入前に compose 済みの既存 deck については、`polish` が Design Contract 不在だけで blocked にならない legacy path を維持する。
+
 ## Scope
 
 **In**:
 
 - Claude Design zip を唯一の user-facing design system 入力として解決する規則。
-- `slides/<deck>/design/` の zip discovery、missing / ambiguous / invalid source の失敗規則。
+- `slides/<deck>/design/` の zip discovery、missing / ambiguous / invalid source、invalid sibling zip 同居の失敗規則。
 - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` の検証。
 - optional な `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets の取り込み。
 - Resolved Design Contract として、colors / typography / spacing / radius / shadow / brand fonts / adherence metadata / guidance / source catalog を正規化する。
@@ -50,6 +52,8 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 - `compose` が Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する規約。
 - `design-system.md` を compose canonical artifact、override 条件、success assertion から外す workflow / docs / validator 更新。
 - compose report / review / supervision reports への Claude Design Source 使用記録。
+- `--force` 時の source validation / artifact invalidation / Resolved Design Contract 保存順序。
+- Resolved Design Contract を持たない既存 deck の legacy polish path。
 - smoke validation、foundation validation、package/no-copy validation の更新。
 
 **Out**:
