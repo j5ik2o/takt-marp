@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.5.0](https://github.com/j5ik2o/takt-marp/compare/v0.4.3...v0.5.0) (2026-06-21)
+
+### Features
+
+* **slide-workflow-research:** add research reuse sidecar ([5d1bfba](https://github.com/j5ik2o/takt-marp/commit/5d1bfba8f2d00e6703a7295bf5c38ff7e11d5250))
+* **slide-workflow-research:** add research reuse workflow template ([02ded65](https://github.com/j5ik2o/takt-marp/commit/02ded658f5eb35d2e2a7afe897e00f557729d0e5))
+* **slide-workflow-research:** connect research reuse lifecycle ([8b2b5cc](https://github.com/j5ik2o/takt-marp/commit/8b2b5cc16b48a912391e9c1eedf0e33f51d593a7))
+* **slide-workflow-research:** copy reuse source report before run ([7b10421](https://github.com/j5ik2o/takt-marp/commit/7b104213c389048b1c45c65bf927ecca2482079c))
+* **slide-workflow-research:** detect reusable failed research reports ([e0d61d6](https://github.com/j5ik2o/takt-marp/commit/e0d61d6c6f07a88a32f4a2db69ffeb8a63616f3b))
+* **slide-workflow-research:** select research reuse workflow ([59bc3bb](https://github.com/j5ik2o/takt-marp/commit/59bc3bb195c83cda0cfa8d0f0cd41f8e0d903413))
+* **slide-workflow-research:** support reuse adapter source marker ([72f4437](https://github.com/j5ik2o/takt-marp/commit/72f4437c086389b4d098f640fbf4b575987f4d05))
+
+### Bug Fixes
+
+* **slide-workflow-research:** address bundled reuse review feedback ([fbb9af6](https://github.com/j5ik2o/takt-marp/commit/fbb9af6425627825845569fb47c6d51e2b8f1dc9))
+* **slide-workflow-research:** address reuse review feedback ([2c6c771](https://github.com/j5ik2o/takt-marp/commit/2c6c77112a44ec0da68b29e3356fcfa153a2ec6e))
+* **slide-workflow-research:** harden reuse failure recovery ([92704f1](https://github.com/j5ik2o/takt-marp/commit/92704f12a4de65aaf0d6e4b5ac9657b1ed6fa356))
+* **slide-workflow-research:** preserve reuse sidecar on sync failures ([1f1b607](https://github.com/j5ik2o/takt-marp/commit/1f1b6078adfdf25e9f2f96c905164a6d2b7ad506))
+* **slide-workflow-research:** preserve reuse sidecar until success ([afe3e5a](https://github.com/j5ik2o/takt-marp/commit/afe3e5ad7bc69f9fbb305f12692858e67c8c2f25))
+
 ## [0.4.3](https://github.com/j5ik2o/takt-marp/compare/v0.4.2...v0.4.3) (2026-06-20)
 
 ### Bug Fixes
