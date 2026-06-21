@@ -47,12 +47,15 @@ import {
   resolveResearchReuseCandidate,
   resolveDeckTarget,
   shouldCleanGeneratedOutputsOnForce,
+  shouldPreserveDesignContract,
+  shouldResolveDesignContract,
   supervisionPath,
   writeResearchReuseSidecar,
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
-import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-source.mjs";
+import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-fixtures.mjs";
+import { runDesignContractFoundationChecks } from "./takt-marp-validate-design-contract-foundation.mjs";
 import {
   FORBIDDEN_PACK_FILES,
   REQUIRED_PACK_FILES,
@@ -272,11 +275,8 @@ async function main() {
   });
 
   await check("Claude Design fixture imports into a deterministic Resolved Design Contract", async () => {
-    const {
-      buildClaudeDesignSmokeFixtureZipBuffer,
-      importClaudeDesignSourceBuffer,
-      importClaudeDesignSourceArchive,
-    } = await import("./lib/takt-marp-claude-design-source.mjs");
+    const { buildClaudeDesignSmokeFixtureZipBuffer } = await import("./lib/takt-marp-claude-design-fixtures.mjs");
+    const { importClaudeDesignSourceBuffer, importClaudeDesignSourceArchive } = await import("./lib/takt-marp-claude-design-source.mjs");
     const { ZipArchiveReader, createZipArchiveBuffer } = await import("./lib/takt-marp-zip-archive.mjs");
     const sourcePath = path.join(ROOT_DIR, "slides", "demo", "design", "Claude Design Smoke.zip");
     const first = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
@@ -1296,6 +1296,11 @@ async function main() {
     assert(planConfig.cleanGeneratedOutputsOnForce === true, "plan force must keep generated output cleanup");
     assert(shouldCleanGeneratedOutputsOnForce("plan"), "plan force cleanup predicate must stay enabled");
     assert(!planConfig.requiredState, `plan must not require a prior command state, got ${planConfig.requiredState}`);
+    assert(shouldResolveDesignContract("plan"), "plan must resolve a fresh Design Contract");
+    assert(shouldResolveDesignContract("compose"), "compose must resolve a fresh Design Contract");
+    assert(shouldPreserveDesignContract("research"), "research must preserve existing Design Contract marker when available");
+    assert(shouldPreserveDesignContract("polish"), "polish must preserve existing Design Contract marker when available");
+    assert(shouldPreserveDesignContract("deliver"), "deliver must preserve existing Design Contract marker when available");
 
     let caught;
     try {
@@ -1963,350 +1968,7 @@ async function main() {
     assert(!result.stderr.includes("TAKT_EXECUTABLE_MISSING"), `TAKT check ran before invalid target: ${result.stderr}`);
   });
 
-  await check("runner uses selected workflow file path and preserves provider argument", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-runner-"));
-    await makeDeck(root, "demo");
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status === 0, `runner failed with selected workflow file path: ${result.stderr}`);
-    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
-    const workflowArgIndex = args.indexOf("-w");
-    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
-    assert(args[workflowArgIndex + 1] === selectedWorkflowPath, `TAKT did not receive selected workflow file path: ${args.join(" ")}`);
-    const targetArgIndex = args.indexOf("-t");
-    assert(targetArgIndex >= 0, `TAKT args did not include -t: ${args.join(" ")}`);
-    assert(args[targetArgIndex + 1] === "slides/demo", `plan TAKT target changed unexpectedly: ${args.join(" ")}`);
-    const providerArgIndex = args.indexOf("--provider");
-    assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
-    assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.target === "slides/demo", `plan marker target changed unexpectedly: ${JSON.stringify(marker)}`);
-    assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `plan marker missing design_contract path: ${JSON.stringify(marker)}`);
-    assert(marker.design_contract?.source?.path === "slides/demo/design/Claude Design Smoke.zip", `plan marker missing source path: ${JSON.stringify(marker)}`);
-    assert(marker.design_contract?.fingerprint?.contract_sha256, `plan marker missing contract fingerprint: ${JSON.stringify(marker)}`);
-    assert(
-      existsSync(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json")),
-      "runner did not write resolved design contract",
-    );
-    assert(!Object.hasOwn(marker, "research_brief_path"), `plan marker included research brief path: ${JSON.stringify(marker)}`);
-    assert(!Object.hasOwn(marker, "research_output_dir"), `plan marker included research output dir: ${JSON.stringify(marker)}`);
-    assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
-  });
-
-  await check("runner rejects missing Claude Design Source before TAKT for plan", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-missing-design-source-"));
-    const deckPath = path.join(root, "slides", "demo");
-    await mkdir(path.join(deckPath, "review"), { recursive: true });
-    await writeFile(path.join(deckPath, "brief.md"), "# Brief\n", "utf8");
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status !== 0, "runner unexpectedly accepted missing Claude Design Source");
-    assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
-    assert(result.stderr.includes("slides/demo/design"), `missing design source message did not identify design directory: ${result.stderr}`);
-    assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source");
-  });
-
-  await check("runner rejects invalid sibling Claude Design zip before TAKT for plan", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-invalid-sibling-design-source-"));
-    const targetInfo = await makeDeck(root, "demo");
-    const { createZipArchiveBuffer } = await import("./lib/takt-marp-zip-archive.mjs");
-    await writeFile(path.join(targetInfo.deckPath, "design", "Incomplete Design Source.zip"), createZipArchiveBuffer({
-      "notes.txt": "not a Claude Design export\n",
-    }));
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status !== 0, "runner unexpectedly accepted invalid sibling Claude Design zip");
-    assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_INVALID:"), `invalid sibling source did not surface CLAUDE_DESIGN_SOURCE_INVALID: ${result.stderr}`);
-    assert(result.stderr.includes("Incomplete Design Source.zip"), `invalid sibling source message did not identify bad zip: ${result.stderr}`);
-    assert(!existsSync(argsPath), "TAKT was invoked despite invalid sibling Claude Design zip");
-  });
-
-  await check("plan force validates Claude Design Source before archiving artifacts", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-force-missing-design-source-"));
-    const targetInfo = await makeDeck(root, "demo");
-    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await mkdir(path.join(root, "dist", "demo"), { recursive: true });
-    await writeFile(path.join(root, "dist", "demo", "SLIDES.pdf"), "old pdf", "utf8");
-    await rm(path.join(targetInfo.deckPath, "design"), { recursive: true, force: true });
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock", "--force"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status !== 0, "force runner unexpectedly accepted missing Claude Design Source");
-    assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `force missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
-    assert(existsSync(supervisionPath(targetInfo, "plan")), "force archived supervision before validating Claude Design Source");
-    assert(existsSync(approvalPath(targetInfo, "plan")), "force archived approval before validating Claude Design Source");
-    assert(existsSync(path.join(root, "dist", "demo", "SLIDES.pdf")), "force cleaned generated outputs before validating Claude Design Source");
-    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "force created review history before validating Claude Design Source");
-    assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source on force");
-  });
-
-  await check("rejected plan rerun validates Claude Design Source before archiving artifacts", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-rejected-missing-design-source-"));
-    const targetInfo = await makeDeck(root, "demo");
-    await writeSupervision(targetInfo, "plan", "none", "rejected", "run-rejected-plan");
-    const supervisionBefore = await readFile(supervisionPath(targetInfo, "plan"), "utf8");
-    await rm(path.join(targetInfo.deckPath, "design"), { recursive: true, force: true });
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status !== 0, "rejected rerun unexpectedly accepted missing Claude Design Source");
-    assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `rejected rerun missing source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
-    assert((await readFile(supervisionPath(targetInfo, "plan"), "utf8")) === supervisionBefore, "rejected rerun archived supervision before validating Claude Design Source");
-    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "rejected rerun created review history before validating Claude Design Source");
-    assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source on rejected rerun");
-  });
-
-  await check("plan force does not save Design Contract until artifact invalidation succeeds", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-force-design-save-after-archive-"));
-    const targetInfo = await makeDeck(root, "demo");
-    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan-1");
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeFile(path.join(targetInfo.reviewPath, "history"), "not a directory\n", "utf8");
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-    const contractPath = path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock", "--force"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status !== 0, "force runner unexpectedly succeeded despite blocked archive history path");
-    assert(existsSync(supervisionPath(targetInfo, "plan")), "force archive failure removed current supervision");
-    assert(existsSync(approvalPath(targetInfo, "plan")), "force archive failure removed current approval");
-    assert(!existsSync(contractPath), "force archive failure saved a new Resolved Design Contract before invalidation succeeded");
-    assert(!existsSync(argsPath), "TAKT was invoked despite force archive failure");
-  });
-
-  await check("runner preserves Design Contract marker for polish", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-design-marker-"));
-    const targetInfo = await makeDeck(root, "demo");
-    const fakePackage = await makeFakePackageRoot();
-    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
-    let result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `plan runner failed before polish marker test: ${result.stderr}`);
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
-    await writeApproval(targetInfo, "compose", "foundation-test");
-
-    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
-    result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `polish runner failed after compose approval: ${result.stderr}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.command === "polish", `polish marker command mismatch: ${JSON.stringify(marker)}`);
-    assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `polish marker dropped design_contract: ${JSON.stringify(marker)}`);
-    assert(marker.design_contract?.fingerprint?.contract_sha256, `polish marker missing contract fingerprint: ${JSON.stringify(marker)}`);
-  });
-
-  await check("runner recovers polish Design Contract marker when current marker is malformed", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-malformed-design-marker-"));
-    const targetInfo = await makeDeck(root, "demo");
-    const fakePackage = await makeFakePackageRoot();
-    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
-    let result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `plan runner failed before malformed marker test: ${result.stderr}`);
-    assert(
-      existsSync(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json")),
-      "plan did not write resolved contract before malformed marker test",
-    );
-    await writeFile(path.join(root, ".takt", "workflow-current-target.json"), "{not json\n", "utf8");
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
-    await writeApproval(targetInfo, "compose", "foundation-test");
-
-    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
-    result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `polish runner failed with malformed current marker: ${result.stderr}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.command === "polish", `polish marker command mismatch after malformed marker recovery: ${JSON.stringify(marker)}`);
-    assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `polish marker did not recover stored design_contract: ${JSON.stringify(marker)}`);
-  });
-
-  await check("runner ignores corrupt stored Design Contract marker for polish", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-corrupt-stored-design-marker-"));
-    const targetInfo = await makeDeck(root, "demo");
-    await mkdir(path.join(root, ".takt", "design-contracts", "demo"), { recursive: true });
-    await writeFile(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json"), "{not json\n", "utf8");
-    await mkdir(path.join(root, ".takt"), { recursive: true });
-    await writeFile(path.join(root, ".takt", "workflow-current-target.json"), "{not json\n", "utf8");
-    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan");
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
-    await writeApproval(targetInfo, "compose", "foundation-test");
-
-    const fakePackage = await makeFakePackageRoot();
-    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `polish runner failed with corrupt stored design contract: ${result.stderr}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.command === "polish", `polish marker command mismatch after corrupt stored contract fallback: ${JSON.stringify(marker)}`);
-    assert(!marker.design_contract, `polish marker kept corrupt stored design_contract: ${JSON.stringify(marker)}`);
-  });
-
-  await check("runner validates existing Design Contract marker payload before polish", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-corrupt-existing-design-marker-"));
-    const targetInfo = await makeDeck(root, "demo");
-    const fakePackage = await makeFakePackageRoot();
-    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
-    let result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `plan runner failed before corrupt existing marker test: ${result.stderr}`);
-    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
-    await writeFile(path.join(root, planMarker.design_contract.path), "{not json\n", "utf8");
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
-    await writeApproval(targetInfo, "compose", "foundation-test");
-
-    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
-    result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `polish runner failed with corrupt existing marker payload: ${result.stderr}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.command === "polish", `polish marker command mismatch after corrupt existing marker fallback: ${JSON.stringify(marker)}`);
-    assert(!marker.design_contract, `polish marker kept corrupt existing design_contract: ${JSON.stringify(marker)}`);
-  });
-
-  await check("runner rejects incomplete Design Contract fingerprint before polish", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-incomplete-design-fingerprint-"));
-    const targetInfo = await makeDeck(root, "demo");
-    const fakePackage = await makeFakePackageRoot();
-    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
-    let result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `plan runner failed before incomplete fingerprint test: ${result.stderr}`);
-    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
-    const contractPath = path.join(root, planMarker.design_contract.path);
-    const contract = JSON.parse(await readFile(contractPath, "utf8"));
-    contract.fingerprint = {};
-    await writeFile(contractPath, `${JSON.stringify(contract, null, 2)}\n`, "utf8");
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
-    await writeApproval(targetInfo, "compose", "foundation-test");
-
-    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
-    result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `polish runner failed with incomplete design fingerprint: ${result.stderr}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.command === "polish", `polish marker command mismatch after incomplete fingerprint fallback: ${JSON.stringify(marker)}`);
-    assert(!marker.design_contract, `polish marker kept incomplete fingerprint design_contract: ${JSON.stringify(marker)}`);
-  });
-
-  await check("runner ignores stale Design Contract marker for polish", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-stale-design-marker-"));
-    const targetInfo = await makeDeck(root, "demo");
-    const fakePackage = await makeFakePackageRoot();
-    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
-    let result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `plan runner failed before stale marker test: ${result.stderr}`);
-    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
-    await rm(path.join(root, planMarker.design_contract.path), { force: true });
-    await writeApproval(targetInfo, "plan", "foundation-test");
-    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
-    await writeApproval(targetInfo, "compose", "foundation-test");
-
-    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
-    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
-    result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8" },
-    );
-    assert(result.status === 0, `polish runner failed after stale marker setup: ${result.stderr}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.command === "polish", `polish marker command mismatch: ${JSON.stringify(marker)}`);
-    assert(!marker.design_contract, `polish marker kept stale design_contract: ${JSON.stringify(marker)}`);
-  });
+  await runDesignContractFoundationChecks(check);
 
   await check("research runner requires research brief before TAKT", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-missing-brief-"));
@@ -4319,6 +3981,7 @@ async function makeFakePackageRoot() {
   for (const relative of [
     "takt-marp-run-slide-workflow.mjs",
     path.join("lib", "takt-marp-claude-design-source.mjs"),
+    path.join("lib", "takt-marp-design-contract-run-context.mjs"),
     path.join("lib", "takt-marp-errors.mjs"),
     path.join("lib", "takt-marp-project-templates.mjs"),
     path.join("lib", "takt-marp-slide-workflow.mjs"),

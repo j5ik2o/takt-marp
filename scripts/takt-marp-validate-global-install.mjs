@@ -21,7 +21,7 @@ import path from "node:path";
 import { assertNoProhibitedEntries, listTemplateEntries } from "./lib/takt-marp-project-templates.mjs";
 import { resolveRuntimeContext, runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 import { SlideWorkflowError, formatError } from "./lib/takt-marp-slide-workflow.mjs";
-import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-source.mjs";
+import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-fixtures.mjs";
 
 const CLI_COMMANDS = [
   "eject",

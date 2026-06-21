@@ -28,8 +28,8 @@ import { runtimeExecutablePath } from "./lib/takt-marp-runtime-context.mjs";
 import { resolveTemplateSource, workflowFilePath } from "./lib/takt-marp-project-templates.mjs";
 import {
   resolveAndSaveClaudeDesignContract,
-  writeClaudeDesignSmokeFixture,
 } from "./lib/takt-marp-claude-design-source.mjs";
+import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-fixtures.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = path.resolve(SCRIPT_DIR, "..");

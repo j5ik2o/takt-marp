@@ -30,12 +30,10 @@ import {
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
 import {
-  loadDesignContractMarkerPayloadFromPath,
-  loadResolvedDesignContractMarker,
-  resolveAndSaveClaudeDesignContract,
-  resolveClaudeDesignContract,
-  saveResolvedDesignContract,
-} from "./lib/takt-marp-claude-design-source.mjs";
+  designContractMarkerForRun,
+  pendingDesignContractBeforeInvalidation,
+  resolvedDesignContractForRun,
+} from "./lib/takt-marp-design-contract-run-context.mjs";
 
 function usage() {
   return [
@@ -75,9 +73,7 @@ async function main() {
 
   let resolvedDesignContract = null;
   let pendingDesignContract = null;
-  if ((command === "plan" || command === "compose") && flags.force) {
-    pendingDesignContract = await resolveClaudeDesignContract(targetInfo);
-  }
+  pendingDesignContract = await pendingDesignContractBeforeInvalidation(command, targetInfo, { force: flags.force });
 
   let researchReuseCandidate = null;
   if (flags.force) {
@@ -88,9 +84,7 @@ async function main() {
     if (shouldCleanGeneratedOutputsOnForce(command)) {
       await cleanGeneratedOutputs(targetInfo);
     }
-    if (pendingDesignContract) {
-      resolvedDesignContract = await saveResolvedDesignContract(pendingDesignContract.contract, targetInfo);
-    }
+    resolvedDesignContract = await resolvedDesignContractForRun(command, targetInfo, { pendingDesignContract });
   } else if (isSuccessfulCommandState(targetInfo, command)) {
     throw new SlideWorkflowError(
       `Command '${command}' already reached successful state. Use --force to invalidate and rerun.`,
@@ -99,9 +93,7 @@ async function main() {
   } else {
     const supervisionResult = await commandSupervisionResult(targetInfo, command);
     if (supervisionResult === "rejected") {
-      if (command === "plan" || command === "compose") {
-        pendingDesignContract = await resolveClaudeDesignContract(targetInfo);
-      }
+      pendingDesignContract = await pendingDesignContractBeforeInvalidation(command, targetInfo, { rejectedRerun: true });
       await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
     }
   }
@@ -129,14 +121,13 @@ async function main() {
     preparedResearchReuseCandidate = researchReuseCandidate
       ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
       : null;
-    if ((command === "plan" || command === "compose") && !resolvedDesignContract) {
-      resolvedDesignContract = pendingDesignContract
-        ? await saveResolvedDesignContract(pendingDesignContract.contract, targetInfo)
-        : await resolveAndSaveClaudeDesignContract(targetInfo);
-    }
+    resolvedDesignContract = await resolvedDesignContractForRun(command, targetInfo, {
+      pendingDesignContract,
+      resolvedDesignContract,
+    });
     await writeCurrentWorkflowTarget(command, targetInfo, {
       researchReuseCandidate: preparedResearchReuseCandidate,
-      designContract: resolvedDesignContract?.markerPayload ?? (await existingDesignContractMarker(targetInfo)),
+      designContract: await designContractMarkerForRun(command, targetInfo, resolvedDesignContract),
     });
     runSnapshotBefore = await snapshotTaktRuns(command);
     runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
@@ -267,39 +258,6 @@ async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
     `${JSON.stringify(marker, null, 2)}\n`,
     "utf8",
   );
-}
-
-async function existingDesignContractMarker(targetInfo) {
-  const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
-  if (existsSync(markerPath)) {
-    try {
-      const marker = JSON.parse(await readFile(markerPath, "utf8"));
-      if (marker.target === targetInfo.target && marker.design_contract && designContractMarkerPathExists(marker.design_contract)) {
-        const existingMarker = await loadDesignContractMarkerPayloadFromPath(designContractMarkerAbsolutePath(marker.design_contract));
-        if (existingMarker) {
-          return existingMarker;
-        }
-      }
-    } catch (error) {
-      if (!(error instanceof SyntaxError) && error.code !== "ENOENT") {
-        throw error;
-      }
-    }
-  }
-  return loadResolvedDesignContractMarker(targetInfo);
-}
-
-function designContractMarkerPathExists(designContract) {
-  if (typeof designContract.path !== "string" || !designContract.path) {
-    return false;
-  }
-  return existsSync(designContractMarkerAbsolutePath(designContract));
-}
-
-function designContractMarkerAbsolutePath(designContract) {
-  return path.isAbsolute(designContract.path)
-    ? designContract.path
-    : path.join(process.cwd(), designContract.path);
 }
 
 function projectRelativeMarkerPath(filePath) {

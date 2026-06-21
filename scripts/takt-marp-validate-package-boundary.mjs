@@ -40,10 +40,13 @@ export const FORBIDDEN_PACK_FILES = ["scripts/lib/takt-marp-project-init.mjs"];
 export const REQUIRED_PACK_FILES = [
   "bin/takt-marp.mjs",
   "marp.config.mjs",
+  "scripts/takt-marp-validate-design-contract-foundation.mjs",
   "scripts/takt-marp-run-slide-workflow.mjs",
   "scripts/takt-marp-validate-slide-workflow-smoke.mjs",
+  "scripts/lib/takt-marp-claude-design-fixtures.mjs",
   "scripts/lib/takt-marp-claude-design-source.mjs",
   "scripts/lib/takt-marp-cli.mjs",
+  "scripts/lib/takt-marp-design-contract-run-context.mjs",
   "scripts/lib/takt-marp-errors.mjs",
   "scripts/lib/takt-marp-project-eject.mjs",
   "scripts/lib/takt-marp-project-templates.mjs",

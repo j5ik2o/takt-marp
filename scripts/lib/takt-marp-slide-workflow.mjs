@@ -17,6 +17,7 @@ const COMMAND_CONFIG_ENTRIES = Object.freeze([
     cleanGeneratedOutputsOnForce: false,
     invalidationTargets: ["research"],
     sourceArtifacts: [],
+    designContractPolicy: "preserve",
   }),
   commandConfig({
     name: "plan",
@@ -25,6 +26,7 @@ const COMMAND_CONFIG_ENTRIES = Object.freeze([
     approvalSupported: true,
     invalidationTargets: ["plan", "compose", "polish", "deliver"],
     sourceArtifacts: ["brief.md"],
+    designContractPolicy: "resolve",
   }),
   commandConfig({
     name: "compose",
@@ -34,6 +36,7 @@ const COMMAND_CONFIG_ENTRIES = Object.freeze([
     invalidationTargets: ["compose", "polish", "deliver"],
     sourceArtifacts: [],
     requiredState: "plan:planned:approved",
+    designContractPolicy: "resolve",
   }),
   commandConfig({
     name: "polish",
@@ -43,6 +46,7 @@ const COMMAND_CONFIG_ENTRIES = Object.freeze([
     invalidationTargets: ["polish", "deliver"],
     sourceArtifacts: [],
     requiredState: "compose:composed:approved",
+    designContractPolicy: "preserve",
   }),
   commandConfig({
     name: "deliver",
@@ -52,6 +56,7 @@ const COMMAND_CONFIG_ENTRIES = Object.freeze([
     invalidationTargets: ["deliver"],
     sourceArtifacts: [],
     requiredState: "polish:polished",
+    designContractPolicy: "preserve",
   }),
 ]);
 
@@ -79,6 +84,7 @@ function commandConfig(config) {
     cleanGeneratedOutputsOnForce: config.cleanGeneratedOutputsOnForce ?? true,
     invalidationTargets: Object.freeze([...config.invalidationTargets]),
     sourceArtifacts: Object.freeze([...config.sourceArtifacts]),
+    designContractPolicy: config.designContractPolicy ?? "none",
   });
 }
 
@@ -706,6 +712,18 @@ export function downstreamCommands(command) {
 
 export function shouldCleanGeneratedOutputsOnForce(command) {
   return configFor(command).cleanGeneratedOutputsOnForce;
+}
+
+export function designContractPolicyFor(command) {
+  return configFor(command).designContractPolicy;
+}
+
+export function shouldResolveDesignContract(command) {
+  return designContractPolicyFor(command) === "resolve";
+}
+
+export function shouldPreserveDesignContract(command) {
+  return designContractPolicyFor(command) === "preserve";
 }
 
 export function timestampForFile() {
