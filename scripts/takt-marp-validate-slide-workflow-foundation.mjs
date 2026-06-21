@@ -1377,6 +1377,11 @@ async function main() {
     await rm(sourceReportPath, { force: true });
     assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing source report sidecar must not become a reuse candidate");
     assert(!existsSync(sidecarPath), "missing source report sidecar was not deleted as stale");
+
+    await mkdir(sourceReportPath, { recursive: true });
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-non-file-source", sourceReportsDir, sourceReportPath }, { root });
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "non-file source report sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "non-file source report sidecar was not deleted as stale");
   });
 
   await check("research workflow wrapper delegates deep research without copying built-in research facets", async () => {
@@ -2082,6 +2087,41 @@ async function main() {
     assert(!result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `reuse mode still failed built-in preflight: ${result.stderr}`);
   });
 
+  await check("bundled research reuse mode skips callable deep research staging", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-bundled-no-builtin-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nBundled reuse without built-in deep research\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const fakePackage = await makeFakePackageRoot();
+    const fakeTemplateRoot = path.join(fakePackage.packageRoot, "templates", "project");
+    await cp(path.join(ROOT_DIR, "templates", "project"), fakeTemplateRoot, { recursive: true });
+    const source = resolveTemplateSource({ projectRoot: root, templateRoot: fakeTemplateRoot });
+    const selectedWorkflowPath = workflowFilePath(source, "research");
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-bundled-reuse-no-builtin", "passed", targetInfo.target, { sourceReports: [] }),
+    );
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `bundled reuse mode should not stage TAKT built-in deep research: ${result.stderr}`);
+    assert(existsSync(argsPath), "bundled reuse mode did not invoke TAKT");
+    assert(!result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `bundled reuse mode still failed built-in staging: ${result.stderr}`);
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(
+      args[workflowArgIndex + 1].endsWith("workflows/takt-marp-slide-research-reuse.yaml"),
+      `bundled reuse mode did not select the staged sibling reuse workflow: ${args.join(" ")}`,
+    );
+  });
+
   await check("research successful rerun without force is blocked before TAKT", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-rerun-blocked-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -2479,7 +2519,7 @@ async function main() {
     );
   });
 
-  await check("research reuse source report copy failure stops before TAKT and preserves deck report", async () => {
+  await check("research reuse non-file source report invalidates sidecar and falls back to full research", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-source-copy-fail-"));
     const targetInfo = await makeDeck(root, "demo");
     const researchArtifacts = researchArtifactPaths(targetInfo);
@@ -2500,11 +2540,14 @@ async function main() {
       [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
       { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
     );
-    assert(result.status !== 0, "reuse source report copy failure unexpectedly succeeded");
-    assert(!existsSync(argsPath), "TAKT was invoked despite reuse source report copy failure");
+    assert(result.status === 0, `non-file reuse source report should fall back to full research: ${result.stderr}`);
+    assert(existsSync(argsPath), "TAKT was not invoked for full research fallback");
+    assert(!(await resolveResearchReuseCandidate(targetInfo, { root })), "non-file reuse source report sidecar was not invalidated");
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse !== true, `non-file reuse source report unexpectedly entered reuse mode: ${JSON.stringify(marker)}`);
     assert(
-      await readFile(researchArtifacts.report, "utf8") === "# Existing Deck Research Report\n",
-      "failed reuse source report copy corrupted existing deck-local research-report.md",
+      await readFile(researchArtifacts.report, "utf8") !== "# Existing Deck Research Report\n",
+      "full research fallback did not replace stale deck-local research-report.md",
     );
   });
 

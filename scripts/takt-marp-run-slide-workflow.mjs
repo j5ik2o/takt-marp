@@ -92,7 +92,9 @@ async function main() {
   }
 
   const preparedWorkflow = selectedWorkflowFilePath
-    ? await prepareBundledWorkflowRuntime(availableWorkflowPath)
+    ? await prepareBundledWorkflowRuntime(availableWorkflowPath, {
+        stageBundledDeepResearch: !(command === "research" && researchReuseCandidate),
+      })
     : undefined;
   let code;
   let runSnapshotBefore;

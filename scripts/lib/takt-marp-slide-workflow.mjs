@@ -1,5 +1,5 @@
 import { accessSync, constants, existsSync, readFileSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -393,7 +393,7 @@ export async function resolveResearchReuseCandidate(targetInfo, options = {}) {
     sidecar.research_brief_path === researchTaktTarget(targetInfo) &&
     sidecar.research_brief_sha256 === currentDigest &&
     sidecar.source_report_origin === "builtin_deep_research" &&
-    existsSync(sourceReportPath);
+    await isRegularFile(sourceReportPath);
 
   if (!valid) {
     await deleteResearchReuseSidecar(targetInfo, { root });
@@ -405,6 +405,17 @@ export async function resolveResearchReuseCandidate(targetInfo, options = {}) {
     source_reports_dir: sourceReportsDir,
     source_report_path: sourceReportPath,
   });
+}
+
+async function isRegularFile(filePath) {
+  try {
+    return (await stat(filePath)).isFile();
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      return false;
+    }
+    throw error;
+  }
 }
 
 function projectRelativePath(filePath, root) {
