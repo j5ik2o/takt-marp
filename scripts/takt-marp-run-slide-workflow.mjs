@@ -32,6 +32,8 @@ import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./
 import {
   loadResolvedDesignContractMarker,
   resolveAndSaveClaudeDesignContract,
+  resolveClaudeDesignContract,
+  saveResolvedDesignContract,
 } from "./lib/takt-marp-claude-design-source.mjs";
 
 function usage() {
@@ -71,8 +73,9 @@ async function main() {
   }
 
   let resolvedDesignContract = null;
+  let pendingDesignContract = null;
   if ((command === "plan" || command === "compose") && flags.force) {
-    resolvedDesignContract = await resolveAndSaveClaudeDesignContract(targetInfo);
+    pendingDesignContract = await resolveClaudeDesignContract(targetInfo);
   }
 
   let researchReuseCandidate = null;
@@ -83,6 +86,9 @@ async function main() {
     await archiveCommandArtifacts(targetInfo, downstreamCommands(command), "force", { includeApprovals: true });
     if (shouldCleanGeneratedOutputsOnForce(command)) {
       await cleanGeneratedOutputs(targetInfo);
+    }
+    if (pendingDesignContract) {
+      resolvedDesignContract = await saveResolvedDesignContract(pendingDesignContract.contract, targetInfo);
     }
   } else if (isSuccessfulCommandState(targetInfo, command)) {
     throw new SlideWorkflowError(
@@ -117,7 +123,9 @@ async function main() {
       ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
       : null;
     if ((command === "plan" || command === "compose") && !resolvedDesignContract) {
-      resolvedDesignContract = await resolveAndSaveClaudeDesignContract(targetInfo);
+      resolvedDesignContract = pendingDesignContract
+        ? await saveResolvedDesignContract(pendingDesignContract.contract, targetInfo)
+        : await resolveAndSaveClaudeDesignContract(targetInfo);
     }
     await writeCurrentWorkflowTarget(command, targetInfo, {
       researchReuseCandidate: preparedResearchReuseCandidate,
@@ -257,9 +265,15 @@ async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
 async function existingDesignContractMarker(targetInfo) {
   const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
   if (existsSync(markerPath)) {
-    const marker = JSON.parse(await readFile(markerPath, "utf8"));
-    if (marker.target === targetInfo.target && marker.design_contract && designContractMarkerPathExists(marker.design_contract)) {
-      return marker.design_contract;
+    try {
+      const marker = JSON.parse(await readFile(markerPath, "utf8"));
+      if (marker.target === targetInfo.target && marker.design_contract && designContractMarkerPathExists(marker.design_contract)) {
+        return marker.design_contract;
+      }
+    } catch (error) {
+      if (!(error instanceof SyntaxError) && error.code !== "ENOENT") {
+        throw error;
+      }
     }
   }
   return loadResolvedDesignContractMarker(targetInfo);

@@ -98,13 +98,21 @@ export async function writeClaudeDesignSmokeFixture(targetInfo, options = {}) {
 }
 
 export async function resolveAndSaveClaudeDesignContract(targetInfo, options = {}) {
+  const resolved = await resolveClaudeDesignContract(targetInfo, options);
+  return saveResolvedDesignContract(resolved.contract, targetInfo, options);
+}
+
+export async function resolveClaudeDesignContract(targetInfo, options = {}) {
   const source = await resolveClaudeDesignSource(targetInfo, options);
   const contract = await importClaudeDesignSourceArchive(source.archive, {
     root: options.root ?? process.cwd(),
     sourcePath: source.sourcePath,
     deckName: targetInfo.deckName,
   });
-  return saveResolvedDesignContract(contract, targetInfo, options);
+  return Object.freeze({
+    contract,
+    sourcePath: source.sourcePath,
+  });
 }
 
 export async function resolveClaudeDesignSource(targetInfo, options = {}) {
@@ -135,6 +143,22 @@ export async function resolveClaudeDesignSource(targetInfo, options = {}) {
     }
   }
 
+  if (invalid.length > 0) {
+    throw new SlideWorkflowError(
+      [
+        `Claude Design Source zip candidates include invalid archives for ${targetInfo.target}.`,
+        ...invalid.map((item) => `- ${item}`),
+        ...(valid.length > 0
+          ? [
+              "Valid candidates were also found, but invalid sibling zip files make the design input ambiguous:",
+              ...valid.map((item) => `- ${projectRelativePath(item.sourcePath, root)}`),
+            ]
+          : []),
+        "Keep exactly one valid Claude Design export zip containing _ds_manifest.json under slides/<deck>/design/.",
+      ].join("\n"),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+  }
   if (valid.length > 1) {
     throw new SlideWorkflowError(
       [
@@ -288,6 +312,12 @@ function parseManifest(source, sourcePath) {
     manifest = JSON.parse(source);
   } catch (error) {
     throw new SlideWorkflowError(`Claude Design manifest is malformed JSON in ${sourcePath}: ${error.message}`, "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new SlideWorkflowError(
+      `Claude Design manifest must be a JSON object in ${sourcePath}.`,
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
   }
   const missing = REQUIRED_MANIFEST_FIELDS.filter((field) => manifest[field] === undefined);
   if (missing.length > 0) {
