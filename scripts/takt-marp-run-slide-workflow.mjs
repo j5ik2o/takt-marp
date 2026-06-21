@@ -11,6 +11,7 @@ import {
   assertWorkflowAvailable,
   cleanGeneratedOutputs,
   commandSupervisionResult,
+  deleteResearchReuseSidecar,
   downstreamCommands,
   formatError,
   isSuccessfulCommandState,
@@ -19,12 +20,15 @@ import {
   researchArtifactPaths,
   researchTaktTarget,
   requireCommand,
+  resolveResearchReuseCandidate,
   resolveDeckTarget,
   shouldCleanGeneratedOutputsOnForce,
   SlideWorkflowError,
   taktExecutablePath,
+  validateSupervision,
+  writeResearchReuseSidecar,
 } from "./lib/takt-marp-slide-workflow.mjs";
-import { prepareBundledWorkflowRuntime } from "./lib/takt-marp-project-templates.mjs";
+import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
 
 function usage() {
   return [
@@ -53,13 +57,20 @@ async function main() {
 
   await assertCommandPrerequisites(targetInfo, command);
   const availableWorkflowPath = assertWorkflowAvailable(command, { workflowFilePath: selectedWorkflowFilePath });
-  if (command === "research") {
-    assertBuiltinWorkflowAvailable("deep-research");
-  }
   // Keep executable availability in preflight so failed setup cannot invalidate current artifacts.
   assertTaktExecutableAvailable();
 
+  let fullResearchPreflightChecked = false;
+  if (command === "research" && flags.force) {
+    assertBuiltinWorkflowAvailable("deep-research");
+    fullResearchPreflightChecked = true;
+  }
+
+  let researchReuseCandidate = null;
   if (flags.force) {
+    if (command === "research") {
+      await deleteResearchReuseSidecar(targetInfo);
+    }
     await archiveCommandArtifacts(targetInfo, downstreamCommands(command), "force", { includeApprovals: true });
     if (shouldCleanGeneratedOutputsOnForce(command)) {
       await cleanGeneratedOutputs(targetInfo);
@@ -73,33 +84,133 @@ async function main() {
     await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
   }
 
+  if (command === "research" && !flags.force) {
+    researchReuseCandidate = await resolveResearchReuseCandidate(targetInfo);
+  }
+  if (command === "research" && !researchReuseCandidate && !fullResearchPreflightChecked) {
+    assertBuiltinWorkflowAvailable("deep-research");
+  }
+
   const preparedWorkflow = selectedWorkflowFilePath
-    ? await prepareBundledWorkflowRuntime(availableWorkflowPath)
+    ? await prepareBundledWorkflowRuntime(availableWorkflowPath, {
+        stageBundledDeepResearch: !(command === "research" && researchReuseCandidate),
+      })
     : undefined;
-  await writeCurrentWorkflowTarget(command, targetInfo);
-  const runSnapshotBefore = await snapshotTaktRuns(command);
-  const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
   let code;
+  let runSnapshotBefore;
+  let runDirectorySnapshotBefore;
+  let preparedResearchReuseCandidate = null;
   try {
+    const selectedWorkflowForTakt = researchReuseCandidate
+      ? assertResearchReuseWorkflowAvailable(preparedWorkflow?.workflowFilePath ?? availableWorkflowPath)
+      : preparedWorkflow?.workflowFilePath;
+    preparedResearchReuseCandidate = researchReuseCandidate
+      ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
+      : null;
+    await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate: preparedResearchReuseCandidate });
+    runSnapshotBefore = await snapshotTaktRuns(command);
+    runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
+    const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
     code = await runTakt(command, taktTarget, {
       provider: flags.provider,
-      workflowFilePath: preparedWorkflow?.workflowFilePath,
+      workflowFilePath: selectedWorkflowForTakt,
     });
+  } catch (error) {
+    await preparedResearchReuseCandidate?.restoreSourceReport();
+    throw error;
   } finally {
     await preparedWorkflow?.cleanup();
   }
   if (code !== 0) {
+    await preparedResearchReuseCandidate?.restoreSourceReport();
+    if (command === "research" && !researchReuseCandidate) {
+      try {
+        await writeResearchReuseSidecarFromFailedRun(targetInfo, runDirectorySnapshotBefore);
+      } catch (error) {
+        console.error(formatError(error));
+        process.exitCode = code;
+        return;
+      }
+    }
     process.exitCode = code;
     return;
   }
   if (command === "research") {
-    await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore);
+    try {
+      await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, { researchReuseCandidate: preparedResearchReuseCandidate });
+      if (!isSuccessfulCommandState(targetInfo, "research")) {
+        throw new SlideWorkflowError(
+          `TAKT completed but research supervision did not reach successful state '${targetInfo.target} -> researched'.`,
+          "TAKT_RESEARCH_SUPERVISION_NOT_PASSED",
+        );
+      }
+      await preparedResearchReuseCandidate?.commitSourceReport();
+      await deleteResearchReuseSidecar(targetInfo);
+    } catch (error) {
+      await preparedResearchReuseCandidate?.restoreSourceReport();
+      if (!researchReuseCandidate && error.code !== "TAKT_RESEARCH_SOURCE_REPORT_AMBIGUOUS") {
+        await writeResearchReuseSidecarFromFailedRun(targetInfo, runDirectorySnapshotBefore);
+      }
+      throw error;
+    }
   } else {
     await syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore);
   }
 }
 
-async function writeCurrentWorkflowTarget(command, targetInfo) {
+async function prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate) {
+  const researchArtifacts = researchArtifactPaths(targetInfo);
+  const backupPath = path.join(
+    path.dirname(researchArtifacts.report),
+    `.${path.basename(researchArtifacts.report)}.${process.pid}-${Date.now()}.reuse.bak`,
+  );
+  const hadExistingReport = existsSync(researchArtifacts.report);
+  if (hadExistingReport) {
+    await mkdir(path.dirname(backupPath), { recursive: true });
+    await copyFile(researchArtifacts.report, backupPath);
+  }
+  try {
+    await replaceFileAtomically(researchReuseCandidate.source_report_path, researchArtifacts.report);
+  } catch (error) {
+    await removeIfExists(backupPath);
+    throw error;
+  }
+  let finalized = false;
+  return Object.freeze({
+    ...researchReuseCandidate,
+    original_source_report_path: researchReuseCandidate.source_report_path,
+    source_report_path: researchArtifacts.report,
+    restoreSourceReport: async () => {
+      if (finalized) {
+        return;
+      }
+      if (hadExistingReport) {
+        await replaceFileAtomically(backupPath, researchArtifacts.report);
+        await removeIfExists(backupPath);
+      } else {
+        await removeIfExists(researchArtifacts.report);
+      }
+      finalized = true;
+    },
+    commitSourceReport: async () => {
+      if (finalized) {
+        return;
+      }
+      await removeIfExists(backupPath);
+      finalized = true;
+    },
+  });
+}
+
+async function removeIfExists(filePath) {
+  await unlink(filePath).catch((error) => {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+  });
+}
+
+async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
   const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
   await mkdir(path.dirname(markerPath), { recursive: true });
   const marker = {
@@ -112,11 +223,37 @@ async function writeCurrentWorkflowTarget(command, targetInfo) {
     marker.research_brief_path = researchTaktTarget(targetInfo);
     marker.research_output_dir = path.posix.join(targetInfo.target, "research");
   }
+  if (command === "research" && options.researchReuseCandidate) {
+    marker.research_reuse = true;
+    marker.research_source_report_path = projectRelativeMarkerPath(options.researchReuseCandidate.source_report_path);
+    marker.research_source_report_origin = "builtin_deep_research";
+    marker.research_source_run = options.researchReuseCandidate.source_run;
+  }
   await writeFile(
     markerPath,
     `${JSON.stringify(marker, null, 2)}\n`,
     "utf8",
   );
+}
+
+function projectRelativeMarkerPath(filePath) {
+  const relativePath = path.relative(process.cwd(), filePath);
+  if (relativePath && !relativePath.startsWith("..") && !path.isAbsolute(relativePath)) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return filePath;
+}
+
+function assertResearchReuseWorkflowAvailable(researchWorkflowFilePath) {
+  const reuseWorkflowFilePath = researchReuseWorkflowFilePath(researchWorkflowFilePath);
+  if (!existsSync(reuseWorkflowFilePath)) {
+    throw new SlideWorkflowError(
+      `Research Reuse Workflow YAML is not implemented: ${path.relative(process.cwd(), reuseWorkflowFilePath)}. ` +
+        "Implement takt-marp-slide-research-reuse.yaml before reusing a failed research source report.",
+      "WORKFLOW_NOT_IMPLEMENTED",
+    );
+  }
+  return reuseWorkflowFilePath;
 }
 
 async function runTakt(command, target, options = {}) {
@@ -164,19 +301,34 @@ async function syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore) {
   await replaceDeckReports(targetInfo.reviewPath, reportNameSet, reportCopies);
 }
 
-async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore) {
-  const reportsDir = await createdTaktReportsDir("research", targetInfo, runSnapshotBefore);
+async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, options = {}) {
+  const reportsDir = await createdTaktReportsDir("research", targetInfo, runSnapshotBefore, { requirePassed: false });
   if (!reportsDir) {
     throw new SlideWorkflowError(
       `TAKT completed but no matching research report directory was found for ${targetInfo.target}.`,
       "TAKT_RESEARCH_REPORT_SYNC_MISSING",
     );
   }
+  await assertResearchSupervisionPassed(reportsDir, targetInfo);
 
   const researchArtifacts = researchArtifactPaths(targetInfo);
-  const sourceReportPath = await findSingleResearchSourceReportPath(reportsDir);
+  const sourceReportCopies = [];
+  if (options.researchReuseCandidate) {
+    if (!existsSync(researchArtifacts.report)) {
+      throw new SlideWorkflowError(
+        `TAKT completed but the deck-local reuse source report was not found: ${path.relative(process.cwd(), researchArtifacts.report)}`,
+        "TAKT_RESEARCH_REUSE_SOURCE_REPORT_MISSING",
+      );
+    }
+    await assertResearchReuseSourceReportUnchanged(options.researchReuseCandidate, researchArtifacts.report);
+  } else {
+    sourceReportCopies.push(Object.freeze({
+      sourcePath: await findSingleResearchSourceReportPath(reportsDir),
+      finalPath: researchArtifacts.report,
+    }));
+  }
   const artifactCopies = [
-    Object.freeze({ sourcePath: sourceReportPath, finalPath: researchArtifacts.report }),
+    ...sourceReportCopies,
     ...researchAdapterArtifactCopies(reportsDir, researchArtifacts),
   ];
   for (const { sourcePath, finalPath } of artifactCopies) {
@@ -184,7 +336,143 @@ async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore) {
   }
 }
 
-async function findSingleResearchSourceReportPath(reportsDir) {
+async function assertResearchReuseSourceReportUnchanged(researchReuseCandidate, deckReportPath) {
+  const sourceReportPath = researchReuseCandidate.original_source_report_path;
+  if (!sourceReportPath) {
+    throw new SlideWorkflowError(
+      "TAKT completed but reuse source report origin was not recorded before workflow execution.",
+      "TAKT_RESEARCH_REUSE_SOURCE_REPORT_MISSING",
+    );
+  }
+  const [sourceReport, deckReport] = await Promise.all([
+    readFile(sourceReportPath),
+    readFile(deckReportPath),
+  ]);
+  if (!sourceReport.equals(deckReport)) {
+    throw new SlideWorkflowError(
+      `TAKT completed but deck-local reuse source report changed during reuse workflow execution: ${path.relative(process.cwd(), deckReportPath)}`,
+      "TAKT_RESEARCH_REUSE_SOURCE_REPORT_CHANGED",
+    );
+  }
+}
+
+async function assertResearchSupervisionPassed(reportsDir, targetInfo) {
+  const supervisionReportPath = path.join(reportsDir, "research-supervision.md");
+  if (!existsSync(supervisionReportPath)) {
+    throw new SlideWorkflowError(
+      `TAKT completed but research supervision report was not found in selected reports directory: ${path.relative(process.cwd(), supervisionReportPath)}`,
+      "TAKT_RESEARCH_ARTIFACT_SYNC_MISSING",
+    );
+  }
+  const { frontMatter } = parseFrontMatter(await readFile(supervisionReportPath, "utf8"));
+  try {
+    validateSupervision(frontMatter, targetInfo, "research");
+  } catch (error) {
+    if (error.code !== "STATE_MISMATCH") {
+      throw error;
+    }
+  }
+  if (frontMatter.result !== "passed" || frontMatter.state !== "researched") {
+    throw new SlideWorkflowError(
+      `TAKT completed but research supervision did not reach successful state '${targetInfo.target} -> researched'.`,
+      "TAKT_RESEARCH_SUPERVISION_NOT_PASSED",
+    );
+  }
+}
+
+async function writeResearchReuseSidecarFromFailedRun(targetInfo, runSnapshotBefore) {
+  const candidates = await failedResearchReuseCandidates(targetInfo, runSnapshotBefore);
+  if (candidates.length === 0) {
+    return null;
+  }
+  if (candidates.length > 1) {
+    const relativeCandidates = candidates.map((candidate) => path.relative(process.cwd(), candidate.sourceReportPath)).sort();
+    throw new SlideWorkflowError(
+      `TAKT research failed but multiple reusable built-in research-report.md candidates were found in this execution: ${relativeCandidates.join(", ")}`,
+      "TAKT_RESEARCH_REUSE_AMBIGUOUS",
+    );
+  }
+  const [candidate] = candidates;
+  return writeResearchReuseSidecar(targetInfo, {
+    sourceRun: candidate.runName,
+    sourceReportsDir: candidate.reportsDir,
+    sourceReportPath: candidate.sourceReportPath,
+  });
+}
+
+async function failedResearchReuseCandidates(targetInfo, runSnapshotBefore) {
+  const candidates = [];
+  const changedRuns = await changedTaktRunsSinceSnapshot(runSnapshotBefore ?? new Map());
+  for (const { runName, runDir } of changedRuns) {
+    const meta = await readTaktRunMeta(runDir);
+    if (!matchesResearchReuseRunMeta(meta, targetInfo)) {
+      continue;
+    }
+    const reportsDir = reportDirectoryFromMeta(meta, runDir);
+    let sourceReportPath;
+    try {
+      sourceReportPath = await findSingleResearchSourceReportPath(reportsDir, { allowDirectFallback: false });
+    } catch (error) {
+      if (error.code === "TAKT_RESEARCH_SOURCE_REPORT_MISSING") {
+        continue;
+      }
+      if (error.code === "TAKT_RESEARCH_SOURCE_REPORT_AMBIGUOUS") {
+        throw new SlideWorkflowError(error.message, "TAKT_RESEARCH_REUSE_AMBIGUOUS");
+      }
+      throw error;
+    }
+    candidates.push(Object.freeze({ runName, reportsDir, sourceReportPath }));
+  }
+  return Object.freeze(candidates);
+}
+
+function matchesResearchReuseRunMeta(meta, targetInfo) {
+  if (!meta) {
+    return false;
+  }
+  return (
+    normalizeWorkflowIdentity(meta.workflow) === "takt-marp-slide-research" &&
+    meta.task === researchTaktTarget(targetInfo)
+  );
+}
+
+function normalizeWorkflowIdentity(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return "";
+  }
+  const normalized = value.trim().replaceAll("\\", "/");
+  const baseName = normalized.includes("/") ? path.posix.basename(normalized) : normalized;
+  return baseName.replace(/\.ya?ml$/i, "");
+}
+
+async function readTaktRunMeta(runDir) {
+  const metaPath = path.join(runDir, "meta.json");
+  if (!existsSync(metaPath)) {
+    return null;
+  }
+  try {
+    return JSON.parse(await readFile(metaPath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function reportDirectoryFromMeta(meta, runDir) {
+  const reportDirectory = meta?.reportDirectory ?? meta?.report_directory;
+  if (typeof reportDirectory !== "string" || !reportDirectory.trim()) {
+    return path.join(runDir, "reports");
+  }
+  if (path.isAbsolute(reportDirectory)) {
+    return reportDirectory;
+  }
+  const projectRelative = path.resolve(process.cwd(), reportDirectory);
+  if (existsSync(projectRelative)) {
+    return projectRelative;
+  }
+  return path.resolve(runDir, reportDirectory);
+}
+
+async function findSingleResearchSourceReportPath(reportsDir, options = {}) {
   const found = [];
   await collectReportPaths(reportsDir, "research-report.md", found);
   const preferred = found.filter((reportPath) => isDeepResearchWorkflowReport(reportsDir, reportPath));
@@ -199,9 +487,11 @@ async function findSingleResearchSourceReportPath(reportsDir) {
     return preferred[0];
   }
 
-  const directReportPath = path.join(reportsDir, "research-report.md");
-  if (existsSync(directReportPath)) {
-    return directReportPath;
+  if (options.allowDirectFallback !== false) {
+    const directReportPath = path.join(reportsDir, "research-report.md");
+    if (existsSync(directReportPath)) {
+      return directReportPath;
+    }
   }
 
   throw new SlideWorkflowError(
@@ -393,7 +683,15 @@ async function matchingAiGateReport(reportPath, expected) {
 }
 
 async function collectReportPaths(directory, reportFileName, found) {
-  const entries = await readdir(directory, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") {
+      return;
+    }
+    throw error;
+  }
   for (const entry of entries) {
     const entryPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
@@ -467,16 +765,17 @@ async function cleanStaleDeckReports(reviewPath, reportNameSet, syncedReportName
   }
 }
 
-async function createdTaktReportsDir(command, targetInfo, runSnapshotBefore) {
+async function createdTaktReportsDir(command, targetInfo, runSnapshotBefore, options = {}) {
   const runsRoot = path.join(process.cwd(), ".takt", "runs");
   const runNames = (await listTaktRunNames()).sort().reverse();
   const candidates = [];
+  const requirePassed = options.requirePassed ?? true;
 
   for (const runName of runNames) {
     const reportsDir = path.join(runsRoot, runName, "reports");
     const reportPath = path.join(reportsDir, `${command}-supervision.md`);
     const reportMtime = await reportMtimeIfChangedSinceSnapshot(reportPath, runName, runSnapshotBefore);
-    if (reportMtime !== null && (await reportMatchesSuccessfulTarget(reportPath, command, targetInfo.target))) {
+    if (reportMtime !== null && (await reportMatchesTarget(reportPath, command, targetInfo.target, { requirePassed }))) {
       candidates.push({ reportsDir, reportMtime });
     }
   }
@@ -503,6 +802,45 @@ async function snapshotTaktRuns(command) {
   return snapshot;
 }
 
+async function snapshotTaktRunDirectories() {
+  const runsRoot = path.join(process.cwd(), ".takt", "runs");
+  const snapshot = new Map();
+  for (const runName of await listTaktRunNames()) {
+    const runDir = path.join(runsRoot, runName);
+    snapshot.set(runName, await maxMtimeMs(runDir));
+  }
+  return snapshot;
+}
+
+async function changedTaktRunsSinceSnapshot(runSnapshotBefore) {
+  const runsRoot = path.join(process.cwd(), ".takt", "runs");
+  const changed = [];
+  for (const runName of await listTaktRunNames()) {
+    const runDir = path.join(runsRoot, runName);
+    const currentMtimeMs = await maxMtimeMs(runDir);
+    const previousMtimeMs = runSnapshotBefore.get(runName);
+    if (previousMtimeMs === undefined || currentMtimeMs > previousMtimeMs) {
+      changed.push(Object.freeze({ runName, runDir, currentMtimeMs }));
+    }
+  }
+  return Object.freeze(changed);
+}
+
+async function maxMtimeMs(rootPath) {
+  const rootStat = await stat(rootPath);
+  let max = rootStat.mtimeMs;
+  const entries = await readdir(rootPath, { withFileTypes: true });
+  for (const entry of entries) {
+    const entryPath = path.join(rootPath, entry.name);
+    const entryStat = await stat(entryPath);
+    max = Math.max(max, entryStat.mtimeMs);
+    if (entry.isDirectory()) {
+      max = Math.max(max, await maxMtimeMs(entryPath));
+    }
+  }
+  return max;
+}
+
 async function reportMtimeIfChangedSinceSnapshot(reportPath, runName, runSnapshotBefore) {
   if (!existsSync(reportPath)) {
     return null;
@@ -520,12 +858,13 @@ async function listTaktRunNames() {
   return (await readdir(runsRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 }
 
-async function reportMatchesSuccessfulTarget(reportPath, command, target) {
+async function reportMatchesTarget(reportPath, command, target, options = {}) {
   if (!existsSync(reportPath)) {
     return false;
   }
+  const requirePassed = options.requirePassed ?? true;
   const { frontMatter } = parseFrontMatter(await readFile(reportPath, "utf8"));
-  return frontMatter.command === command && frontMatter.target === target && frontMatter.result === "passed";
+  return frontMatter.command === command && frontMatter.target === target && (!requirePassed || frontMatter.result === "passed");
 }
 
 main().catch((error) => {

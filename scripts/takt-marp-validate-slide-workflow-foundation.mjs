@@ -16,6 +16,8 @@ import {
   diffTemplateTrees,
   formatTemplateDrift,
   listTemplateEntries,
+  prepareBundledWorkflowRuntime,
+  researchReuseWorkflowFilePath,
   resolveTemplateSource,
   workflowFilePath,
 } from "./lib/takt-marp-project-templates.mjs";
@@ -38,10 +40,14 @@ import {
   parseRequiredState,
   readSupervision,
   researchArtifactPaths,
+  researchBriefSha256,
+  researchReuseSidecarPath,
   requireCommand,
+  resolveResearchReuseCandidate,
   resolveDeckTarget,
   shouldCleanGeneratedOutputsOnForce,
   supervisionPath,
+  writeResearchReuseSidecar,
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
@@ -58,7 +64,9 @@ const BIN_ENTRY_SCRIPT = path.join(ROOT_DIR, "bin", "takt-marp.mjs");
 const RUNNER_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-run-slide-workflow.mjs");
 const VERIFY_DELIVERY_SCRIPT = path.join(SCRIPT_DIR, "takt-marp-verify-delivery-artifacts.mjs");
 const RESEARCH_WORKFLOW_RELATIVE_PATH = ".takt/workflows/takt-marp-slide-research.yaml";
+const RESEARCH_REUSE_WORKFLOW_RELATIVE_PATH = ".takt/workflows/takt-marp-slide-research-reuse.yaml";
 const RESEARCH_WRAPPER_STEP_NAMES = Object.freeze(["deep_research", "adapt_research", "supervise_research"]);
+const RESEARCH_REUSE_STEP_NAMES = Object.freeze(["adapt_research", "supervise_research"]);
 const RESEARCH_ADAPTER_INSTRUCTION = Object.freeze({
   name: "takt-marp-adapt-research",
   relativePath: ".takt/facets/instructions/takt-marp-adapt-research.md",
@@ -86,6 +94,10 @@ const RESEARCH_ADAPTER_OUTPUT_CONTRACTS = Object.freeze([
 const RESEARCH_SUPERVISION_INSTRUCTION = Object.freeze({
   name: "takt-marp-supervise-research",
   relativePath: ".takt/facets/instructions/takt-marp-supervise-research.md",
+});
+const RESEARCH_REUSE_SUPERVISION_INSTRUCTION = Object.freeze({
+  name: "takt-marp-supervise-research-reuse",
+  relativePath: ".takt/facets/instructions/takt-marp-supervise-research-reuse.md",
 });
 const RESEARCH_SUPERVISION_OUTPUT_CONTRACT = Object.freeze({
   artifactName: "research-supervision.md",
@@ -139,8 +151,10 @@ const BUILTIN_RESEARCH_FACET_RELATIVE_PATHS = Object.freeze([
 const BUILTIN_RESEARCH_OUTPUT_CONTRACT_FILES = Object.freeze(["research-report.md"]);
 const RESEARCH_TEMPLATE_RELATIVE_PATHS = Object.freeze([
   "workflows/takt-marp-slide-research.yaml",
+  "workflows/takt-marp-slide-research-reuse.yaml",
   "facets/instructions/takt-marp-adapt-research.md",
   "facets/instructions/takt-marp-supervise-research.md",
+  "facets/instructions/takt-marp-supervise-research-reuse.md",
   "facets/output-contracts/takt-marp-research-sources.md",
   "facets/output-contracts/takt-marp-research-claims.md",
   "facets/output-contracts/takt-marp-open-questions.md",
@@ -303,6 +317,10 @@ async function main() {
     assert(
       !result.created.includes(".takt/facets/output-contracts/research-report.md"),
       "eject must not distribute built-in deep-research research-report.md output contract",
+    );
+    assert(
+      !existsSync(path.join(targetDir, ".takt", "facets", "output-contracts", "research-report.md")),
+      "eject copied built-in deep-research research-report.md output contract",
     );
     await assertNoRuntimeOrProviderFiles(targetDir);
   });
@@ -614,18 +632,95 @@ async function main() {
     const bundledRoot = await mkdtemp(path.join(os.tmpdir(), "template-source-research-bundled-"));
     const bundledSource = resolveTemplateSource({ projectRoot: bundledRoot });
     const bundledResearchWorkflow = path.join(ROOT_DIR, "templates", "project", "workflows", "takt-marp-slide-research.yaml");
+    const bundledReuseWorkflow = path.join(ROOT_DIR, "templates", "project", "workflows", "takt-marp-slide-research-reuse.yaml");
     assert(bundledSource.kind === "bundled", `expected bundled source, got ${bundledSource.kind}`);
     assert(workflowFilePath(bundledSource, "research") === bundledResearchWorkflow, `bundled research workflow path mismatch: ${workflowFilePath(bundledSource, "research")}`);
+    assert(
+      researchReuseWorkflowFilePath(bundledResearchWorkflow) === bundledReuseWorkflow,
+      `bundled research reuse workflow sibling path mismatch: ${researchReuseWorkflowFilePath(bundledResearchWorkflow)}`,
+    );
     assert(existsSync(bundledResearchWorkflow), `bundled research workflow template missing: ${bundledResearchWorkflow}`);
 
     const ejectedRoot = await mkdtemp(path.join(os.tmpdir(), "template-source-research-ejected-"));
     await mkdir(path.join(ejectedRoot, ".takt", "workflows"), { recursive: true });
     await mkdir(path.join(ejectedRoot, ".takt", "facets"), { recursive: true });
     const ejectedResearchWorkflow = path.join(ejectedRoot, ".takt", "workflows", "takt-marp-slide-research.yaml");
+    const ejectedReuseWorkflow = path.join(ejectedRoot, ".takt", "workflows", "takt-marp-slide-research-reuse.yaml");
     await writeFile(ejectedResearchWorkflow, "name: ejected-research\n", "utf8");
     const ejectedSource = resolveTemplateSource({ projectRoot: ejectedRoot });
     assert(ejectedSource.kind === "ejected", `expected ejected source, got ${ejectedSource.kind}`);
     assert(workflowFilePath(ejectedSource, "research") === ejectedResearchWorkflow, `ejected research workflow path mismatch: ${workflowFilePath(ejectedSource, "research")}`);
+    assert(
+      researchReuseWorkflowFilePath(ejectedResearchWorkflow) === ejectedReuseWorkflow,
+      `ejected research reuse workflow sibling path mismatch: ${researchReuseWorkflowFilePath(ejectedResearchWorkflow)}`,
+    );
+  });
+
+  await check("bundled runtime stages research wrapper and reuse workflow from selected template source", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "bundled-runtime-selected-research-"));
+    const projectRoot = path.join(root, "project");
+    const templateRoot = path.join(root, "templates", "project");
+    const selectedResearchWorkflow = path.join(templateRoot, "workflows", "takt-marp-slide-research.yaml");
+    const selectedReuseWorkflow = researchReuseWorkflowFilePath(selectedResearchWorkflow);
+    await writeTemplateTree(templateRoot, new Map([
+      [
+        "workflows/takt-marp-slide-research.yaml",
+        [
+          "name: selected-wrapper-runtime-source",
+          "steps:",
+          "  - name: deep_research",
+          "    call: deep-research",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "workflows/takt-marp-slide-research-reuse.yaml",
+        [
+          "name: selected-reuse-runtime-source",
+          "steps:",
+          "  - name: adapt_research",
+          "",
+        ].join("\n"),
+      ],
+      ["facets/personas/takt-marp-slide-planner.md", "# Planner\n"],
+    ]));
+    assert(existsSync(selectedReuseWorkflow), `selected research reuse workflow fixture was not created: ${selectedReuseWorkflow}`);
+
+    const prepared = await prepareBundledWorkflowRuntime(selectedResearchWorkflow, { projectRoot, templateRoot });
+    try {
+      const runtimeReuseWorkflow = researchReuseWorkflowFilePath(prepared.workflowFilePath);
+      const [runtimeWrapperSource, runtimeReuseSource] = await Promise.all([
+        readFile(prepared.workflowFilePath, "utf8"),
+        readFile(runtimeReuseWorkflow, "utf8"),
+      ]);
+      assert(
+        prepared.workflowFilePath !== selectedResearchWorkflow,
+        "bundled runtime must stage a runtime copy instead of using the package template path directly",
+      );
+      assert(
+        runtimeWrapperSource.includes("selected-wrapper-runtime-source"),
+        `staged research wrapper did not come from selected template source: ${runtimeWrapperSource}`,
+      );
+      assert(
+        runtimeReuseSource.includes("selected-reuse-runtime-source"),
+        `staged research reuse workflow did not come from selected template source: ${runtimeReuseSource}`,
+      );
+      assert(
+        runtimeWrapperSource.includes("call: ./takt-marp-bundled-deep-research.yaml"),
+        `staged research wrapper did not rewrite the built-in deep-research call: ${runtimeWrapperSource}`,
+      );
+      assert(
+        existsSync(path.join(path.dirname(prepared.workflowFilePath), "takt-marp-bundled-deep-research.yaml")),
+        "bundled runtime did not stage the callable built-in deep-research workflow next to the wrapper",
+      );
+      assert(
+        path.dirname(runtimeReuseWorkflow) === path.dirname(prepared.workflowFilePath),
+        `staged research reuse workflow is not a sibling of the staged wrapper: ${runtimeReuseWorkflow}`,
+      );
+    } finally {
+      await prepared.cleanup();
+    }
+    assert(!existsSync(path.join(projectRoot, "workflows")), "bundled runtime cleanup left project workflows/ staging directory");
   });
 
   await check("template sync validator detects byte drift between package template and dev .takt trees", async () => {
@@ -771,14 +866,17 @@ async function main() {
       "stale init compatibility shim file must be removed from scripts/lib",
     );
 
+    const researchReuseTemplatePath = "workflows/takt-marp-slide-research-reuse.yaml";
     const templateEntries = [
       { relativePath: "workflows/takt-marp-slide-plan.yaml" },
+      { relativePath: researchReuseTemplatePath },
       { relativePath: "facets/instructions/takt-marp-compose-fix.md" },
     ];
     const validPackPaths = [
       ...REQUIRED_PACK_FILES,
       "fixtures/marp-slide-workflow/_workflow-smoke/brief.md",
       "templates/project/workflows/takt-marp-slide-plan.yaml",
+      `templates/project/${researchReuseTemplatePath}`,
       "templates/project/facets/instructions/takt-marp-compose-fix.md",
     ].sort();
 
@@ -804,6 +902,17 @@ async function main() {
         `missing required runtime ${missingPath} was not reported with path: ${formatViolations(violations)}`,
       );
     }
+
+    const missingResearchReuseTemplateViolations = collectPackContentViolations(
+      validPackPaths.filter((packedPath) => packedPath !== `templates/project/${researchReuseTemplatePath}`),
+      templateEntries,
+    );
+    assert(
+      missingResearchReuseTemplateViolations.some(
+        (violation) => violation.detail === `template entry missing from pack: templates/project/${researchReuseTemplatePath}`,
+      ),
+      `missing research reuse workflow template was not reported with path: ${formatViolations(missingResearchReuseTemplateViolations)}`,
+    );
 
     const prohibitedPath = "templates/project/workflows/config.yaml";
     const prohibitedViolations = collectPackContentViolations([...validPackPaths, prohibitedPath], templateEntries);
@@ -1215,6 +1324,66 @@ async function main() {
     assert((await readFile(path.join(targetInfo.deckPath, "brief.md"), "utf8")) === briefBefore, "brief.md was touched by research path resolution");
   });
 
+  await check("research reuse sidecar validates target digest and source report before reuse", async () => {
+    const root = await fixtureRoot();
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReusable topic\n", "utf8");
+    const sourceReportPath = path.join(
+      root,
+      ".takt",
+      "runs",
+      "run-failed",
+      "reports",
+      "subworkflows",
+      "iteration-1--step-deep_research--workflow-deep-research",
+      "reports",
+      "research-report.md",
+    );
+    await mkdir(path.dirname(sourceReportPath), { recursive: true });
+    await writeFile(sourceReportPath, "# Built-in Research Report\n\nReusable report\n", "utf8");
+    const sourceReportsDir = path.join(root, ".takt", "runs", "run-failed", "reports");
+    const sidecarPath = researchReuseSidecarPath(targetInfo, { root });
+
+    const sidecar = await writeResearchReuseSidecar(targetInfo, {
+      sourceRun: "run-failed",
+      sourceReportsDir,
+      sourceReportPath,
+    }, { root });
+    assert(existsSync(sidecarPath), `research reuse sidecar was not written: ${sidecarPath}`);
+    assert(sidecar.target === targetInfo.target, `sidecar target mismatch: ${JSON.stringify(sidecar)}`);
+    assert(sidecar.deck === targetInfo.deckName, `sidecar deck mismatch: ${JSON.stringify(sidecar)}`);
+    assert(sidecar.research_brief_sha256 === await researchBriefSha256(targetInfo), "sidecar did not persist current research brief digest");
+
+    const reusable = await resolveResearchReuseCandidate(targetInfo, { root });
+    assert(reusable, "valid sidecar was not returned as a reuse candidate");
+    assert(reusable.source_report_path === sourceReportPath, `reuse candidate source report path mismatch: ${JSON.stringify(reusable)}`);
+
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-target-mismatch", sourceReportsDir, sourceReportPath }, { root });
+    const targetMismatch = JSON.parse(await readFile(sidecarPath, "utf8"));
+    targetMismatch.target = "slides/other";
+    await writeFile(sidecarPath, `${JSON.stringify(targetMismatch, null, 2)}\n`, "utf8");
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "target mismatch sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "target mismatch sidecar was not deleted as stale");
+
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-digest-mismatch", sourceReportsDir, sourceReportPath }, { root });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nChanged topic\n", "utf8");
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "brief digest mismatch sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "brief digest mismatch sidecar was not deleted as stale");
+
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReusable topic\n", "utf8");
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-missing-source", sourceReportsDir, sourceReportPath }, { root });
+    await rm(sourceReportPath, { force: true });
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing source report sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "missing source report sidecar was not deleted as stale");
+
+    await mkdir(sourceReportPath, { recursive: true });
+    await writeResearchReuseSidecar(targetInfo, { sourceRun: "run-non-file-source", sourceReportsDir, sourceReportPath }, { root });
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "non-file source report sidecar must not become a reuse candidate");
+    assert(!existsSync(sidecarPath), "non-file source report sidecar was not deleted as stale");
+  });
+
   await check("research workflow wrapper delegates deep research without copying built-in research facets", async () => {
     const wrapperPath = path.join(ROOT_DIR, ...RESEARCH_WORKFLOW_RELATIVE_PATH.split("/"));
     assert(existsSync(wrapperPath), `research workflow wrapper missing: ${RESEARCH_WORKFLOW_RELATIVE_PATH}`);
@@ -1246,6 +1415,66 @@ async function main() {
       const workflowSource = await readFile(path.join(ROOT_DIR, ".takt", "workflows", `takt-marp-slide-${command}.yaml`), "utf8");
       assertWorkflowCallStep(workflowSource, `ai_quality_gate_${command}`, "./takt-marp-slide-ai-quality-gate.yaml");
     }
+  });
+
+  await check("research reuse workflow runs adapter and supervision without deep research call", async () => {
+    const reuseWorkflowPath = path.join(ROOT_DIR, ...RESEARCH_REUSE_WORKFLOW_RELATIVE_PATH.split("/"));
+    assert(existsSync(reuseWorkflowPath), `research reuse workflow missing: ${RESEARCH_REUSE_WORKFLOW_RELATIVE_PATH}`);
+    const reuseSource = await readFile(reuseWorkflowPath, "utf8");
+    const reuseSteps = extractWorkflowStepBlocks(reuseSource);
+    const reuseStepNames = reuseSteps.map((step) => step.name);
+    const reuseSuperviseStep = reuseSteps.find((step) => step.name === "supervise_research");
+    assert(
+      JSON.stringify(reuseStepNames) === JSON.stringify(RESEARCH_REUSE_STEP_NAMES),
+      `research reuse workflow must own only ${RESEARCH_REUSE_STEP_NAMES.join(", ")} steps, got: ${reuseStepNames.join(", ")}`,
+    );
+    assert(reuseSuperviseStep, "research reuse workflow must include supervise_research step");
+    assert(!reuseSource.includes("deep_research"), "research reuse workflow must not include a deep_research step");
+    assert(!reuseSource.includes("kind: workflow_call"), "research reuse workflow must not call subworkflows");
+    assert(!reuseSource.includes("call: deep-research"), "research reuse workflow must not call TAKT built-in deep-research");
+    assert(
+      reuseSource.includes(`${RESEARCH_ADAPTER_INSTRUCTION.name}: ../facets/instructions/takt-marp-adapt-research.md`),
+      `research reuse workflow must register adapter instruction ${RESEARCH_ADAPTER_INSTRUCTION.name}`,
+    );
+    assert(
+      reuseSource.includes(`${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}: ../facets/instructions/${path.basename(RESEARCH_REUSE_SUPERVISION_INSTRUCTION.relativePath)}`),
+      `research reuse workflow must register reuse supervision instruction ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}`,
+    );
+    assert(
+      reuseSuperviseStep.block.includes(`\n    instruction: ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}\n`),
+      `research reuse workflow must use reuse supervision instruction ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.name}`,
+    );
+    for (const contract of RESEARCH_ADAPTER_OUTPUT_CONTRACTS) {
+      assert(
+        reuseSource.includes(`${contract.format}: ../facets/output-contracts/${path.basename(contract.relativePath)}`),
+        `research reuse workflow must register output contract format ${contract.format}`,
+      );
+      assert(
+        reuseSource.includes(`name: ${contract.artifactName}`) && reuseSource.includes(`format: ${contract.format}`),
+        `research reuse workflow must output ${contract.artifactName} with ${contract.format}`,
+      );
+    }
+    assert(
+      reuseSource.includes(`${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}: ../facets/output-contracts/${path.basename(RESEARCH_SUPERVISION_OUTPUT_CONTRACT.relativePath)}`),
+      `research reuse workflow must register output contract format ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`,
+    );
+    assert(
+      reuseSource.includes(`name: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.artifactName}`) &&
+        reuseSource.includes(`format: ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`),
+      `research reuse workflow must output ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.artifactName} with ${RESEARCH_SUPERVISION_OUTPUT_CONTRACT.format}`,
+    );
+    assert(reuseSource.includes("state: researched"), "research reuse workflow must preserve the researched successful state contract");
+
+    const reuseInstructionPath = path.join(ROOT_DIR, ...RESEARCH_REUSE_SUPERVISION_INSTRUCTION.relativePath.split("/"));
+    assert(existsSync(reuseInstructionPath), `research reuse supervision instruction missing: ${RESEARCH_REUSE_SUPERVISION_INSTRUCTION.relativePath}`);
+    const reuseInstructionSource = await readFile(reuseInstructionPath, "utf8");
+    assert(reuseInstructionSource.includes("research_reuse: true"), "reuse supervision instruction must require reuse marker");
+    assert(reuseInstructionSource.includes("research_source_report_path"), "reuse supervision instruction must validate source report path marker");
+    assert(reuseInstructionSource.includes("research_source_report_origin: builtin_deep_research"), "reuse supervision instruction must preserve source report origin");
+    assert(
+      !reuseInstructionSource.includes("workflow_call step"),
+      "reuse supervision instruction must not require the full research workflow_call boundary",
+    );
   });
 
   await check("built-in research facet copy detection rejects generic research policy copies", async () => {
@@ -1299,6 +1528,12 @@ async function main() {
     const instructionSource = await readFile(instructionPath, "utf8");
     assert(instructionSource.includes("research-report.md"), "adapter instruction must name research-report.md");
     assert(instructionSource.includes("only input"), "adapter instruction must state research-report.md is the only input");
+    assert(instructionSource.includes("research_reuse"), "adapter instruction must branch on research reuse marker");
+    assert(instructionSource.includes("research_source_report_path"), "adapter instruction must read deck-local reuse source report path");
+    assert(
+      instructionSource.includes("source_report_origin: builtin_deep_research"),
+      "adapter instruction must preserve built-in source report origin in reuse mode",
+    );
     assert(instructionSource.includes("not_present_in_builtin_report"), "adapter instruction must preserve missing built-in report fields");
     for (const term of RESEARCH_ADAPTER_FORBIDDEN_BOUNDARY_TERMS) {
       assert(instructionSource.toLowerCase().includes(term), `adapter instruction must forbid ${term}`);
@@ -1797,6 +2032,96 @@ async function main() {
     assert(!existsSync(argsPath), "TAKT was invoked despite missing TAKT built-in deep research");
   });
 
+  await check("research force checks built-in deep research before invalidating artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-force-missing-builtin-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nForce missing built-in\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
+    await writeFile(researchArtifacts.claims, "# Existing Research Claims\n", "utf8");
+    await writeFile(researchArtifacts.openQuestions, "# Existing Open Questions\n", "utf8");
+    await writeSupervision(targetInfo, "research", "researched", "passed", "run-research-existing");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-should-not-start", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath, "--force"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "research force unexpectedly succeeded without TAKT built-in deep research");
+    assert(result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `force missing built-in did not report BUILTIN_WORKFLOW_NOT_AVAILABLE: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked before force built-in preflight completed");
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }), "force missing built-in deleted existing reuse sidecar");
+    assert(!existsSync(path.join(targetInfo.researchPath, "history")), "force missing built-in archived research artifacts before preflight");
+    assert((await readFile(researchArtifacts.report, "utf8")) === "# Existing Research Report\n", "force missing built-in changed research-report.md");
+    assert((await readFile(researchArtifacts.sources, "utf8")) === "# Existing Research Sources\n", "force missing built-in changed research-sources.md");
+    assert((await readFile(researchArtifacts.claims, "utf8")) === "# Existing Research Claims\n", "force missing built-in changed research-claims.md");
+    assert((await readFile(researchArtifacts.openQuestions, "utf8")) === "# Existing Open Questions\n", "force missing built-in changed open-questions.md");
+  });
+
+  await check("research reuse mode bypasses built-in deep research availability preflight", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-no-builtin-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse without built-in deep research\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-reuse-no-builtin", "passed", targetInfo.target, { sourceReports: [] }));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `reuse mode should not require TAKT built-in deep research: ${result.stderr}`);
+    assert(existsSync(argsPath), "reuse mode did not invoke TAKT after bypassing built-in deep research preflight");
+    assert(!result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `reuse mode still failed built-in preflight: ${result.stderr}`);
+  });
+
+  await check("bundled research reuse mode skips callable deep research staging", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-bundled-no-builtin-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nBundled reuse without built-in deep research\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const fakePackage = await makeFakePackageRoot();
+    const fakeTemplateRoot = path.join(fakePackage.packageRoot, "templates", "project");
+    await cp(path.join(ROOT_DIR, "templates", "project"), fakeTemplateRoot, { recursive: true });
+    const source = resolveTemplateSource({ projectRoot: root, templateRoot: fakeTemplateRoot });
+    const selectedWorkflowPath = workflowFilePath(source, "research");
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-bundled-reuse-no-builtin", "passed", targetInfo.target, { sourceReports: [] }),
+    );
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `bundled reuse mode should not stage TAKT built-in deep research: ${result.stderr}`);
+    assert(existsSync(argsPath), "bundled reuse mode did not invoke TAKT");
+    assert(!result.stderr.includes("BUILTIN_WORKFLOW_NOT_AVAILABLE:"), `bundled reuse mode still failed built-in staging: ${result.stderr}`);
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(
+      args[workflowArgIndex + 1].endsWith("workflows/takt-marp-slide-research-reuse.yaml"),
+      `bundled reuse mode did not select the staged sibling reuse workflow: ${args.join(" ")}`,
+    );
+  });
+
   await check("research successful rerun without force is blocked before TAKT", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-rerun-blocked-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -1903,6 +2228,66 @@ async function main() {
     assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "rejected research rerun created review/history");
   });
 
+  await check("research zero-exit rejected supervision creates reuse sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-zero-exit-rejected-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nZero exit rejected\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-rejected-zero", "rejected", targetInfo.target));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "zero-exit rejected research unexpectedly succeeded");
+    assert(
+      result.stderr.includes("TAKT_RESEARCH_SUPERVISION_NOT_PASSED:"),
+      `zero-exit rejected research did not report TAKT_RESEARCH_SUPERVISION_NOT_PASSED: ${result.stderr}`,
+    );
+    const candidate = await resolveResearchReuseCandidate(targetInfo, { root });
+    assert(candidate, "zero-exit rejected research did not create a reuse sidecar");
+    assert(candidate.source_run === "run-rejected-zero", `zero-exit rejected sidecar source run mismatch: ${JSON.stringify(candidate)}`);
+    assert(candidate.source_report_path.includes("workflow-deep-research"), `zero-exit rejected sidecar did not point at built-in report: ${candidate.source_report_path}`);
+    assert(!existsSync(researchArtifacts.report), "zero-exit rejected research synced research-report.md despite rejected supervision");
+  });
+
+  await check("research zero-exit artifact sync failure creates reuse sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-zero-exit-sync-missing-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nZero exit sync missing\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-sync-missing-zero", "passed", targetInfo.target, {
+        extraLines: ['rm ".takt/runs/run-sync-missing-zero/reports/research-sources.md"'],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "zero-exit artifact sync failure unexpectedly succeeded");
+    assert(
+      result.stderr.includes("TAKT_RESEARCH_ARTIFACT_SYNC_MISSING:"),
+      `zero-exit artifact sync failure did not report TAKT_RESEARCH_ARTIFACT_SYNC_MISSING: ${result.stderr}`,
+    );
+    const candidate = await resolveResearchReuseCandidate(targetInfo, { root });
+    assert(candidate, "zero-exit artifact sync failure did not create a reuse sidecar");
+    assert(candidate.source_run === "run-sync-missing-zero", `zero-exit sync failure sidecar source run mismatch: ${JSON.stringify(candidate)}`);
+    assert(!existsSync(researchArtifacts.report), "zero-exit artifact sync failure synced research-report.md despite missing adapter artifact");
+  });
+
   await check("research TAKT failure preserves existing plan state and review artifacts", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-external-failure-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -1929,6 +2314,480 @@ async function main() {
     assert((await readFile(planSupervisionPath, "utf8")) === planSupervisionBefore, "research failure changed review plan supervision");
     assert((await readFile(planApprovalPath, "utf8")) === planApprovalBefore, "research failure changed review plan approval");
     assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "research failure archived review artifacts");
+  });
+
+  await check("failed research run creates reuse sidecar from current workflow identity and deep report", async () => {
+    const workflowCases = [
+      { label: "workflow-name", workflow: "takt-marp-slide-research" },
+      { label: "workflow-path", workflow: await makeSelectedWorkflowFile("research") },
+    ];
+
+    for (const testCase of workflowCases) {
+      const root = await mkdtemp(path.join(os.tmpdir(), `slide-workflow-research-reuse-candidate-${testCase.label}-`));
+      const targetInfo = await makeDeck(root, "demo");
+      const researchArtifacts = researchArtifactPaths(targetInfo);
+      await mkdir(targetInfo.researchPath, { recursive: true });
+      await writeFile(researchArtifacts.brief, `# Research Brief\n\n${testCase.label}\n`, "utf8");
+      const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+      const fakePackage = await makeFakePackageRoot();
+      await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+      await makeTaktExecutable(
+        fakePackage.packageRoot,
+        fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+          workflow: testCase.workflow,
+          exitCode: 42,
+          sourceReports: [
+            {
+              relativePath: "subworkflows/iteration-1--step-deep_research--workflow-deep-research/reports/research-report.md",
+              lines: [`# Built-in Research Report ${testCase.label}`, "", "Reusable failed run report."],
+            },
+          ],
+        }),
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+        { cwd: root, encoding: "utf8" },
+      );
+      assert(result.status === 42, `failed research should preserve TAKT exit code for ${testCase.label}, got ${result.status}: ${result.stderr}`);
+      const candidate = await resolveResearchReuseCandidate(targetInfo, { root });
+      assert(candidate, `failed research did not create a reusable sidecar for ${testCase.label}`);
+      assert(candidate.source_run === "run-current", `sidecar source_run mismatch for ${testCase.label}: ${JSON.stringify(candidate)}`);
+      assert(
+        candidate.source_report_path.endsWith("workflow-deep-research/reports/research-report.md"),
+        `sidecar source report path must point at deep research report for ${testCase.label}: ${JSON.stringify(candidate)}`,
+      );
+      assert(!existsSync(researchArtifacts.report), `failed full research should not sync deck-local report before reuse: ${researchArtifacts.report}`);
+    }
+  });
+
+  await check("failed research run without reusable deep report does not create reuse sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-no-report-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nNo report\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+        workflow: "takt-marp-slide-research",
+        exitCode: 43,
+        sourceReports: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 43, `failed research without reusable report should preserve TAKT exit code, got ${result.status}: ${result.stderr}`);
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing deep research report created a reuse sidecar");
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "missing deep research report left a sidecar file");
+  });
+
+  await check("failed research run with missing reports directory does not replace TAKT exit code", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-missing-reports-dir-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nMissing reports directory\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+        workflow: selectedWorkflowPath,
+        exitCode: 46,
+        createReportsDir: false,
+        sourceReports: [],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 46, `missing reports directory should preserve TAKT exit code 46, got ${result.status}: ${result.stderr}`);
+    assert(!result.stderr.includes("ENOENT"), `missing reports directory leaked raw ENOENT: ${result.stderr}`);
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "missing reports directory created a reuse sidecar");
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "missing reports directory left a sidecar file");
+  });
+
+  await check("failed research run rejects ambiguous reusable reports without sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-ambiguous-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nAmbiguous report\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeFailingResearchTaktScriptWithReuseMeta("run-current", targetInfo, {
+        workflow: selectedWorkflowPath,
+        exitCode: 44,
+        sourceReports: [
+          {
+            relativePath: "subworkflows/iteration-1--step-deep_research--workflow-deep-research/reports/research-report.md",
+            lines: ["# First Built-in Research Report"],
+          },
+          {
+            relativePath: "subworkflows/iteration-2--step-deep_research--workflow-deep-research/reports/research-report.md",
+            lines: ["# Second Built-in Research Report"],
+          },
+        ],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 44, `ambiguous failed research should preserve TAKT exit code 44, got ${result.status}: ${result.stderr}`);
+    assert(result.stderr.includes("TAKT_RESEARCH_REUSE_AMBIGUOUS:"), `ambiguous reuse candidate did not report TAKT_RESEARCH_REUSE_AMBIGUOUS: ${result.stderr}`);
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }) === null, "ambiguous reusable reports created a sidecar");
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "ambiguous reusable reports left a sidecar file");
+  });
+
+  await check("research reuse mode writes marker metadata and deletes sidecar on success", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-success-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse success\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-reuse-success", "passed", targetInfo.target));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `reuse research success failed: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse === true, `reuse marker flag missing: ${JSON.stringify(marker)}`);
+    assert(
+      marker.research_source_report_path === "slides/demo/research/research-report.md",
+      `reuse marker source report path mismatch: ${JSON.stringify(marker)}`,
+    );
+    assert(marker.research_source_report_origin === "builtin_deep_research", `reuse marker origin mismatch: ${JSON.stringify(marker)}`);
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "reuse success did not delete sidecar");
+  });
+
+  await check("research reuse mode copies source report before TAKT and keeps it authoritative", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-source-copy-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse source report copy\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const expectedReport = await readFile(reusable.sourceReportPath, "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-reuse-source-copy", "passed", targetInfo.target, { sourceReports: [] }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `reuse source report copy failed: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(
+      marker.research_source_report_path === "slides/demo/research/research-report.md",
+      `reuse marker must point at deck-local source report copy: ${JSON.stringify(marker)}`,
+    );
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === expectedReport,
+      "reuse source report copy was not preserved byte-for-byte as deck-local research-report.md",
+    );
+  });
+
+  await check("research reuse non-file source report invalidates sidecar and falls back to full research", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-source-copy-fail-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse source report copy failure\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Deck Research Report\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    await rm(reusable.sourceReportPath, { force: true });
+    await mkdir(reusable.sourceReportPath, { recursive: true });
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-should-not-start", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `non-file reuse source report should fall back to full research: ${result.stderr}`);
+    assert(existsSync(argsPath), "TAKT was not invoked for full research fallback");
+    assert(!(await resolveResearchReuseCandidate(targetInfo, { root })), "non-file reuse source report sidecar was not invalidated");
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse !== true, `non-file reuse source report unexpectedly entered reuse mode: ${JSON.stringify(marker)}`);
+    assert(
+      await readFile(researchArtifacts.report, "utf8") !== "# Existing Deck Research Report\n",
+      "full research fallback did not replace stale deck-local research-report.md",
+    );
+  });
+
+  await check("research reuse failure preserves sidecar for retry", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-failure-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse failure\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Successful Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
+    const reusable = await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeFailingTaktScript(45));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 45, `reuse failure should preserve TAKT exit code 45, got ${result.status}: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse === true, `reuse failure marker flag missing: ${JSON.stringify(marker)}`);
+    assert(
+      marker.research_source_report_path === "slides/demo/research/research-report.md",
+      `reuse failure marker source report path mismatch: ${JSON.stringify(marker)}`,
+    );
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse failure did not preserve sidecar for retry");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === "# Existing Successful Research Report\n",
+      "reuse failure did not roll back deck-local research-report.md",
+    );
+    assert(
+      await readFile(researchArtifacts.sources, "utf8") === "# Existing Research Sources\n",
+      "reuse failure changed existing research-sources.md",
+    );
+  });
+
+  await check("research reuse invalid successful supervision preserves sidecar for retry", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-invalid-success-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse invalid successful supervision\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Successful Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
+    await writeFile(researchArtifacts.claims, "# Existing Research Claims\n", "utf8");
+    await writeFile(researchArtifacts.openQuestions, "# Existing Open Questions\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-reuse-invalid-success", "passed", targetInfo.target, {
+        sourceReports: [],
+        supervisionState: "planned",
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "reuse invalid successful supervision unexpectedly succeeded");
+    assert(
+      result.stderr.includes("TAKT_RESEARCH_SUPERVISION_NOT_PASSED:"),
+      `reuse invalid successful supervision did not report TAKT_RESEARCH_SUPERVISION_NOT_PASSED: ${result.stderr}`,
+    );
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }), "reuse invalid successful supervision did not preserve sidecar for retry");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === "# Existing Successful Research Report\n",
+      "reuse invalid successful supervision did not roll back deck-local research-report.md",
+    );
+    assert(
+      await readFile(researchArtifacts.sources, "utf8") === "# Existing Research Sources\n",
+      "reuse invalid successful supervision changed existing research-sources.md before supervision validation",
+    );
+    assert(
+      await readFile(researchArtifacts.claims, "utf8") === "# Existing Research Claims\n",
+      "reuse invalid successful supervision changed existing research-claims.md before supervision validation",
+    );
+    assert(
+      await readFile(researchArtifacts.openQuestions, "utf8") === "# Existing Open Questions\n",
+      "reuse invalid successful supervision changed existing open-questions.md before supervision validation",
+    );
+  });
+
+  await check("research reuse rejects changed source report before committing artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-mutated-report-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse mutated source report\n", "utf8");
+    await writeFile(researchArtifacts.report, "# Existing Successful Research Report\n", "utf8");
+    await writeFile(researchArtifacts.sources, "# Existing Research Sources\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-reuse-mutated-report", "passed", targetInfo.target, {
+        sourceReports: [],
+        extraLines: [
+          `cat > "${path.posix.join(targetInfo.target, "research", "research-report.md")}" <<'EOF'`,
+          "# Mutated Reuse Source Report",
+          "",
+          "Adapter should not rewrite the authoritative source report.",
+          "EOF",
+        ],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "mutated reuse source report unexpectedly succeeded");
+    assert(
+      result.stderr.includes("TAKT_RESEARCH_REUSE_SOURCE_REPORT_CHANGED:"),
+      `mutated reuse source report did not report TAKT_RESEARCH_REUSE_SOURCE_REPORT_CHANGED: ${result.stderr}`,
+    );
+    assert(await resolveResearchReuseCandidate(targetInfo, { root }), "mutated reuse source report did not preserve sidecar for retry");
+    assert(
+      await readFile(researchArtifacts.report, "utf8") === "# Existing Successful Research Report\n",
+      "mutated reuse source report did not restore prior deck-local research-report.md",
+    );
+    assert(
+      await readFile(researchArtifacts.sources, "utf8") === "# Existing Research Sources\n",
+      "mutated reuse source report synced research-sources.md before source report validation",
+    );
+  });
+
+  await check("research force deletes existing reuse sidecar and bypasses reuse marker", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-force-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nForce full research\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    await writeSupervision(targetInfo, "research", "researched", "passed", "run-research-old");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-force-success", "passed", targetInfo.target));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath, "--force"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `force full research failed: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.research_reuse !== true, `force research unexpectedly entered reuse mode: ${JSON.stringify(marker)}`);
+    assert(!Object.hasOwn(marker, "research_source_report_path"), `force marker leaked reuse source report metadata: ${JSON.stringify(marker)}`);
+    assert(!existsSync(researchReuseSidecarPath(targetInfo, { root })), "force full research did not delete existing sidecar");
+  });
+
+  await check("research reuse mode selects sibling private workflow and keeps public command surface unchanged", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-workflow-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nReuse workflow selection\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research", { includeResearchReuse: true });
+    const selectedReuseWorkflowPath = researchReuseWorkflowFilePath(selectedWorkflowPath);
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-reuse-workflow", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `reuse workflow selection run failed: ${result.stderr}`);
+    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
+    const workflowArgIndex = args.indexOf("-w");
+    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
+    assert(args[workflowArgIndex + 1] === selectedReuseWorkflowPath, `reuse mode did not select sibling private workflow: ${args.join(" ")}`);
+    assert(!COMMANDS.includes("research-reuse"), `research-reuse leaked into public command registry: ${COMMANDS.join(", ")}`);
+  });
+
+  await check("research reuse mode fails before TAKT when sibling private workflow is unavailable", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-workflow-missing-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nMissing reuse workflow\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-should-not-start", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "reuse mode unexpectedly succeeded without sibling private workflow");
+    assert(result.stderr.includes("WORKFLOW_NOT_IMPLEMENTED:"), `missing reuse workflow did not report WORKFLOW_NOT_IMPLEMENTED: ${result.stderr}`);
+    assert(result.stderr.includes("takt-marp-slide-research-reuse.yaml"), `missing reuse workflow error omitted file name: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite missing sibling reuse workflow");
+  });
+
+  await check("bundled research reuse missing sibling cleans staged runtime before failing", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-reuse-bundled-missing-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nBundled missing reuse workflow\n", "utf8");
+    await writeReusableResearchSidecarFixture(root, targetInfo, "run-reusable");
+    const fakePackage = await makeFakePackageRoot();
+    const fakeTemplateRoot = path.join(fakePackage.packageRoot, "templates", "project");
+    await cp(path.join(ROOT_DIR, "templates", "project"), fakeTemplateRoot, { recursive: true });
+    await rm(path.join(fakeTemplateRoot, "workflows", "takt-marp-slide-research-reuse.yaml"), { force: true });
+    const source = resolveTemplateSource({ projectRoot: root, templateRoot: fakeTemplateRoot });
+    const selectedWorkflowPath = workflowFilePath(source, "research");
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(fakePackage.packageRoot, fakeResearchTaktScriptWithArtifacts("run-should-not-start", "passed", targetInfo.target));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "bundled reuse mode unexpectedly succeeded without sibling private workflow");
+    assert(result.stderr.includes("WORKFLOW_NOT_IMPLEMENTED:"), `bundled missing reuse workflow did not report WORKFLOW_NOT_IMPLEMENTED: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite bundled missing sibling reuse workflow");
+    assert(!existsSync(path.join(root, "workflows")), "bundled missing reuse workflow left staged runtime under project workflows/");
   });
 
   await check("global CLI workflow command uses bundled no-copy templates without npm project", async () => {
@@ -2917,11 +3776,14 @@ async function makeDeck(root, deckName) {
   return resolveDeckTarget(`slides/${deckName}`, { root });
 }
 
-async function makeSelectedWorkflowFile(command) {
+async function makeSelectedWorkflowFile(command, options = {}) {
   const selectedSourceRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-source-"));
   const selectedWorkflowPath = path.join(selectedSourceRoot, "workflows", `takt-marp-slide-${command}.yaml`);
   await mkdir(path.dirname(selectedWorkflowPath), { recursive: true });
   await writeFile(selectedWorkflowPath, `name: selected-${command}\n`, "utf8");
+  if (command === "research" && options.includeResearchReuse) {
+    await writeFile(researchReuseWorkflowFilePath(selectedWorkflowPath), "name: selected-research-reuse\n", "utf8");
+  }
   return selectedWorkflowPath;
 }
 
@@ -3229,20 +4091,64 @@ function fakeResearchTaktScriptWithArtifacts(runName, result, reportTarget, opti
       lines: ["# Built-in Research Report", "", `Current report from ${runName}.`],
     },
   ];
+  const reportsDir = `.takt/runs/${runName}/reports`;
+  const meta = {
+    workflow: options.workflow ?? "takt-marp-slide-research",
+    task: `${reportTarget}/research/research-brief.md`,
+    reportDirectory: reportsDir,
+  };
   return [
     "#!/bin/sh",
     "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
     "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
     "fi",
-    ...fakeResearchSupervisionLines(runName, result, reportTarget),
+    `mkdir -p ".takt/runs/${runName}"`,
+    `cat > ".takt/runs/${runName}/meta.json" <<'EOF'`,
+    JSON.stringify(meta, null, 2),
+    "EOF",
+    ...fakeResearchSupervisionLines(runName, result, reportTarget, { state: options.supervisionState }),
     ...fakeResearchAdapterArtifactLines(runName),
     ...sourceReports.flatMap(({ relativePath, lines }) => fakeReportFileLines(runName, relativePath, lines)),
+    ...(options.extraLines ?? []),
     "exit 0",
     "",
   ].join("\n");
 }
 
-function fakeResearchSupervisionLines(runName, result, reportTarget) {
+function fakeFailingResearchTaktScriptWithReuseMeta(runName, targetInfo, options = {}) {
+  const sourceReports = options.sourceReports ?? [
+    {
+      relativePath: "subworkflows/iteration-1--step-deep_research--workflow-deep-research/reports/research-report.md",
+      lines: ["# Built-in Research Report", "", `Reusable report from ${runName}.`],
+    },
+  ];
+  const reportsDir = `.takt/runs/${runName}/reports`;
+  const meta = {
+    workflow: options.workflow ?? "takt-marp-slide-research",
+    task: researchTaktTargetForFixture(targetInfo),
+    reportDirectory: reportsDir,
+  };
+  return [
+    "#!/bin/sh",
+    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
+    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
+    "fi",
+    `mkdir -p ".takt/runs/${runName}"`,
+    ...(options.createReportsDir === false ? [] : [`mkdir -p "${reportsDir}"`]),
+    `cat > ".takt/runs/${runName}/meta.json" <<'EOF'`,
+    JSON.stringify(meta, null, 2),
+    "EOF",
+    ...sourceReports.flatMap(({ relativePath, lines }) => fakeReportFileLines(runName, relativePath, lines)),
+    `exit ${options.exitCode ?? 42}`,
+    "",
+  ].join("\n");
+}
+
+function researchTaktTargetForFixture(targetInfo) {
+  return `${targetInfo.target}/research/research-brief.md`;
+}
+
+function fakeResearchSupervisionLines(runName, result, reportTarget, options = {}) {
   return fakeReportFileLines(runName, "research-supervision.md", [
     "---",
     "command: research",
@@ -3251,7 +4157,7 @@ function fakeResearchSupervisionLines(runName, result, reportTarget) {
     `workflow_run_id: ${runName}`,
     "step: supervision",
     "cycle: 1",
-    "state: researched",
+    `state: ${options.state ?? "researched"}`,
     `result: ${result}`,
     "blocking_findings: 0",
     "major_findings: 0",
@@ -3339,6 +4245,25 @@ async function writeStaleResearchRun(root, target) {
     ].join("\n"),
     "utf8",
   );
+}
+
+async function writeReusableResearchSidecarFixture(root, targetInfo, sourceRun) {
+  const reportsDir = path.join(root, ".takt", "runs", sourceRun, "reports");
+  const sourceReportPath = path.join(
+    reportsDir,
+    "subworkflows",
+    "iteration-1--step-deep_research--workflow-deep-research",
+    "reports",
+    "research-report.md",
+  );
+  await mkdir(path.dirname(sourceReportPath), { recursive: true });
+  await writeFile(sourceReportPath, `# Built-in Research Report\n\nReusable report from ${sourceRun}.\n`, "utf8");
+  await writeResearchReuseSidecar(targetInfo, {
+    sourceRun,
+    sourceReportsDir: reportsDir,
+    sourceReportPath,
+  }, { root });
+  return Object.freeze({ sourceRun, reportsDir, sourceReportPath });
 }
 
 function fakeFailingTaktScript(exitCode) {

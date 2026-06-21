@@ -24,6 +24,12 @@ issue title、設計メモ、仮説、test 名、PR 説明で domain concept を
 
 必要な概念が `CONTEXT.md` にない場合は、勝手に追加せず、domain modeling の gap として扱う。
 
+Kiro / SDD / OpenSpec の requirements / design / tasks / review を生成または更新した後は、次の phase、design validation、implementation、PR 化へ進む前に、spec 内のドメイン用語・契約名・境界名を `CONTEXT.md` と照合する。
+
+- 未登録のプロジェクト固有用語は glossary gap として扱い、`/domain-modeling` または `/grill-with-docs` 経由で確定してから `CONTEXT.md` に登録する。
+- 一般的な技術語、ファイル名、関数名、単発の実装詳細、一次的な作業ラベルは `CONTEXT.md` に登録しない。
+- spec 側の表記ゆれは `CONTEXT.md` の canonical term に合わせて修正する。
+
 ## ADR との矛盾
 
 出力や実装方針が既存 ADR と矛盾する場合は、黙って上書きせず、どの ADR と矛盾するのかを明示する。
