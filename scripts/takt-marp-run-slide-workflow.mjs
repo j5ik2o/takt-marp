@@ -60,6 +60,12 @@ async function main() {
   // Keep executable availability in preflight so failed setup cannot invalidate current artifacts.
   assertTaktExecutableAvailable();
 
+  let fullResearchPreflightChecked = false;
+  if (command === "research" && flags.force) {
+    assertBuiltinWorkflowAvailable("deep-research");
+    fullResearchPreflightChecked = true;
+  }
+
   let researchReuseCandidate = null;
   if (flags.force) {
     if (command === "research") {
@@ -81,7 +87,7 @@ async function main() {
   if (command === "research" && !flags.force) {
     researchReuseCandidate = await resolveResearchReuseCandidate(targetInfo);
   }
-  if (command === "research" && !researchReuseCandidate) {
+  if (command === "research" && !researchReuseCandidate && !fullResearchPreflightChecked) {
     assertBuiltinWorkflowAvailable("deep-research");
   }
 
@@ -129,7 +135,7 @@ async function main() {
   }
   if (command === "research") {
     try {
-      await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, { researchReuseCandidate });
+      await syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, { researchReuseCandidate: preparedResearchReuseCandidate });
       if (!isSuccessfulCommandState(targetInfo, "research")) {
         throw new SlideWorkflowError(
           `TAKT completed but research supervision did not reach successful state '${targetInfo.target} -> researched'.`,
@@ -140,6 +146,9 @@ async function main() {
       await deleteResearchReuseSidecar(targetInfo);
     } catch (error) {
       await preparedResearchReuseCandidate?.restoreSourceReport();
+      if (!researchReuseCandidate && error.code === "TAKT_RESEARCH_SUPERVISION_NOT_PASSED") {
+        await writeResearchReuseSidecarFromFailedRun(targetInfo, runDirectorySnapshotBefore);
+      }
       throw error;
     }
   } else {
@@ -167,6 +176,7 @@ async function prepareResearchReuseSourceReport(targetInfo, researchReuseCandida
   let finalized = false;
   return Object.freeze({
     ...researchReuseCandidate,
+    original_source_report_path: researchReuseCandidate.source_report_path,
     source_report_path: researchArtifacts.report,
     restoreSourceReport: async () => {
       if (finalized) {
@@ -290,7 +300,7 @@ async function syncTaktReportsToDeck(command, targetInfo, runSnapshotBefore) {
 }
 
 async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, options = {}) {
-  const reportsDir = await createdTaktReportsDir("research", targetInfo, runSnapshotBefore);
+  const reportsDir = await createdTaktReportsDir("research", targetInfo, runSnapshotBefore, { requirePassed: false });
   if (!reportsDir) {
     throw new SlideWorkflowError(
       `TAKT completed but no matching research report directory was found for ${targetInfo.target}.`,
@@ -308,6 +318,7 @@ async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, option
         "TAKT_RESEARCH_REUSE_SOURCE_REPORT_MISSING",
       );
     }
+    await assertResearchReuseSourceReportUnchanged(options.researchReuseCandidate, researchArtifacts.report);
   } else {
     sourceReportCopies.push(Object.freeze({
       sourcePath: await findSingleResearchSourceReportPath(reportsDir),
@@ -320,6 +331,26 @@ async function syncResearchArtifactsToDeck(targetInfo, runSnapshotBefore, option
   ];
   for (const { sourcePath, finalPath } of artifactCopies) {
     await replaceFileAtomically(sourcePath, finalPath);
+  }
+}
+
+async function assertResearchReuseSourceReportUnchanged(researchReuseCandidate, deckReportPath) {
+  const sourceReportPath = researchReuseCandidate.original_source_report_path;
+  if (!sourceReportPath) {
+    throw new SlideWorkflowError(
+      "TAKT completed but reuse source report origin was not recorded before workflow execution.",
+      "TAKT_RESEARCH_REUSE_SOURCE_REPORT_MISSING",
+    );
+  }
+  const [sourceReport, deckReport] = await Promise.all([
+    readFile(sourceReportPath),
+    readFile(deckReportPath),
+  ]);
+  if (!sourceReport.equals(deckReport)) {
+    throw new SlideWorkflowError(
+      `TAKT completed but deck-local reuse source report changed during reuse workflow execution: ${path.relative(process.cwd(), deckReportPath)}`,
+      "TAKT_RESEARCH_REUSE_SOURCE_REPORT_CHANGED",
+    );
   }
 }
 
@@ -732,16 +763,17 @@ async function cleanStaleDeckReports(reviewPath, reportNameSet, syncedReportName
   }
 }
 
-async function createdTaktReportsDir(command, targetInfo, runSnapshotBefore) {
+async function createdTaktReportsDir(command, targetInfo, runSnapshotBefore, options = {}) {
   const runsRoot = path.join(process.cwd(), ".takt", "runs");
   const runNames = (await listTaktRunNames()).sort().reverse();
   const candidates = [];
+  const requirePassed = options.requirePassed ?? true;
 
   for (const runName of runNames) {
     const reportsDir = path.join(runsRoot, runName, "reports");
     const reportPath = path.join(reportsDir, `${command}-supervision.md`);
     const reportMtime = await reportMtimeIfChangedSinceSnapshot(reportPath, runName, runSnapshotBefore);
-    if (reportMtime !== null && (await reportMatchesSuccessfulTarget(reportPath, command, targetInfo.target))) {
+    if (reportMtime !== null && (await reportMatchesTarget(reportPath, command, targetInfo.target, { requirePassed }))) {
       candidates.push({ reportsDir, reportMtime });
     }
   }
@@ -824,12 +856,13 @@ async function listTaktRunNames() {
   return (await readdir(runsRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name);
 }
 
-async function reportMatchesSuccessfulTarget(reportPath, command, target) {
+async function reportMatchesTarget(reportPath, command, target, options = {}) {
   if (!existsSync(reportPath)) {
     return false;
   }
+  const requirePassed = options.requirePassed ?? true;
   const { frontMatter } = parseFrontMatter(await readFile(reportPath, "utf8"));
-  return frontMatter.command === command && frontMatter.target === target && frontMatter.result === "passed";
+  return frontMatter.command === command && frontMatter.target === target && (!requirePassed || frontMatter.result === "passed");
 }
 
 main().catch((error) => {
