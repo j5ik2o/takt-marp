@@ -52,6 +52,7 @@ export const REQUIRED_PACK_FILES = [
   "scripts/lib/takt-marp-project-templates.mjs",
   "scripts/lib/takt-marp-runtime-context.mjs",
   "scripts/lib/takt-marp-slide-workflow.mjs",
+  "scripts/lib/takt-marp-validation-harness.mjs",
   "scripts/lib/takt-marp-zip-archive.mjs",
 ];
 const SMOKE_FIXTURE_PREFIX = "fixtures/marp-slide-workflow/_workflow-smoke/";

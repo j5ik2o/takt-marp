@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import os from "node:os";
@@ -7,17 +7,243 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   approvalPath,
-  resolveDeckTarget,
+  shouldPreserveDesignContract,
+  shouldResolveDesignContract,
   supervisionPath,
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
-import { writeClaudeDesignSmokeFixture } from "./lib/takt-marp-claude-design-fixtures.mjs";
-import { createZipArchiveBuffer } from "./lib/takt-marp-zip-archive.mjs";
+import {
+  buildClaudeDesignSmokeFixtureZipBuffer,
+} from "./lib/takt-marp-claude-design-fixtures.mjs";
+import {
+  importClaudeDesignSourceArchive,
+  importClaudeDesignSourceBuffer,
+} from "./lib/takt-marp-claude-design-source.mjs";
+import {
+  createZipArchiveBuffer,
+  ZipArchiveReader,
+} from "./lib/takt-marp-zip-archive.mjs";
+import {
+  fakeCommandTaktScript,
+  fakeTaktScript,
+  listFilesRecursively,
+  makeDeck,
+  makeFakePackageRoot,
+  makeSelectedWorkflowFile,
+  makeTaktExecutable,
+  writeSupervision,
+} from "./lib/takt-marp-validation-harness.mjs";
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.dirname(SCRIPT_DIR);
 
 export async function runDesignContractFoundationChecks(check) {
+  await check("Claude Design zip reader rejects traversal and exposes safe entries", async () => {
+    const archive = await ZipArchiveReader.fromBuffer(createZipArchiveBuffer({
+      "tokens/colors.css": ":root { --accent: #b0241d; }\n",
+      "nested/readme.txt": "safe\n",
+    }));
+    assert(
+      JSON.stringify(archive.entryNames()) === JSON.stringify(["nested/readme.txt", "tokens/colors.css"]),
+      `zip entry list was not deterministic: ${archive.entryNames().join(", ")}`,
+    );
+    assert((await archive.readText("tokens/colors.css")).includes("--accent"), "zip text entry read failed");
+    const dotPrefixedArchive = await ZipArchiveReader.fromBuffer(createZipArchiveBuffer({
+      "./tokens/colors.css": ":root { --accent: #b0241d; }\n",
+      "./nested/readme.txt": "safe\n",
+    }));
+    assert(
+      JSON.stringify(dotPrefixedArchive.entryNames()) === JSON.stringify(["nested/readme.txt", "tokens/colors.css"]),
+      `dot-prefixed zip entry list was not normalized: ${dotPrefixedArchive.entryNames().join(", ")}`,
+    );
+    assert(dotPrefixedArchive.hasEntry("tokens/colors.css"), "dot-prefixed zip entry was not addressable without ./ prefix");
+
+    let caught;
+    try {
+      await ZipArchiveReader.fromBuffer(createZipArchiveBuffer({ "../escape.txt": "bad\n" }));
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught?.code === "ZIP_ENTRY_PATH_INVALID", `expected ZIP_ENTRY_PATH_INVALID, got ${caught?.code ?? "success"}`);
+
+    await expectFailure(
+      () => ZipArchiveReader.fromBuffer(createZipArchiveBuffer({
+        "a.txt": "a\n",
+        "b.txt": "b\n",
+      }), { limits: { maxEntries: 1 } }),
+      "ZIP_ARCHIVE_LIMIT_EXCEEDED",
+    );
+    await expectFailure(
+      () => ZipArchiveReader.fromBuffer(createZipArchiveBuffer({ "large.txt": "1234\n" }), { limits: { maxTotalUncompressedBytes: 4 } }),
+      "ZIP_ARCHIVE_LIMIT_EXCEEDED",
+    );
+    await expectFailure(
+      () => ZipArchiveReader.fromBuffer(createZipArchiveBuffer({ "archive.txt": "ok\n" }), { limits: { maxArchiveBytes: 1 } }),
+      "ZIP_ARCHIVE_LIMIT_EXCEEDED",
+    );
+  });
+
+  await check("Claude Design fixture imports into a deterministic Resolved Design Contract", async () => {
+    const sourcePath = path.join(ROOT_DIR, "slides", "demo", "design", "Claude Design Smoke.zip");
+    const first = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    const second = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+
+    assert(first.source.kind === "claude-design-zip", `unexpected design source kind: ${first.source.kind}`);
+    assert(first.source.path === "slides/demo/design/Claude Design Smoke.zip", `source path must be project-relative: ${first.source.path}`);
+    assert(first.source.namespace === "ClaudeDesignSmoke", `namespace mismatch: ${first.source.namespace}`);
+    assert(first.token_counts.color >= 2, `color token count too small: ${JSON.stringify(first.token_counts)}`);
+    assert(first.token_counts.typography >= 2, `typography token count too small: ${JSON.stringify(first.token_counts)}`);
+    assert(first.token_counts.spacing >= 1, `spacing token count too small: ${JSON.stringify(first.token_counts)}`);
+    assert(first.adherence.available === true, "optional adherence metadata was not detected");
+    assert(first.components.names.includes("Metric"), `generic component catalog was not preserved: ${JSON.stringify(first.components)}`);
+    assert(first.guidance.documents.some((item) => item.path === "SKILL.md" && item.kind === "skill" && item.text.includes("Generic slide design system")), `SKILL.md guidance was not captured: ${JSON.stringify(first.guidance)}`);
+    assert(first.guidance.documents.some((item) => item.path === "readme.md" && item.kind === "readme"), `readme guidance was not captured: ${JSON.stringify(first.guidance)}`);
+    assert(first.guidance.component_prompts.some((item) => item.path === "components/demo/Metric.prompt.md" && item.text.includes("Metric")), `component prompt guidance was not captured: ${JSON.stringify(first.guidance)}`);
+    assert(first.source_catalog.counts.components === 1, `component catalog count mismatch: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.cards.some((item) => item.path === "guidelines/overview.card.html"), `card catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.sample_slides.some((item) => item.path === "slides/cover.html"), `sample slide catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.templates.some((item) => item.entryPath === "templates/generic-deck/GenericDeck.dc.html"), `template catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.assets.some((item) => item.path === "assets/mark.svg"), `asset catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
+
+    const mismatchedManifest = {
+      namespace: "ClaudeDesignMismatch",
+      globalCssPaths: ["styles.css"],
+      tokens: [{ name: "--accent", value: "#000000", kind: "color", definedIn: "tokens/colors.css" }],
+    };
+    await expectFailure(
+      () => importClaudeDesignSourceBuffer(createZipArchiveBuffer({
+        "_ds_manifest.json": `${JSON.stringify(mismatchedManifest)}\n`,
+        "styles.css": "",
+        "tokens/colors.css": ":root { --accent: #ffffff; }\n",
+        "tokens/typography.css": "",
+        "tokens/spacing.css": "",
+      }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+    await expectFailure(
+      () => importClaudeDesignSourceBuffer(createZipArchiveBuffer({
+        "_ds_manifest.json": "null\n",
+        "styles.css": "",
+        "tokens/colors.css": "",
+        "tokens/typography.css": "",
+        "tokens/spacing.css": "",
+      }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+    await expectFailure(
+      () => importClaudeDesignSourceArchive(new ZipArchiveReader({
+        "_ds_manifest.json": Buffer.from(`${JSON.stringify(mismatchedManifest)}\n`),
+        "styles.css": Buffer.from(""),
+        "tokens/colors.css": Buffer.from(":root { --accent: #000000; }\n"),
+        "tokens/typography.css": Buffer.from(""),
+        "tokens/spacing.css": Buffer.from(""),
+      }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+
+    const compoundManifest = {
+      namespace: "ClaudeDesignCompoundTokens",
+      globalCssPaths: ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
+      brandFonts: [{ family: "Inter", status: "available" }],
+      tokens: [
+        { name: "--text-body", value: "16px", kind: "font", definedIn: "tokens/typography.css" },
+        { name: "--button-text-size", value: "12px", kind: "spacing", definedIn: "tokens/spacing.css" },
+        { name: "--bg-page", value: "#ffffff", kind: "color", definedIn: "tokens/colors.css" },
+      ],
+    };
+    const classified = await importClaudeDesignSourceBuffer(createZipArchiveBuffer({
+      "_ds_manifest.json": `${JSON.stringify(compoundManifest)}\n`,
+      "styles.css": "",
+      "tokens/colors.css": ":root { --bg-page: #ffffff; }\n",
+      "tokens/typography.css": ":root { --text-body: 16px; }\n",
+      "tokens/spacing.css": ":root { --button-text-size: 12px; }\n",
+    }), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    const categories = Object.fromEntries(classified.tokens.map((token) => [token.name, token.category]));
+    assert(categories["--text-body"] === "typography", `typography path token misclassified: ${JSON.stringify(categories)}`);
+    assert(categories["--button-text-size"] === "spacing", `spacing path token with text in name misclassified: ${JSON.stringify(categories)}`);
+    assert(categories["--bg-page"] === "color", `color path token misclassified: ${JSON.stringify(categories)}`);
+    assert(classified.brand_fonts.includes("Inter"), `object brandFonts family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
+  });
+
+  await check("slide commands resolve or preserve Design Contract by lifecycle phase", async () => {
+    assert(shouldResolveDesignContract("plan"), "plan must resolve a fresh Design Contract");
+    assert(shouldResolveDesignContract("compose"), "compose must resolve a fresh Design Contract");
+    assert(shouldPreserveDesignContract("research"), "research must preserve existing Design Contract marker when available");
+    assert(shouldPreserveDesignContract("polish"), "polish must preserve existing Design Contract marker when available");
+    assert(shouldPreserveDesignContract("deliver"), "deliver must preserve existing Design Contract marker when available");
+  });
+
+  await check("compose workflow and facets use Design Contract without design-system step", async () => {
+    for (const rootRelativePath of [".takt", "templates/project"]) {
+      const workflowPath = path.join(ROOT_DIR, rootRelativePath, "workflows", "takt-marp-slide-compose.yaml");
+      const workflowSource = await readFile(workflowPath, "utf8");
+      assert(workflowSource.includes("initial_step: compose_sections"), `${workflowPath} must start compose at compose_sections`);
+      assert(!workflowSource.includes("initial_step: design_system"), `${workflowPath} still starts with design_system`);
+      assert(!/^\s+design_system:/m.test(workflowSource), `${workflowPath} still declares a design_system step`);
+      assert(!workflowSource.includes("takt-marp-design-system"), `${workflowPath} still references takt-marp-design-system`);
+
+      const facetRoot = path.join(ROOT_DIR, rootRelativePath, "facets");
+      const facetFiles = await listFilesRecursively(facetRoot);
+      const violations = [];
+      for (const filePath of facetFiles) {
+        const source = await readFile(filePath, "utf8");
+        const relativePath = path.relative(ROOT_DIR, filePath);
+        source.split("\n").forEach((line, index) => {
+          const isAllowedLegacyNote = line.includes("既存 deck に `design-system.md` が残っていても");
+          if (line.includes("design-system.md") && !isAllowedLegacyNote) {
+            violations.push(`${relativePath}:${index + 1}: ${line.trim()}`);
+          }
+          if (line.includes("takt-marp-design-system") || line.includes("design_system")) {
+            violations.push(`${relativePath}:${index + 1}: ${line.trim()}`);
+          }
+        });
+      }
+      assert(violations.length === 0, `Design Contract facet migration violations:\n${violations.join("\n")}`);
+
+      const planInstruction = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan.md"), "utf8");
+      assert(planInstruction.includes("design_contract.path"), `${rootRelativePath} plan instruction must open marker design_contract.path`);
+      assert(planInstruction.includes("Resolved Design Contract JSON"), `${rootRelativePath} plan instruction must read the Resolved Design Contract JSON`);
+      assert(planInstruction.includes("token constraints"), `${rootRelativePath} plan instruction must ground planning in token constraints`);
+      assert(planInstruction.includes("guidance"), `${rootRelativePath} plan instruction must use Design System guidance`);
+      assert(planInstruction.includes("source_catalog"), `${rootRelativePath} plan instruction must use Design System source_catalog`);
+
+      const planContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-plan.md"), "utf8");
+      const blueprintContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-blueprint.md"), "utf8");
+      for (const [label, contractSource] of [["plan", planContract], ["blueprint", blueprintContract]]) {
+        assert(contractSource.includes("Design Contract"), `${rootRelativePath} ${label} output contract must include a Design Contract section`);
+        assert(contractSource.includes("contract_sha256"), `${rootRelativePath} ${label} output contract must require contract_sha256`);
+        assert(contractSource.includes("token constraints"), `${rootRelativePath} ${label} output contract must require token constraints`);
+        assert(contractSource.includes("guidance"), `${rootRelativePath} ${label} output contract must require Design System guidance`);
+        assert(contractSource.includes("source_catalog"), `${rootRelativePath} ${label} output contract must require Design System source_catalog`);
+      }
+
+      const composeInstructionPaths = [
+        "takt-marp-compose-sections.md",
+        "takt-marp-assemble-slides.md",
+        "takt-marp-compose-review.md",
+        "takt-marp-compose-work-summary.md",
+      ];
+      for (const fileName of composeInstructionPaths) {
+        const source = await readFile(path.join(facetRoot, "instructions", fileName), "utf8");
+        assert(source.includes("fingerprint.contract_sha256"), `${rootRelativePath}/${fileName} must compare marker fingerprint.contract_sha256`);
+        assert(source.includes("contract_sha256"), `${rootRelativePath}/${fileName} must compare artifact contract_sha256`);
+        assert(source.includes("guidance") || source.includes("source_catalog"), `${rootRelativePath}/${fileName} must read Design System guidance or source_catalog`);
+        if (fileName === "takt-marp-compose-review.md") {
+          assert(source.includes("各 `Layout`"), `${rootRelativePath}/${fileName} must compare planned Layout entries`);
+          assert(source.includes("slide `_class:`"), `${rootRelativePath}/${fileName} must compare planned Layout to slide _class`);
+          assert(source.includes("front matter CSS / token-driven class 定義"), `${rootRelativePath}/${fileName} must compare planned Layout to CSS definitions`);
+        }
+      }
+
+      const polishInspect = await readFile(path.join(facetRoot, "instructions", "takt-marp-polish-inspect.md"), "utf8");
+      assert(polishInspect.includes("design_contract.path"), `${rootRelativePath}/takt-marp-polish-inspect.md must branch on design_contract.path`);
+      assert(polishInspect.includes("fingerprint.contract_sha256"), `${rootRelativePath}/takt-marp-polish-inspect.md must compare contract fingerprints when present`);
+      assert(polishInspect.includes("token drift"), `${rootRelativePath}/takt-marp-polish-inspect.md must report token drift when Design Contract is present`);
+      assert(polishInspect.includes("legacy path"), `${rootRelativePath}/takt-marp-polish-inspect.md must preserve legacy path without Design Contract`);
+    }
+  });
+
   await check("runner uses selected workflow file path and preserves provider argument", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-runner-"));
     await makeDeck(root, "demo");
@@ -316,176 +542,14 @@ async function markComposeApproved(targetInfo) {
   await writeApproval(targetInfo, "compose", "foundation-test");
 }
 
-async function makeDeck(root, deckName) {
-  const deckPath = path.join(root, "slides", deckName);
-  await mkdir(path.join(deckPath, "review"), { recursive: true });
-  await writeFile(path.join(deckPath, "brief.md"), "# Brief\n");
-  const targetInfo = resolveDeckTarget(`slides/${deckName}`, { root });
-  await writeClaudeDesignSmokeFixture(targetInfo, { root });
-  return targetInfo;
-}
-
-async function makeSelectedWorkflowFile(command) {
-  const selectedSourceRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-source-"));
-  const selectedWorkflowPath = path.join(selectedSourceRoot, "workflows", `takt-marp-slide-${command}.yaml`);
-  await mkdir(path.dirname(selectedWorkflowPath), { recursive: true });
-  await writeFile(selectedWorkflowPath, `name: selected-${command}\n`, "utf8");
-  return selectedWorkflowPath;
-}
-
-async function makeFakePackageRoot() {
-  const packageRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-design-package-"));
-  for (const relative of [
-    "takt-marp-run-slide-workflow.mjs",
-    path.join("lib", "takt-marp-claude-design-source.mjs"),
-    path.join("lib", "takt-marp-design-contract-run-context.mjs"),
-    path.join("lib", "takt-marp-errors.mjs"),
-    path.join("lib", "takt-marp-project-templates.mjs"),
-    path.join("lib", "takt-marp-slide-workflow.mjs"),
-    path.join("lib", "takt-marp-runtime-context.mjs"),
-    path.join("lib", "takt-marp-zip-archive.mjs"),
-  ]) {
-    const destination = path.join(packageRoot, "scripts", relative);
-    await mkdir(path.dirname(destination), { recursive: true });
-    await cp(path.join(SCRIPT_DIR, relative), destination);
+async function expectFailure(fn, code) {
+  try {
+    await fn();
+  } catch (error) {
+    if (error.code === code) return;
+    throw new Error(`Expected ${code}, got ${error.code ?? error.message}`);
   }
-  await cp(path.join(ROOT_DIR, "node_modules", "fflate"), path.join(packageRoot, "node_modules", "fflate"), { recursive: true });
-  return {
-    packageRoot,
-    runnerScript: path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
-  };
-}
-
-async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {
-  const executablePath = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "takt.cmd" : "takt");
-  await mkdir(path.dirname(executablePath), { recursive: true });
-  await writeFile(executablePath, script, { encoding: "utf8", mode: 0o755 });
-}
-
-function fakeTaktScript(runIds, result) {
-  const lines = [
-    "#!/bin/sh",
-    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
-    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
-    "fi",
-    "target=\"\"",
-    "while [ \"$#\" -gt 0 ]; do",
-    "  if [ \"$1\" = \"-t\" ]; then",
-    "    shift",
-    "    target=\"$1\"",
-    "  fi",
-    "  shift",
-    "done",
-  ];
-  for (const runId of runIds) {
-    lines.push(
-      `mkdir -p .takt/runs/${runId}/reports`,
-      `cat > .takt/runs/${runId}/reports/brief.normalized.md <<EOF`,
-      "# Normalized Brief",
-      "",
-      `Mock normalized brief for ${runId}.`,
-      "EOF",
-      `cat > .takt/runs/${runId}/reports/reference-analysis.md <<EOF`,
-      "# Reference Deck Analysis",
-      "",
-      `Mock reference analysis for ${runId}.`,
-      "EOF",
-      `cat > .takt/runs/${runId}/reports/plan.md <<EOF`,
-      "# Slide Plan",
-      "",
-      "deliverables: [html, pdf]",
-      "",
-      `Mock plan for ${runId}.`,
-      "EOF",
-      `cat > .takt/runs/${runId}/reports/slide-blueprint.md <<EOF`,
-      "# Slide Blueprint",
-      "",
-      `Mock slide blueprint for ${runId}.`,
-      "EOF",
-      `cat > .takt/runs/${runId}/reports/plan-supervision.md <<EOF`,
-      "---",
-      "command: plan",
-      "target: $target",
-      "generated_at: 2026-06-05T17:10:00+09:00",
-      `workflow_run_id: ${runId}`,
-      "step: supervision",
-      "cycle: 1",
-      "state: planned",
-      `result: ${result}`,
-      "blocking_findings: 0",
-      "major_findings: 0",
-      "minor_findings: 0",
-      "info_findings: 0",
-      "---",
-      "",
-      "# Supervision",
-      "EOF",
-    );
-  }
-  lines.push("exit 0", "");
-  return lines.join("\n");
-}
-
-function fakeCommandTaktScript(runId, command, state, result) {
-  return [
-    "#!/bin/sh",
-    "target=\"\"",
-    "while [ \"$#\" -gt 0 ]; do",
-    "  if [ \"$1\" = \"-t\" ]; then",
-    "    shift",
-    "    target=\"$1\"",
-    "  fi",
-    "  shift",
-    "done",
-    `mkdir -p .takt/runs/${runId}/reports`,
-    `cat > .takt/runs/${runId}/reports/${command}-supervision.md <<EOF`,
-    "---",
-    `command: ${command}`,
-    "target: $target",
-    "generated_at: 2026-06-05T17:10:00+09:00",
-    `workflow_run_id: ${runId}`,
-    "step: supervision",
-    "cycle: 1",
-    `state: ${state}`,
-    `result: ${result}`,
-    "blocking_findings: 0",
-    "major_findings: 0",
-    "minor_findings: 0",
-    "info_findings: 0",
-    "---",
-    "",
-    "# Supervision",
-    "EOF",
-    "exit 0",
-    "",
-  ].join("\n");
-}
-
-async function writeSupervision(targetInfo, command, state, result, workflowRunId) {
-  await mkdir(targetInfo.reviewPath, { recursive: true });
-  await writeFile(supervisionPath(targetInfo, command), supervisionMarkdown(command, state, result, workflowRunId, targetInfo.target), "utf8");
-}
-
-function supervisionMarkdown(command, state, result, workflowRunId, target = "slides/demo") {
-  return [
-    "---",
-    `command: ${command}`,
-    `target: ${target}`,
-    "generated_at: 2026-06-05T17:10:00+09:00",
-    `workflow_run_id: ${workflowRunId}`,
-    "step: supervision",
-    "cycle: 1",
-    `state: ${state}`,
-    `result: ${result}`,
-    "blocking_findings: 0",
-    "major_findings: 0",
-    "minor_findings: 0",
-    "info_findings: 0",
-    "---",
-    "",
-    "# Supervision",
-    "",
-  ].join("\n");
+  throw new Error(`Expected failure ${code}`);
 }
 
 function assert(condition, message) {
