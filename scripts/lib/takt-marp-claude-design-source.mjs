@@ -207,6 +207,16 @@ export async function saveResolvedDesignContract(contract, targetInfo, options =
   });
 }
 
+export async function loadResolvedDesignContractMarker(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const contractPath = path.join(root, ".takt", "design-contracts", targetInfo.deckName, "resolved-design-contract.json");
+  if (!existsSync(contractPath)) {
+    return null;
+  }
+  const contract = JSON.parse(await readFile(contractPath, "utf8"));
+  return designContractMarkerPayload(contract, contractPath, root);
+}
+
 export function designContractMarkerPayload(contract, contractPath, root = process.cwd()) {
   return Object.freeze({
     source: contract.source,
@@ -301,16 +311,26 @@ function assertTokenConsistency(manifestTokens, cssTokens, sourcePath) {
   const cssNames = new Set(cssTokens.keys());
   const missingInCss = [...manifestNames].filter((name) => !cssNames.has(name)).sort();
   const missingInManifest = [...cssNames].filter((name) => !manifestNames.has(name)).sort();
-  if (missingInCss.length > 0 || missingInManifest.length > 0) {
+  const valueMismatches = manifestTokens
+    .filter((token) => cssTokens.has(token.name))
+    .filter((token) => normalizeTokenValue(token.value) !== normalizeTokenValue(cssTokens.get(token.name).value))
+    .map((token) => `${token.name}: manifest=${token.value || "(empty)"} css=${cssTokens.get(token.name).value || "(empty)"}`)
+    .sort();
+  if (missingInCss.length > 0 || missingInManifest.length > 0 || valueMismatches.length > 0) {
     throw new SlideWorkflowError(
       [
         `Claude Design token mismatch in ${sourcePath}.`,
         `Missing in CSS: ${missingInCss.join(", ") || "(none)"}`,
         `Missing in manifest: ${missingInManifest.join(", ") || "(none)"}`,
+        `Value mismatch: ${valueMismatches.join(", ") || "(none)"}`,
       ].join("\n"),
       "CLAUDE_DESIGN_SOURCE_INVALID",
     );
   }
+}
+
+function normalizeTokenValue(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
 }
 
 async function readAdherenceMetadata(archive) {

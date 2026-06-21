@@ -250,6 +250,7 @@ async function main() {
       buildClaudeDesignSmokeFixtureZipBuffer,
       importClaudeDesignSourceBuffer,
     } = await import("./lib/takt-marp-claude-design-source.mjs");
+    const { createZipArchiveBuffer } = await import("./lib/takt-marp-zip-archive.mjs");
     const sourcePath = path.join(ROOT_DIR, "slides", "demo", "design", "Claude Design Smoke.zip");
     const first = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
     const second = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
@@ -262,6 +263,22 @@ async function main() {
     assert(first.token_counts.spacing >= 1, `spacing token count too small: ${JSON.stringify(first.token_counts)}`);
     assert(first.adherence.available === true, "optional adherence metadata was not detected");
     assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
+
+    const mismatchedManifest = {
+      namespace: "ClaudeDesignMismatch",
+      globalCssPaths: ["styles.css"],
+      tokens: [{ name: "--accent", value: "#000000", kind: "color", definedIn: "tokens/colors.css" }],
+    };
+    await expectFailure(
+      () => importClaudeDesignSourceBuffer(createZipArchiveBuffer({
+        "_ds_manifest.json": `${JSON.stringify(mismatchedManifest)}\n`,
+        "styles.css": "",
+        "tokens/colors.css": ":root { --accent: #ffffff; }\n",
+        "tokens/typography.css": "",
+        "tokens/spacing.css": "",
+      }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
   });
 
   await check("project template copy rejects prohibited workflow/facet entries before writing", async () => {
@@ -1888,6 +1905,36 @@ async function main() {
     assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
     assert(result.stderr.includes("slides/demo/design"), `missing design source message did not identify design directory: ${result.stderr}`);
     assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source");
+  });
+
+  await check("runner preserves Design Contract marker for polish", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-design-marker-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const fakePackage = await makeFakePackageRoot();
+    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
+    let result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `plan runner failed before polish marker test: ${result.stderr}`);
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
+    await writeApproval(targetInfo, "compose", "foundation-test");
+
+    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
+    result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `polish runner failed after compose approval: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.command === "polish", `polish marker command mismatch: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `polish marker dropped design_contract: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.fingerprint?.contract_sha256, `polish marker missing contract fingerprint: ${JSON.stringify(marker)}`);
   });
 
   await check("research runner requires research brief before TAKT", async () => {
@@ -4072,6 +4119,41 @@ function fakeTaktScript(runNames, result) {
   }
   lines.push("exit 0", "");
   return lines.join("\n");
+}
+
+function fakeCommandTaktScript(runName, command, state, result) {
+  return [
+    "#!/bin/sh",
+    "target=\"\"",
+    "while [ \"$#\" -gt 0 ]; do",
+    "  if [ \"$1\" = \"-t\" ]; then",
+    "    shift",
+    "    target=\"$1\"",
+    "  fi",
+    "  shift",
+    "done",
+    `mkdir -p ".takt/runs/${runName}/reports"`,
+    `cat > ".takt/runs/${runName}/reports/${command}-supervision.md" <<EOF`,
+    "---",
+    `command: ${command}`,
+    "target: $target",
+    "generated_at: 2026-06-05T17:10:00+09:00",
+    `workflow_run_id: ${runName}`,
+    "step: supervision",
+    "cycle: 1",
+    `state: ${state}`,
+    `result: ${result}`,
+    "blocking_findings: 0",
+    "major_findings: 0",
+    "minor_findings: 0",
+    "info_findings: 0",
+    "---",
+    "",
+    "# Supervision",
+    "EOF",
+    "exit 0",
+    "",
+  ].join("\n");
 }
 
 function fakePlanTaktScriptWithOptionalResearchContext(runName, result) {

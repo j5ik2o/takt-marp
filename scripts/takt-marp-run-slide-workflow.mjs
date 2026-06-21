@@ -29,7 +29,10 @@ import {
   writeResearchReuseSidecar,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
-import { resolveAndSaveClaudeDesignContract } from "./lib/takt-marp-claude-design-source.mjs";
+import {
+  loadResolvedDesignContractMarker,
+  resolveAndSaveClaudeDesignContract,
+} from "./lib/takt-marp-claude-design-source.mjs";
 
 function usage() {
   return [
@@ -114,7 +117,7 @@ async function main() {
     }
     await writeCurrentWorkflowTarget(command, targetInfo, {
       researchReuseCandidate: preparedResearchReuseCandidate,
-      designContract: resolvedDesignContract?.markerPayload,
+      designContract: resolvedDesignContract?.markerPayload ?? (await existingDesignContractMarker(targetInfo)),
     });
     runSnapshotBefore = await snapshotTaktRuns(command);
     runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
@@ -245,6 +248,17 @@ async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
     `${JSON.stringify(marker, null, 2)}\n`,
     "utf8",
   );
+}
+
+async function existingDesignContractMarker(targetInfo) {
+  const markerPath = path.join(process.cwd(), ".takt", "workflow-current-target.json");
+  if (existsSync(markerPath)) {
+    const marker = JSON.parse(await readFile(markerPath, "utf8"));
+    if (marker.target === targetInfo.target && marker.design_contract) {
+      return marker.design_contract;
+    }
+  }
+  return loadResolvedDesignContractMarker(targetInfo);
 }
 
 function projectRelativeMarkerPath(filePath) {
