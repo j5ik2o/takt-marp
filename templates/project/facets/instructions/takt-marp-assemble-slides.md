@@ -2,7 +2,7 @@ section sourceからMarp Markdownをassembleしてください。
 
 **やること:**
 1. `brief.normalized.md`、`plan.md`、`slide-blueprint.md`、`.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract、`sections/manifest.md`、`sections/*.md` を読んでください。
-2. marker の contract fingerprint と `plan.md` / `slide-blueprint.md` に記録された fingerprint が一致することを確認してください。不一致の場合は `needs_input` とし、`SLIDES.md` を成功扱いで更新しないでください。
+2. marker の `design_contract.fingerprint.contract_sha256` と `plan.md` / `slide-blueprint.md` に記録された `contract_sha256` が一致することを確認してください。不一致の場合は `needs_input` とし、`SLIDES.md` を成功扱いで更新しないでください。
 3. `SLIDES.md` をMarp形式で作成または更新してください。
 4. front matter、theme、global style、deck-wide CSS tokenは `SLIDES.md` にだけ書いてください。section fileにはfront matterを残さないでください。
 5. `sections/manifest.md` の順序でsection fileを連結し、slide IDが `S001` からplanned slide countまで欠落・重複なく並ぶことを確認してください。

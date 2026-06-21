@@ -266,8 +266,9 @@ async function main() {
     const {
       buildClaudeDesignSmokeFixtureZipBuffer,
       importClaudeDesignSourceBuffer,
+      importClaudeDesignSourceArchive,
     } = await import("./lib/takt-marp-claude-design-source.mjs");
-    const { createZipArchiveBuffer } = await import("./lib/takt-marp-zip-archive.mjs");
+    const { ZipArchiveReader, createZipArchiveBuffer } = await import("./lib/takt-marp-zip-archive.mjs");
     const sourcePath = path.join(ROOT_DIR, "slides", "demo", "design", "Claude Design Smoke.zip");
     const first = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
     const second = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
@@ -293,6 +294,16 @@ async function main() {
         "tokens/colors.css": ":root { --accent: #ffffff; }\n",
         "tokens/typography.css": "",
         "tokens/spacing.css": "",
+      }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+    await expectFailure(
+      () => importClaudeDesignSourceArchive(new ZipArchiveReader({
+        "_ds_manifest.json": Buffer.from(`${JSON.stringify(mismatchedManifest)}\n`),
+        "styles.css": Buffer.from(""),
+        "tokens/colors.css": Buffer.from(":root { --accent: #000000; }\n"),
+        "tokens/typography.css": Buffer.from(""),
+        "tokens/spacing.css": Buffer.from(""),
       }), { sourcePath, root: ROOT_DIR, deckName: "demo" }),
       "CLAUDE_DESIGN_SOURCE_INVALID",
     );
@@ -1356,6 +1367,18 @@ async function main() {
         assert(contractSource.includes("Design Contract"), `${rootRelativePath} ${label} output contract must include a Design Contract section`);
         assert(contractSource.includes("contract_sha256"), `${rootRelativePath} ${label} output contract must require contract_sha256`);
         assert(contractSource.includes("token constraints"), `${rootRelativePath} ${label} output contract must require token constraints`);
+      }
+
+      const composeInstructionPaths = [
+        "takt-marp-compose-sections.md",
+        "takt-marp-assemble-slides.md",
+        "takt-marp-compose-review.md",
+        "takt-marp-compose-work-summary.md",
+      ];
+      for (const fileName of composeInstructionPaths) {
+        const source = await readFile(path.join(facetRoot, "instructions", fileName), "utf8");
+        assert(source.includes("fingerprint.contract_sha256"), `${rootRelativePath}/${fileName} must compare marker fingerprint.contract_sha256`);
+        assert(source.includes("contract_sha256"), `${rootRelativePath}/${fileName} must compare artifact contract_sha256`);
       }
     }
   });

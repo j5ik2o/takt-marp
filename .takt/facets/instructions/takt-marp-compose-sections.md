@@ -2,7 +2,7 @@
 
 **やること:**
 1. `brief.normalized.md`、`reference-analysis.md`、`plan.md`、`slide-blueprint.md`、`.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract を読んでください。
-2. marker の contract fingerprint と `plan.md` / `slide-blueprint.md` に記録された fingerprint が一致することを確認してください。不一致の場合は `needs_input` とし、`SLIDES.md` や `sections/*` を成功扱いで更新しないでください。
+2. marker の `design_contract.fingerprint.contract_sha256` と `plan.md` / `slide-blueprint.md` に記録された `contract_sha256` が一致することを確認してください。不一致の場合は `needs_input` とし、`SLIDES.md` や `sections/*` を成功扱いで更新しないでください。
 3. `slides/<deck>/sections/manifest.md` を作成または更新してください。
 4. `slide-blueprint.md` の Section Assembly Manifest に従い、`slides/<deck>/sections/*.md` を作成または更新してください。
 5. 各section fileはfront matterなしのMarp本文断片にしてください。section fileの先頭slideは `---` delimiterで始めず、`<!-- slide_id: SNNN -->` から始めてください。2枚目以降のslideだけ `---` delimiterで区切り、各slideに `<!-- slide_id: SNNN -->` を入れてください。
@@ -26,7 +26,7 @@
 - Section manifest:
 - Section files:
 - Slide count:
-- Design contract fingerprint:
+- Design contract_sha256:
 - HTML visuals:
 - Visual placeholders:
 - Files changed:

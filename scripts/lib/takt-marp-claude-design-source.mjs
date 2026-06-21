@@ -146,7 +146,7 @@ export async function importClaudeDesignSourceBuffer(buffer, options = {}) {
 export async function importClaudeDesignSourceArchive(archive, options = {}) {
   const sourcePath = options.sourcePath ?? archive.sourcePath ?? "Claude Design Source.zip";
   const root = options.root ?? process.cwd();
-  const sourceSha256 = archive.sourceSha256 ?? createHash("sha256").update(await archive.readEntry("_ds_manifest.json")).digest("hex");
+  const sourceSha256 = requireArchiveSourceSha256(archive, sourcePath);
   assertRequiredFiles(archive, sourcePath);
   const manifest = parseManifest(await archive.readText("_ds_manifest.json"), sourcePath);
   const tokenCss = await readTokenCss(archive);
@@ -190,6 +190,16 @@ export async function importClaudeDesignSourceArchive(archive, options = {}) {
       contract_sha256: contractSha256,
     },
   });
+}
+
+function requireArchiveSourceSha256(archive, sourcePath) {
+  if (typeof archive.sourceSha256 === "string" && archive.sourceSha256) {
+    return archive.sourceSha256;
+  }
+  throw new SlideWorkflowError(
+    `Claude Design Source archive is missing full zip SHA-256 metadata: ${sourcePath}. Import from a zip file or buffer.`,
+    "CLAUDE_DESIGN_SOURCE_INVALID",
+  );
 }
 
 export async function saveResolvedDesignContract(contract, targetInfo, options = {}) {
