@@ -2216,6 +2216,38 @@ async function main() {
     assert(!existsSync(researchArtifacts.report), "zero-exit rejected research synced research-report.md despite rejected supervision");
   });
 
+  await check("research zero-exit artifact sync failure creates reuse sidecar", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-zero-exit-sync-missing-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const researchArtifacts = researchArtifactPaths(targetInfo);
+    await mkdir(targetInfo.researchPath, { recursive: true });
+    await writeFile(researchArtifacts.brief, "# Research Brief\n\nZero exit sync missing\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("research");
+    const fakePackage = await makeFakePackageRoot();
+    await makeBuiltinDeepResearchWorkflow(fakePackage.packageRoot);
+    await makeTaktExecutable(
+      fakePackage.packageRoot,
+      fakeResearchTaktScriptWithArtifacts("run-sync-missing-zero", "passed", targetInfo.target, {
+        extraLines: ['rm ".takt/runs/run-sync-missing-zero/reports/research-sources.md"'],
+      }),
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "research", "slides/demo", "--workflow-file", selectedWorkflowPath],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status !== 0, "zero-exit artifact sync failure unexpectedly succeeded");
+    assert(
+      result.stderr.includes("TAKT_RESEARCH_ARTIFACT_SYNC_MISSING:"),
+      `zero-exit artifact sync failure did not report TAKT_RESEARCH_ARTIFACT_SYNC_MISSING: ${result.stderr}`,
+    );
+    const candidate = await resolveResearchReuseCandidate(targetInfo, { root });
+    assert(candidate, "zero-exit artifact sync failure did not create a reuse sidecar");
+    assert(candidate.source_run === "run-sync-missing-zero", `zero-exit sync failure sidecar source run mismatch: ${JSON.stringify(candidate)}`);
+    assert(!existsSync(researchArtifacts.report), "zero-exit artifact sync failure synced research-report.md despite missing adapter artifact");
+  });
+
   await check("research TAKT failure preserves existing plan state and review artifacts", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-external-failure-"));
     const targetInfo = await makeDeck(root, "demo");

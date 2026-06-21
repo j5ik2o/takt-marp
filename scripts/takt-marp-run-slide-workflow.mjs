@@ -146,7 +146,7 @@ async function main() {
       await deleteResearchReuseSidecar(targetInfo);
     } catch (error) {
       await preparedResearchReuseCandidate?.restoreSourceReport();
-      if (!researchReuseCandidate && error.code === "TAKT_RESEARCH_SUPERVISION_NOT_PASSED") {
+      if (!researchReuseCandidate && error.code !== "TAKT_RESEARCH_SOURCE_REPORT_AMBIGUOUS") {
         await writeResearchReuseSidecarFromFailedRun(targetInfo, runDirectorySnapshotBefore);
       }
       throw error;
