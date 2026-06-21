@@ -53,9 +53,9 @@
   - research metadata と design metadata を別 field に保ち、Plan Optional Context と混同しない。
   - 通常実行で `.takt/workflows`、`.takt/facets`、package template asset を consumer workspace へ自動コピーしない。
   - `plan` / `compose` の rejected rerun では、rejected artifact archive より前に Claude Design Source を validation する。
-  - `polish` / `deliver` / `research` では、同一 target の既存 marker または保存済み Resolved Design Contract から `design_contract` を引き継ぐ。既存 marker が malformed、`design_contract.path` が存在しない stale marker、既存 marker の path が指す Resolved Design Contract が corrupt、または保存済み Resolved Design Contract が corrupt な場合は読み捨て、保存済み marker または `null` へフォールバックする。
-  - 完了条件: runner fixture で marker に `design_contract` が入り、research marker と共存しても field が混ざらず、template copy が発生せず、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt marker の破棄、corrupt existing marker payload の破棄を検証できる。
-  - _Requirements:_ 3.3, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 7.1, 7.2, 7.3, 7.4
+  - `polish` / `deliver` / `research` では、同一 target の既存 marker または保存済み Resolved Design Contract から `design_contract` を引き継ぐ。既存 marker が malformed、`design_contract.path` が存在しない stale marker、既存 marker の path が指す Resolved Design Contract が corrupt、fingerprint field が欠けている、または保存済み Resolved Design Contract が corrupt な場合は読み捨て、保存済み marker または `null` へフォールバックする。
+  - 完了条件: runner fixture で marker に `design_contract` が入り、research marker と共存しても field が混ざらず、template copy が発生せず、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt marker の破棄、corrupt existing marker payload と incomplete fingerprint marker payload の破棄を検証できる。
+  - _Requirements:_ 3.3, 3.5, 3.6, 3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 7.1, 7.2, 7.3, 7.4
   - _Boundary:_ WorkflowHandoffMarker
   - _Depends:_ 2.3
 

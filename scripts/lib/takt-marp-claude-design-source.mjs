@@ -294,8 +294,12 @@ export async function loadDesignContractMarkerPayloadFromPath(contractPath, opti
 function isResolvedDesignContractShape(contract) {
   return isPlainObject(contract) &&
     isPlainObject(contract.source) &&
+    typeof contract.source.path === "string" &&
+    typeof contract.source.sha256 === "string" &&
     typeof contract.source.namespace === "string" &&
     isPlainObject(contract.fingerprint) &&
+    typeof contract.fingerprint.source_sha256 === "string" &&
+    typeof contract.fingerprint.contract_sha256 === "string" &&
     isPlainObject(contract.token_counts) &&
     Array.isArray(contract.brand_fonts) &&
     isPlainObject(contract.components) &&

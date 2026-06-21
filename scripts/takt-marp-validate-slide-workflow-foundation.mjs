@@ -2241,6 +2241,41 @@ async function main() {
     assert(!marker.design_contract, `polish marker kept corrupt existing design_contract: ${JSON.stringify(marker)}`);
   });
 
+  await check("runner rejects incomplete Design Contract fingerprint before polish", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-incomplete-design-fingerprint-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const fakePackage = await makeFakePackageRoot();
+    const planWorkflowPath = await makeSelectedWorkflowFile("plan");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-plan"], "passed"));
+    let result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", planWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `plan runner failed before incomplete fingerprint test: ${result.stderr}`);
+    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
+    const contractPath = path.join(root, planMarker.design_contract.path);
+    const contract = JSON.parse(await readFile(contractPath, "utf8"));
+    contract.fingerprint = {};
+    await writeFile(contractPath, `${JSON.stringify(contract, null, 2)}\n`, "utf8");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
+    await writeApproval(targetInfo, "compose", "foundation-test");
+
+    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
+    result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `polish runner failed with incomplete design fingerprint: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.command === "polish", `polish marker command mismatch after incomplete fingerprint fallback: ${JSON.stringify(marker)}`);
+    assert(!marker.design_contract, `polish marker kept incomplete fingerprint design_contract: ${JSON.stringify(marker)}`);
+  });
+
   await check("runner ignores stale Design Contract marker for polish", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-polish-stale-design-marker-"));
     const targetInfo = await makeDeck(root, "demo");

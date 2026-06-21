@@ -82,6 +82,8 @@
 
 3.11. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 marker の target が一致し `design_contract.path` が存在する場合でも、その path の Resolved Design Contract が malformed JSON または marker payload を作れない shape であれば、slide workflow は既存 marker の `design_contract` を再利用してはならない。
 
+3.12. Resolved Design Contract から marker payload を作る場合、slide workflow は `source.path`、`source.sha256`、`source.namespace`、`fingerprint.source_sha256`、`fingerprint.contract_sha256` を必須 field として扱い、欠けている場合は valid な Design Contract marker として扱ってはならない。
+
 ### 要件 4: plan は Design Contract を使って実現可能な構成を計画する
 
 **目的:** deck 作成者として、`compose` が実現できる layout と visual だけを `plan` に出してほしい。そうすることで、後続工程で style 不一致による手戻りを減らせる
