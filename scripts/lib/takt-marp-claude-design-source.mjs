@@ -24,6 +24,21 @@ const REQUIRED_MANIFEST_FIELDS = Object.freeze(["namespace", "globalCssPaths", "
 const PRIMARY_GUIDANCE_PATHS = Object.freeze(["SKILL.md", "readme.md", "README.md"]);
 const GUIDANCE_TEXT_LIMIT = 24_000;
 const COMPONENT_PROMPT_TEXT_LIMIT = 8_000;
+const GENERIC_FONT_FAMILIES = Object.freeze(new Set([
+  "serif",
+  "sans-serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+  "system-ui",
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "ui-rounded",
+  "emoji",
+  "math",
+  "fangsong",
+]));
 
 export async function resolveAndSaveClaudeDesignContract(targetInfo, options = {}) {
   const resolved = await resolveClaudeDesignContract(targetInfo, options);
@@ -216,6 +231,9 @@ export async function loadDesignContractMarkerPayloadFromPath(contractPath, opti
   if (!isResolvedDesignContractShape(contract)) {
     return null;
   }
+  if (!hasMatchingStoredContractHash(contract)) {
+    return null;
+  }
   return designContractMarkerPayload(contract, contractPath, root);
 }
 
@@ -232,6 +250,19 @@ function isResolvedDesignContractShape(contract) {
     Array.isArray(contract.brand_fonts) &&
     isPlainObject(contract.components) &&
     isPlainObject(contract.adherence);
+}
+
+function hasMatchingStoredContractHash(contract) {
+  return sha256Stable(contractHashInput(contract)) === contract.fingerprint.contract_sha256;
+}
+
+function contractHashInput(contract) {
+  const fingerprint = { ...contract.fingerprint };
+  delete fingerprint.contract_sha256;
+  return {
+    ...contract,
+    fingerprint,
+  };
 }
 
 function isPlainObject(value) {
@@ -418,8 +449,11 @@ async function readGuidanceText(archive, filePath, kind, maxChars) {
 function buildSourceCatalog(manifest, archive, guidance) {
   const entryNames = archive.entryNames();
   const components = normalizeCatalogItems(manifest.components).map((item) => enrichComponentCatalogItem(item, entryNames));
+  const startingPoints = normalizeCatalogItems(manifest.startingPoints);
   const cards = normalizeCatalogItems(manifest.cards);
   const templates = normalizeCatalogItems(manifest.templates);
+  const themes = normalizeCatalogItems(manifest.themes);
+  const fonts = normalizeCatalogItems(manifest.fonts);
   const sampleSlides = collectFileCatalogEntries(entryNames, "slides/", (name) => name.endsWith(".html"))
     .map((entry) => enrichCatalogEntryFromCards(entry, cards));
   const guidelines = collectFileCatalogEntries(entryNames, "guidelines/", (name) => name.endsWith(".card.html"))
@@ -429,8 +463,11 @@ function buildSourceCatalog(manifest, archive, guidance) {
   return deepFreeze({
     counts: {
       components: components.length,
+      starting_points: startingPoints.length,
       cards: cards.length,
       templates: templates.length,
+      themes: themes.length,
+      fonts: fonts.length,
       sample_slides: sampleSlides.length,
       guidelines: guidelines.length,
       assets: assets.length,
@@ -438,8 +475,11 @@ function buildSourceCatalog(manifest, archive, guidance) {
       component_prompts: guidance.component_prompts.length,
     },
     components,
+    starting_points: startingPoints,
     cards,
     templates,
+    themes,
+    fonts,
     sample_slides: sampleSlides,
     guidelines,
     assets,
@@ -463,7 +503,7 @@ function normalizeCatalogItem(item, index) {
     return Object.freeze({});
   }
   const normalized = { index };
-  for (const key of ["name", "title", "description", "path", "sourcePath", "entryPath", "folder", "group", "viewport", "subtitle", "kind", "category"]) {
+  for (const key of ["id", "name", "label", "title", "description", "path", "sourcePath", "entryPath", "folder", "group", "viewport", "subtitle", "kind", "category", "family", "status"]) {
     if (typeof item[key] === "string" && item[key].trim()) {
       normalized[key] = item[key].trim();
     }
@@ -539,13 +579,44 @@ function brandFonts(manifest, tokens) {
   const fonts = new Set(manifestBrandFontFamilies(manifest.brandFonts));
   for (const token of tokens) {
     if (token.name.startsWith("--font")) {
-      const match = token.value.match(/['"]([^'"]+)['"]/);
-      if (match) {
-        fonts.add(match[1]);
+      for (const family of cssFontFamilies(token.value)) {
+        fonts.add(family);
       }
     }
   }
   return Object.freeze([...fonts].sort());
+}
+
+function cssFontFamilies(value) {
+  return splitCssCommaList(value)
+    .map((family) => family.trim().replace(/^['"]|['"]$/g, "").trim())
+    .filter((family) => family && !isGenericFontFamily(family));
+}
+
+function splitCssCommaList(value) {
+  const items = [];
+  let current = "";
+  let quote = "";
+  for (const char of String(value ?? "")) {
+    if ((char === "\"" || char === "'") && !quote) {
+      quote = char;
+      current += char;
+    } else if (char === quote) {
+      quote = "";
+      current += char;
+    } else if (char === "," && !quote) {
+      items.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  items.push(current);
+  return items;
+}
+
+function isGenericFontFamily(family) {
+  return GENERIC_FONT_FAMILIES.has(family.toLowerCase());
 }
 
 function manifestBrandFontFamilies(brandFonts) {

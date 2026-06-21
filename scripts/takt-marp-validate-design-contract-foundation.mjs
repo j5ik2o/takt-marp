@@ -18,6 +18,7 @@ import {
 import {
   importClaudeDesignSourceArchive,
   importClaudeDesignSourceBuffer,
+  resolveClaudeDesignContract,
 } from "./lib/takt-marp-claude-design-source.mjs";
 import {
   createZipArchiveBuffer,
@@ -100,9 +101,12 @@ export async function runDesignContractFoundationChecks(check) {
     assert(first.guidance.documents.some((item) => item.path === "readme.md" && item.kind === "readme"), `readme guidance was not captured: ${JSON.stringify(first.guidance)}`);
     assert(first.guidance.component_prompts.some((item) => item.path === "components/demo/Metric.prompt.md" && item.text.includes("Metric")), `component prompt guidance was not captured: ${JSON.stringify(first.guidance)}`);
     assert(first.source_catalog.counts.components === 1, `component catalog count mismatch: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.starting_points.some((item) => item.name === "Lecture kickoff"), `starting point catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.cards.some((item) => item.path === "guidelines/overview.card.html"), `card catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.sample_slides.some((item) => item.path === "slides/cover.html"), `sample slide catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.templates.some((item) => item.entryPath === "templates/generic-deck/GenericDeck.dc.html"), `template catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.themes.some((item) => item.name === "High contrast light"), `theme catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.fonts.some((item) => item.family === "Noto Sans JP"), `font catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.assets.some((item) => item.path === "assets/mark.svg"), `asset catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
 
@@ -145,8 +149,9 @@ export async function runDesignContractFoundationChecks(check) {
     const compoundManifest = {
       namespace: "ClaudeDesignCompoundTokens",
       globalCssPaths: ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
-      brandFonts: [{ family: "Inter", status: "available" }],
+      brandFonts: [{ family: "Noto Sans JP", status: "available" }],
       tokens: [
+        { name: "--font-heading", value: "Inter, sans-serif", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--text-body", value: "16px", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--button-text-size", value: "12px", kind: "spacing", definedIn: "tokens/spacing.css" },
         { name: "--bg-page", value: "#ffffff", kind: "color", definedIn: "tokens/colors.css" },
@@ -156,14 +161,15 @@ export async function runDesignContractFoundationChecks(check) {
       "_ds_manifest.json": `${JSON.stringify(compoundManifest)}\n`,
       "styles.css": "",
       "tokens/colors.css": ":root { --bg-page: #ffffff; }\n",
-      "tokens/typography.css": ":root { --text-body: 16px; }\n",
+      "tokens/typography.css": ":root { --font-heading: Inter, sans-serif; --text-body: 16px; }\n",
       "tokens/spacing.css": ":root { --button-text-size: 12px; }\n",
     }), { sourcePath, root: ROOT_DIR, deckName: "demo" });
     const categories = Object.fromEntries(classified.tokens.map((token) => [token.name, token.category]));
     assert(categories["--text-body"] === "typography", `typography path token misclassified: ${JSON.stringify(categories)}`);
     assert(categories["--button-text-size"] === "spacing", `spacing path token with text in name misclassified: ${JSON.stringify(categories)}`);
     assert(categories["--bg-page"] === "color", `color path token misclassified: ${JSON.stringify(categories)}`);
-    assert(classified.brand_fonts.includes("Inter"), `object brandFonts family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(classified.brand_fonts.includes("Noto Sans JP"), `object brandFonts family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(classified.brand_fonts.includes("Inter"), `unquoted font token family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
   });
 
   await check("slide commands resolve or preserve Design Contract by lifecycle phase", async () => {
@@ -399,6 +405,34 @@ export async function runDesignContractFoundationChecks(check) {
     assert(!existsSync(argsPath), "TAKT was invoked despite force archive failure");
   });
 
+  await check("compose force validates approved plan Design Contract fingerprint before archiving artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-compose-force-plan-fingerprint-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const currentContract = (await resolveClaudeDesignContract(targetInfo, { root })).contract;
+    await writePlanDesignContractArtifacts(targetInfo, currentContract.fingerprint.contract_sha256);
+    await markComposeApproved(targetInfo);
+    await mkdir(path.join(root, "dist", "demo"), { recursive: true });
+    await writeFile(path.join(root, "dist", "demo", "SLIDES.pdf"), "old pdf", "utf8");
+    await writeFile(path.join(targetInfo.deckPath, "design", "Claude Design Smoke.zip"), changedClaudeDesignSourceBuffer());
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("compose");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-compose", "compose", "composed", "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "compose", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock", "--force"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "compose force unexpectedly accepted stale plan Design Contract fingerprint");
+    assert(result.stderr.includes("DESIGN_CONTRACT_PLAN_FINGERPRINT_MISMATCH:"), `compose force mismatch did not surface DESIGN_CONTRACT_PLAN_FINGERPRINT_MISMATCH: ${result.stderr}`);
+    assert(existsSync(supervisionPath(targetInfo, "compose")), "compose force archived supervision before validating plan Design Contract fingerprint");
+    assert(existsSync(approvalPath(targetInfo, "compose")), "compose force archived approval before validating plan Design Contract fingerprint");
+    assert(existsSync(path.join(root, "dist", "demo", "SLIDES.pdf")), "compose force cleaned generated outputs before validating plan Design Contract fingerprint");
+    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "compose force created review history before validating plan Design Contract fingerprint");
+    assert(!existsSync(argsPath), "TAKT was invoked despite stale plan Design Contract fingerprint");
+  });
+
   await check("runner preserves Design Contract marker for polish", async () => {
     const { root, targetInfo, fakePackage } = await prepareApprovedComposeFixture("slide-workflow-polish-design-marker-");
     const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
@@ -495,6 +529,28 @@ export async function runDesignContractFoundationChecks(check) {
     assert(!marker.design_contract, `polish marker kept incomplete fingerprint design_contract: ${JSON.stringify(marker)}`);
   });
 
+  await check("runner rejects stale Design Contract hash before polish", async () => {
+    const { root, fakePackage } = await prepareApprovedComposeFixture("slide-workflow-polish-stale-design-contract-hash-");
+    const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(planMarker.design_contract?.path, `plan marker did not create design_contract: ${JSON.stringify(planMarker)}`);
+    const contractPath = path.join(root, planMarker.design_contract.path);
+    const contract = JSON.parse(await readFile(contractPath, "utf8"));
+    contract.tokens[0].value = "__tampered_without_rehash__";
+    await writeFile(contractPath, `${JSON.stringify(contract, null, 2)}\n`, "utf8");
+
+    const polishWorkflowPath = await makeSelectedWorkflowFile("polish");
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-polish", "polish", "polished", "passed"));
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "polish", "slides/demo", "--workflow-file", polishWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `polish runner failed after stale contract hash setup: ${result.stderr}`);
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.command === "polish", `polish marker command mismatch after stale contract hash fallback: ${JSON.stringify(marker)}`);
+    assert(!marker.design_contract, `polish marker kept stale hash design_contract: ${JSON.stringify(marker)}`);
+  });
+
   await check("runner ignores stale Design Contract marker for polish", async () => {
     const { root, fakePackage } = await prepareApprovedComposeFixture("slide-workflow-polish-stale-design-marker-");
     const planMarker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
@@ -540,6 +596,37 @@ async function markComposeApproved(targetInfo) {
   await writeApproval(targetInfo, "plan", "foundation-test");
   await writeSupervision(targetInfo, "compose", "composed", "passed", "run-compose");
   await writeApproval(targetInfo, "compose", "foundation-test");
+}
+
+async function writePlanDesignContractArtifacts(targetInfo, contractSha256) {
+  const lines = [
+    "# Slide Plan",
+    "",
+    "## Design Contract",
+    `- Contract fingerprint: ${contractSha256}`,
+    "",
+  ].join("\n");
+  await writeFile(path.join(targetInfo.deckPath, "plan.md"), lines, "utf8");
+  await writeFile(path.join(targetInfo.deckPath, "slide-blueprint.md"), lines.replace("# Slide Plan", "# Slide Blueprint"), "utf8");
+}
+
+function changedClaudeDesignSourceBuffer() {
+  const manifest = {
+    namespace: "ClaudeDesignChanged",
+    globalCssPaths: ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
+    tokens: [
+      { name: "--accent", value: "#004488", kind: "color", definedIn: "tokens/colors.css" },
+      { name: "--font-body", value: "'Noto Sans JP', sans-serif", kind: "font", definedIn: "tokens/typography.css" },
+      { name: "--space-4", value: "20px", kind: "spacing", definedIn: "tokens/spacing.css" },
+    ],
+  };
+  return createZipArchiveBuffer({
+    "_ds_manifest.json": `${JSON.stringify(manifest, null, 2)}\n`,
+    "styles.css": "",
+    "tokens/colors.css": ":root { --accent: #004488; }\n",
+    "tokens/typography.css": ":root { --font-body: 'Noto Sans JP', sans-serif; }\n",
+    "tokens/spacing.css": ":root { --space-4: 20px; }\n",
+  });
 }
 
 async function expectFailure(fn, code) {

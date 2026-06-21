@@ -52,7 +52,7 @@
 
 2.7. slide workflow が token category を分類するとき、manifest の `kind` だけに依存せず、token name prefix と source CSS path も使って colors / typography / spacing / radius / shadow / font を分類しなければならない。
 
-2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は font token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。
+2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は引用符あり / なしの CSS font-family token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。
 
 ### 要件 3: Resolved Design Contract を workflow に引き渡す
 
@@ -84,6 +84,8 @@
 
 3.12. Resolved Design Contract から marker payload を作る場合、slide workflow は `source.path`、`source.sha256`、`source.namespace`、`fingerprint.source_sha256`、`fingerprint.contract_sha256` を必須 field として扱い、欠けている場合は valid な Design Contract marker として扱ってはならない。
 
+3.13. 保存済み Resolved Design Contract から marker payload を作る場合、slide workflow は `fingerprint.contract_sha256` を再計算し、保存済み値と一致しない場合は valid な Design Contract marker として扱ってはならない。
+
 ### 要件 4: plan は Design Contract を使って実現可能な構成を計画する
 
 **目的:** deck 作成者として、`compose` が実現できる layout と visual だけを `plan` に出してほしい。そうすることで、後続工程で style 不一致による手戻りを減らせる
@@ -108,7 +110,7 @@
 
 #### 受け入れ基準
 
-5.1. `compose` が実行されたとき、slide workflow は marker の Resolved Design Contract fingerprint と `plan.md` / `slide-blueprint.md` に記録された fingerprint を照合しなければならない。
+5.1. `compose` が実行されたとき、slide workflow は marker の Resolved Design Contract fingerprint と `plan.md` / `slide-blueprint.md` に記録された fingerprint を照合しなければならない。`compose --force` の場合、この照合は既存成果物の archive / clean より前に行わなければならない。
 
 5.2. fingerprint が一致しない場合、slide workflow は compose の `needs_input` または review blocker として不一致を報告し、`SLIDES.md` や `sections/*` の生成を成功扱いしてはならない。
 
@@ -172,7 +174,7 @@
 
 8.1. メンテナが smoke validation を実行したとき、slide workflow は `design-system.md` の存在ではなく、Claude Design Source の解決、Resolved Design Contract の生成、`plan` への反映、`compose` への適用を検証しなければならない。
 
-8.2. smoke validation が Claude Design Source の fixture を使うとき、slide workflow は `_ds_manifest.json`、token CSS、optional adherence metadata、`SKILL.md` / `readme.md` guidance、component prompt、card、sample slide、template、asset catalog を含む sample を検証しなければならない。
+8.2. smoke validation が Claude Design Source の fixture を使うとき、slide workflow は `_ds_manifest.json`、token CSS、optional adherence metadata、`SKILL.md` / `readme.md` guidance、component prompt、starting point、card、sample slide、template、theme、font、asset catalog を含む sample を検証しなければならない。
 
 8.3. メンテナが foundation validation を実行したとき、slide workflow は marker shape、plan metadata、compose fingerprint check、legacy `design-system.md` 非依存を検証しなければならない。
 
@@ -182,7 +184,7 @@
 
 8.6. Claude Design Source の検証が失敗した場合、slide workflow は失敗した source file、対象 command、確認すべき artifact を利用者またはメンテナが特定できる結果を表示しなければならない。
 
-8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker の破棄を検証しなければならない。
+8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、stale contract hash の破棄を検証しなければならない。
 
 ### 要件 9: 既存 deck と既存成果物への影響を限定する
 
