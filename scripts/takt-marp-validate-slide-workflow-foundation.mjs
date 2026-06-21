@@ -1417,6 +1417,11 @@ async function main() {
         assert(source.includes("fingerprint.contract_sha256"), `${rootRelativePath}/${fileName} must compare marker fingerprint.contract_sha256`);
         assert(source.includes("contract_sha256"), `${rootRelativePath}/${fileName} must compare artifact contract_sha256`);
         assert(source.includes("guidance") || source.includes("source_catalog"), `${rootRelativePath}/${fileName} must read Design System guidance or source_catalog`);
+        if (fileName === "takt-marp-compose-review.md") {
+          assert(source.includes("各 `Layout`"), `${rootRelativePath}/${fileName} must compare planned Layout entries`);
+          assert(source.includes("slide `_class:`"), `${rootRelativePath}/${fileName} must compare planned Layout to slide _class`);
+          assert(source.includes("front matter CSS / token-driven class 定義"), `${rootRelativePath}/${fileName} must compare planned Layout to CSS definitions`);
+        }
       }
 
       const polishInspect = await readFile(path.join(facetRoot, "instructions", "takt-marp-polish-inspect.md"), "utf8");
