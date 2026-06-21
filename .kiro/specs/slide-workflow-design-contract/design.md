@@ -257,6 +257,8 @@ Optional manifest fields:
 - `fonts`
 - `brandFonts`
 
+`namespace` は空でない string、`globalCssPaths` と `tokens` は array として検証する。`brandFonts` は string 配列、または `family` を持つ object 配列を受け付け、Resolved Design Contract の `brand_fonts` へ font family string として正規化する。
+
 ### Resolved Design Contract JSON
 
 ```json
@@ -504,7 +506,9 @@ interface ZipArchiveReader {
 
 - required files と required manifest fields を検証する。
 - `_ds_manifest.json` は JSON object であることを検証し、`null`、文字列、配列などは `CLAUDE_DESIGN_SOURCE_INVALID` とする。
+- `namespace` は空でない string、`globalCssPaths` と `tokens` は array であることを検証する。
 - manifest token と CSS custom property の名前と値の一致を検証する。
+- manifest `brandFonts` は string entry と object entry の `family` をどちらも font family として正規化し、font token 由来の family と合わせて重複を除く。
 - `_adherence.oxlintrc.json` がある場合は `x-omelette.tokens` / `x-omelette.components` の counts と review rule names を取り込む。
 - `SKILL.md` / `readme.md` / component prompt がある場合は `guidance` として取り込む。
 - components / cards / templates / sample slides / guidelines / assets がある場合は `source_catalog` として取り込む。
@@ -574,6 +578,7 @@ interface ResolvedDesignContract {
 - force invalidation が失敗した場合は、旧 supervision / approval / generated output と旧 Resolved Design Contract を残し、古い source artifact と新しい contract だけが混在する状態を作らない。
 - `polish`、`deliver`、`research` のように新しい Design Contract を生成しない command では、同一 target の既存 marker または `.takt/design-contracts/<deck>/resolved-design-contract.json` から `design_contract` を引き継ぐ。
 - 既存 marker が malformed JSON の場合は marker を読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く。
+- 既存 marker の target が一致しても `design_contract.path` が存在しない場合は stale marker として扱い、その marker の `design_contract` を引き継がない。保存済み Resolved Design Contract が存在すればそこから復旧し、存在しなければ `null` にフォールバックする。
 
 ### PlanFacetContract
 
@@ -633,7 +638,7 @@ interface ResolvedDesignContract {
 - plan / blueprint が `contract_sha256` を記録し、CSS を含まないことを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-- invalid sibling zip、JSON object ではない manifest、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧を検証する。
+- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、stale Design Contract marker の破棄を検証する。
 - Design Contract なしの legacy polish path で inspect / fix が blocked にならないことを facet 文言として検証する。
 
 ### package / global install / no-copy validation
@@ -668,6 +673,7 @@ interface ResolvedDesignContract {
 | 2.5 | manifest / CSS token consistency |
 | 2.6 | empty/non-empty catalog compatibility |
 | 2.7 | token category classification |
+| 2.8 | brand font normalization |
 | 3.1 | `.takt/design-contracts/<deck>/resolved-design-contract.json` |
 | 3.2 | Resolved Design Contract JSON |
 | 3.3 | marker payload |
@@ -675,6 +681,7 @@ interface ResolvedDesignContract {
 | 3.5 | marker field separation |
 | 3.6 | force validation/save ordering |
 | 3.7 | malformed marker recovery |
+| 3.8 | stale Design Contract marker handling |
 | 4.1 | PlanFacetContract |
 | 4.2 | existing layout vocabulary fallback |
 | 4.3 | catalog-aware visual planning |

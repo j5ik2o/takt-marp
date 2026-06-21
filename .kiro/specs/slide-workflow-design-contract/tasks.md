@@ -30,10 +30,10 @@
 
 - [x] 2.2 Claude Design importer を実装する
   - required files と required manifest fields を検証し、manifest が JSON object ではない、token list が空、または manifest token と CSS custom property の名前・値が一致しない場合は import を成功扱いしない。
-  - optional files、brand fonts、empty/non-empty `components`、adherence metadata、guidance documents、component prompts、cards、sample slides、templates、assets を取り込み、存在しない optional file だけで失敗しない。
+  - optional files、string / object `brandFonts`、font token、empty/non-empty `components`、adherence metadata、guidance documents、component prompts、cards、sample slides、templates、assets を取り込み、存在しない optional file だけで失敗しない。
   - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで分類する。
   - 完了条件: sample zip から token counts、brand fonts、component count/names、adherence rule summary、guidance、source catalog が Resolved Design Contract 候補として確認できる。
-  - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 6.4
+  - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 6.4
   - _Boundary:_ ClaudeDesignImporter
   - _Depends:_ 1.1, 2.1
 
@@ -52,9 +52,9 @@
   - `plan` と `compose` の実行前に Claude Design Source resolver/importer を呼び、`.takt/workflow-current-target.json` に `design_contract` summary を記録する。
   - research metadata と design metadata を別 field に保ち、Plan Optional Context と混同しない。
   - 通常実行で `.takt/workflows`、`.takt/facets`、package template asset を consumer workspace へ自動コピーしない。
-  - `polish` / `deliver` / `research` では、同一 target の既存 marker または保存済み Resolved Design Contract から `design_contract` を引き継ぐ。既存 marker が malformed の場合は読み捨て、保存済み marker または `null` へフォールバックする。
-  - 完了条件: runner fixture で marker に `design_contract` が入り、research marker と共存しても field が混ざらず、template copy が発生せず、malformed marker から復旧できる。
-  - _Requirements:_ 3.3, 3.5, 3.6, 3.7, 7.1, 7.2, 7.3, 7.4
+  - `polish` / `deliver` / `research` では、同一 target の既存 marker または保存済み Resolved Design Contract から `design_contract` を引き継ぐ。既存 marker が malformed または `design_contract.path` が存在しない stale marker の場合は読み捨て、保存済み marker または `null` へフォールバックする。
+  - 完了条件: runner fixture で marker に `design_contract` が入り、research marker と共存しても field が混ざらず、template copy が発生せず、malformed marker から復旧でき、stale marker を引き継がない。
+  - _Requirements:_ 3.3, 3.5, 3.6, 3.7, 3.8, 7.1, 7.2, 7.3, 7.4
   - _Boundary:_ WorkflowHandoffMarker
   - _Depends:_ 2.3
 
@@ -100,9 +100,9 @@
 - [x] 5.1 foundation validation を Design Contract 契約へ拡張する
   - marker shape、plan metadata、compose fingerprint check、legacy `design-system.md` 非依存を static assertion として検証する。
   - compose workflow から `design_system` step が消えていることと、facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-  - invalid sibling zip、JSON object ではない manifest、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、legacy polish path を検証する。
+  - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、stale marker の破棄、legacy polish path を検証する。
   - 完了条件: foundation validation が marker / plan / compose / facet 文言 / hardening regression を path 付きで検出できる。
-  - _Requirements:_ 5.6, 5.7, 8.3, 8.7, 9.2, 9.5
+  - _Requirements:_ 2.8, 3.8, 5.6, 5.7, 8.3, 8.7, 9.2, 9.5
   - _Boundary:_ ValidationSurface
   - _Depends:_ 4.3
 

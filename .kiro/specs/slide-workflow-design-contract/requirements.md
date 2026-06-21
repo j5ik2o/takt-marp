@@ -42,7 +42,7 @@
 
 2.2. Claude Design Source に `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md` / `README.md`、`components/**/*.prompt.md`、`guidelines/*.card.html`、`slides/*.html`、`templates/**/*.dc.html`、または `assets/*` が含まれる場合、slide workflow はそれらを optional metadata、guidance、source catalog として取り込み、存在しないことだけを理由に import を失敗させてはならない。
 
-2.3. `_ds_manifest.json` が JSON object ではない場合、または `namespace`、`globalCssPaths`、`tokens` を欠く場合、slide workflow は Resolved Design Contract を生成せず、`CLAUDE_DESIGN_SOURCE_INVALID` と原因または不足 field を表示しなければならない。
+2.3. `_ds_manifest.json` が JSON object ではない場合、`namespace`、`globalCssPaths`、`tokens` を欠く場合、`namespace` が空でない string ではない場合、または `globalCssPaths` / `tokens` が array ではない場合、slide workflow は Resolved Design Contract を生成せず、`CLAUDE_DESIGN_SOURCE_INVALID` と原因または不足 field を表示しなければならない。
 
 2.4. manifest の token list が空の場合、slide workflow は Resolved Design Contract を生成せず、token が空であることを利用者が確認できる失敗情報を残さなければならない。
 
@@ -51,6 +51,8 @@
 2.6. `components`、`startingPoints`、`cards`、`templates`、`themes`、または `fonts` が空配列である場合でも、slide workflow は token が有効であれば Claude Design Source を valid として扱わなければならない。これらが非空の場合、slide workflow は特定ドメインに固定せず、name/path/description などの汎用 catalog として Resolved Design Contract に記録しなければならない。
 
 2.7. slide workflow が token category を分類するとき、manifest の `kind` だけに依存せず、token name prefix と source CSS path も使って colors / typography / spacing / radius / shadow / font を分類しなければならない。
+
+2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は font token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。
 
 ### 要件 3: Resolved Design Contract を workflow に引き渡す
 
@@ -71,6 +73,8 @@
 3.6. `plan` または `compose` を `--force` で再実行する場合、slide workflow は既存成果物の archive / clean より前に Claude Design Source を import / validation しなければならない。ただし Resolved Design Contract の保存は archive / clean が成功した後に行い、archive / clean が失敗した場合は旧成果物と旧 Resolved Design Contract を不整合な状態にしてはならない。
 
 3.7. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 `.takt/workflow-current-target.json` が malformed でも停止せず読み捨て、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
+
+3.8. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 marker の target が一致しても `design_contract.path` が存在しない場合、slide workflow は stale な Design Contract marker を引き継がず、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
 
 ### 要件 4: plan は Design Contract を使って実現可能な構成を計画する
 
@@ -164,7 +168,7 @@
 
 8.6. Claude Design Source の検証が失敗した場合、slide workflow は失敗した source file、対象 command、確認すべき artifact を利用者またはメンテナが特定できる結果を表示しなければならない。
 
-8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧を検証しなければならない。
+8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、stale Design Contract marker の破棄を検証しなければならない。
 
 ### 要件 9: 既存 deck と既存成果物への影響を限定する
 

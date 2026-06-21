@@ -134,14 +134,14 @@
   - manifest の `globalCssPaths` は `tokens/fonts.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`styles.css`。
   - manifest token は 119 件。importer 分類では color 56、typography 31、spacing 23、radius 5、shadow 4、other 0。
   - token 定義元は `tokens/colors.css` 56 件、`tokens/typography.css` 31 件、`tokens/spacing.css` 32 件。
-  - `brandFonts` は `Noto Serif JP`、`Noto Sans JP`、`JetBrains Mono` の 3 件で、いずれも `status: "ok"`。
+  - `brandFonts` は `{ family, status }` の object 配列で、`Noto Serif JP`、`Noto Sans JP`、`JetBrains Mono` の 3 件があり、いずれも `status: "ok"`。
   - `components` は 6 件、`cards` は 20 件、`templates` は 1 件。`startingPoints`、`themes`、`fonts` は空配列。
   - `_adherence.oxlintrc.json` の `x-omelette.tokens` も 119 件で manifest と一致する。
   - adherence rules は raw hex color、raw px value、未提供 font-family を warning する。これは review / lint surface に使える。
   - `styles.css` は import entry のみで inline rule を持たない。実際の contract source は manifest と `tokens/*.css` である。
 - **含意**:
   - 初期 importer は `Claude Design Source` を zip file として受け取り、必須 file を `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` として検証できる。
-  - `tokens/fonts.css` は font import の source として扱うが、network font availability は workflow 成功条件にしない。`brandFonts` と font token を report すればよい。
+  - `tokens/fonts.css` は font import の source として扱うが、network font availability は workflow 成功条件にしない。`brandFonts` が string 配列でも object 配列でも family を抽出し、font token と合わせて `brand_fonts` を report すればよい。
   - `SKILL.md`、`readme.md`、component prompt、cards、sample slides、templates は plan / compose が Design System の意図を読むための primary guidance / source catalog として使える。
   - ただし sample は DDD 講義向けなので、workflow に DDD 専用 component 名や語彙を固定してはならない。importer は generic catalog として保持し、facet は brief に合う要素だけを選定する。
   - `components` が空でも valid な Claude Design Source として扱う。非空の場合は component import を必須条件にせず、汎用 catalog として扱う。
@@ -153,7 +153,7 @@
   - Optional files: `.thumbnail`, `_ds_bundle.js`, `_adherence.oxlintrc.json`, `tokens/fonts.css`, `SKILL.md`, `readme.md` / `README.md`, `components/**/*.prompt.md`, `guidelines/*.card.html`, `slides/*.html`, `templates/**/*.dc.html`, `assets/*`.
   - Required manifest fields: `namespace`, `globalCssPaths`, `tokens`.
   - Optional manifest fields: `components`, `startingPoints`, `cards`, `templates`, `themes`, `fonts`, `brandFonts`, `source`.
-  - Failure cases: missing manifest, malformed JSON, JSON object ではない manifest、missing required token CSS file、empty token list、manifest/CSS token name/value mismatch、unreadable zip、valid zip と invalid sibling zip の同居。
+  - Failure cases: missing manifest, malformed JSON, JSON object ではない manifest、required manifest field の型不一致、missing required token CSS file、empty token list、manifest/CSS token name/value mismatch、unreadable zip、valid zip と invalid sibling zip の同居。
   - Report fields: namespace, source, source fingerprint、contract fingerprint、global CSS paths、required files、optional files present、token counts、brand fonts、component count/name summary、adherence availability、guidance documents、component prompts、source catalog counts。
 
 ### 実装 close-out: PR review 後の hardening
@@ -170,6 +170,7 @@
   - `_ds_manifest.json` が JSON としては valid でも `null`、文字列、配列の場合、field access ではなく `CLAUDE_DESIGN_SOURCE_INVALID` として扱う必要がある。
   - `plan` / `compose --force` では、source validation は archive / clean 前に必要だが、Resolved Design Contract の保存まで先に行うと archive / clean 失敗時に旧成果物と新契約が混在する。最終実装では import / validation と保存を分け、保存は archive / clean 成功後に遅延する。
   - `polish`、`deliver`、`research` は新しい Design Contract を生成しないため、既存 marker が malformed の場合は読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く必要がある。
+  - 既存 marker の target が一致しても `design_contract.path` が存在しない場合、その marker を引き継ぐと存在しない Resolved Design Contract を facet に渡してしまう。最終実装では stale marker として扱い、保存済み Resolved Design Contract がなければ `design_contract` を持たない marker を書く。
   - Claude Design Source 導入前に compose 済みの既存 deck には Resolved Design Contract がない。`polish-inspect` / `polish-fix` は Design Contract 不在そのものを blocked にせず、render evidence と既存 source artifact の範囲で legacy visual/layout/render 修正を許可する。
 - **含意**:
   - Claude Design Source resolver は「valid が 1 件あるか」ではなく「design directory 全体が exactly one valid source として整理されているか」を検証する。
@@ -178,8 +179,10 @@
 - **追加 validation**:
   - invalid sibling zip で runner が TAKT を起動しない。
   - manifest `null` で importer が `CLAUDE_DESIGN_SOURCE_INVALID` を返す。
+  - object 形式の `brandFonts` から `family` を抽出して `brand_fonts` に保持する。
   - `--force` archive 失敗時に新しい Resolved Design Contract を保存しない。
   - malformed marker から `polish` marker が保存済み Resolved Design Contract を復旧する。
+  - `design_contract.path` が存在しない stale marker を `polish` marker に引き継がない。
 
 ## アーキテクチャパターン評価
 

@@ -46,13 +46,14 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 - `slides/<deck>/design/` の zip discovery、missing / ambiguous / invalid source、invalid sibling zip 同居の失敗規則。
 - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` の検証。
 - optional な `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets の取り込み。
-- Resolved Design Contract として、colors / typography / spacing / radius / shadow / brand fonts / adherence metadata / guidance / source catalog を正規化する。
+- Resolved Design Contract として、colors / typography / spacing / radius / shadow / string/object `brandFonts` / font token / adherence metadata / guidance / source catalog を正規化する。
 - `components` が空でも valid な Claude Design Source として扱い、非空の場合は汎用 catalog として扱う。
 - `plan` が Resolved Design Contract を参照して、CSS を生成せず source metadata と制約を記録する規約。
 - `compose` が Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する規約。
 - `design-system.md` を compose canonical artifact、override 条件、success assertion から外す workflow / docs / validator 更新。
 - compose report / review / supervision reports への Claude Design Source 使用記録。
 - `--force` 時の source validation / artifact invalidation / Resolved Design Contract 保存順序。
+- malformed / stale marker からの Design Contract marker 復旧または破棄。
 - Resolved Design Contract を持たない既存 deck の legacy polish path。
 - smoke validation、foundation validation、package/no-copy validation の更新。
 
