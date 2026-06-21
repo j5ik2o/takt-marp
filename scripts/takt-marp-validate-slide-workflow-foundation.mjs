@@ -1342,6 +1342,11 @@ async function main() {
         });
       }
       assert(violations.length === 0, `Design Contract facet migration violations:\n${violations.join("\n")}`);
+
+      const planInstruction = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan.md"), "utf8");
+      assert(planInstruction.includes("design_contract.path"), `${rootRelativePath} plan instruction must open marker design_contract.path`);
+      assert(planInstruction.includes("Resolved Design Contract JSON"), `${rootRelativePath} plan instruction must read the Resolved Design Contract JSON`);
+      assert(planInstruction.includes("token constraints"), `${rootRelativePath} plan instruction must ground planning in token constraints`);
     }
   });
 

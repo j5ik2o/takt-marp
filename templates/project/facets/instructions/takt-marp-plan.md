@@ -22,7 +22,7 @@
 15. `open-questions.md` は未解決前提または保留として扱い、推測で回答を埋めず、必要なら `Plan Findings` または `Non-blocking human review points` に残してください。
 16. plan command の成功条件として外部 web access や追加調査を要求しないでください。
 17. `Target slide count` と固定アウトライン・情報密度・講義本体要件が矛盾する場合は、勝手に圧縮しないでください。`Target slide count: 5` は5枚の概要版として計画し、講義本体を生成するには target を100〜140または期待値相当(例:119)へ修正する必要があることを `Plan Findings` に記録してください。
-18. marker の `design_contract` を読み、Resolved Design Contract の source path、namespace、fingerprint、token summary、adherence availability を `plan.md` と `slide-blueprint.md` に記録してください。`design_contract` がない、path が読めない、または brief の要求と token constraints が両立しない場合は、推測で補完せず finding または `needs_input` にしてください。
+18. marker の `design_contract` を読み、marker の `design_contract.path` が指す Resolved Design Contract JSON を必ず開いてください。Resolved Design Contract の source path、namespace、fingerprint、token summary、adherence availability、token constraints を `plan.md` と `slide-blueprint.md` に記録してください。`design_contract` がない、path が読めない、または brief の要求と token constraints が両立しない場合は、推測で補完せず finding または `needs_input` にしてください。
 19. plan artifact には CSS、front matter style、`_class` style 定義を書かないでください。layout / visual / density の制約だけを、後続 compose が実装できる指示として書いてください。
 
 **artifact 出力:**
