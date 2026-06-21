@@ -289,6 +289,15 @@ async function main() {
     assert(first.token_counts.typography >= 2, `typography token count too small: ${JSON.stringify(first.token_counts)}`);
     assert(first.token_counts.spacing >= 1, `spacing token count too small: ${JSON.stringify(first.token_counts)}`);
     assert(first.adherence.available === true, "optional adherence metadata was not detected");
+    assert(first.components.names.includes("Metric"), `generic component catalog was not preserved: ${JSON.stringify(first.components)}`);
+    assert(first.guidance.documents.some((item) => item.path === "SKILL.md" && item.kind === "skill" && item.text.includes("Generic slide design system")), `SKILL.md guidance was not captured: ${JSON.stringify(first.guidance)}`);
+    assert(first.guidance.documents.some((item) => item.path === "readme.md" && item.kind === "readme"), `readme guidance was not captured: ${JSON.stringify(first.guidance)}`);
+    assert(first.guidance.component_prompts.some((item) => item.path === "components/demo/Metric.prompt.md" && item.text.includes("Metric")), `component prompt guidance was not captured: ${JSON.stringify(first.guidance)}`);
+    assert(first.source_catalog.counts.components === 1, `component catalog count mismatch: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.cards.some((item) => item.path === "guidelines/overview.card.html"), `card catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.sample_slides.some((item) => item.path === "slides/cover.html"), `sample slide catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.templates.some((item) => item.entryPath === "templates/generic-deck/GenericDeck.dc.html"), `template catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.assets.some((item) => item.path === "assets/mark.svg"), `asset catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
 
     const mismatchedManifest = {
@@ -1369,6 +1378,8 @@ async function main() {
       assert(planInstruction.includes("design_contract.path"), `${rootRelativePath} plan instruction must open marker design_contract.path`);
       assert(planInstruction.includes("Resolved Design Contract JSON"), `${rootRelativePath} plan instruction must read the Resolved Design Contract JSON`);
       assert(planInstruction.includes("token constraints"), `${rootRelativePath} plan instruction must ground planning in token constraints`);
+      assert(planInstruction.includes("guidance"), `${rootRelativePath} plan instruction must use Design System guidance`);
+      assert(planInstruction.includes("source_catalog"), `${rootRelativePath} plan instruction must use Design System source_catalog`);
 
       const planContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-plan.md"), "utf8");
       const blueprintContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-blueprint.md"), "utf8");
@@ -1376,6 +1387,8 @@ async function main() {
         assert(contractSource.includes("Design Contract"), `${rootRelativePath} ${label} output contract must include a Design Contract section`);
         assert(contractSource.includes("contract_sha256"), `${rootRelativePath} ${label} output contract must require contract_sha256`);
         assert(contractSource.includes("token constraints"), `${rootRelativePath} ${label} output contract must require token constraints`);
+        assert(contractSource.includes("guidance"), `${rootRelativePath} ${label} output contract must require Design System guidance`);
+        assert(contractSource.includes("source_catalog"), `${rootRelativePath} ${label} output contract must require Design System source_catalog`);
       }
 
       const composeInstructionPaths = [
@@ -1388,6 +1401,7 @@ async function main() {
         const source = await readFile(path.join(facetRoot, "instructions", fileName), "utf8");
         assert(source.includes("fingerprint.contract_sha256"), `${rootRelativePath}/${fileName} must compare marker fingerprint.contract_sha256`);
         assert(source.includes("contract_sha256"), `${rootRelativePath}/${fileName} must compare artifact contract_sha256`);
+        assert(source.includes("guidance") || source.includes("source_catalog"), `${rootRelativePath}/${fileName} must read Design System guidance or source_catalog`);
       }
     }
   });

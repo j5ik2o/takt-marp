@@ -1,7 +1,7 @@
 section sourceからMarp Markdownをassembleしてください。
 
 **やること:**
-1. `brief.normalized.md`、`plan.md`、`slide-blueprint.md`、`.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract、`sections/manifest.md`、`sections/*.md` を読んでください。
+1. `brief.normalized.md`、`plan.md`、`slide-blueprint.md`、`.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract、`sections/manifest.md`、`sections/*.md` を読んでください。Resolved Design Contract の `guidance` と `source_catalog` も読み、plan / blueprint が選定した reusable element、sample、template、component prompt と矛盾しないように assemble してください。
 2. marker の `design_contract.fingerprint.contract_sha256` と `plan.md` / `slide-blueprint.md` に記録された `contract_sha256` が一致することを確認してください。不一致の場合は `needs_input` とし、`SLIDES.md` を成功扱いで更新しないでください。
 3. `SLIDES.md` をMarp形式で作成または更新してください。
 4. front matter、theme、global style、deck-wide CSS tokenは `SLIDES.md` にだけ書いてください。section fileにはfront matterを残さないでください。
@@ -9,7 +9,7 @@ section sourceからMarp Markdownをassembleしてください。
 6. section fileの先頭slideは `---` delimiterを持たないため、2つ目以降のsection fileを連結する直前には `---` delimiterを1つ挿入してください。ただしfront matter直後かつ最初のsection fileの前には追加delimiterを入れてはいけません。
 7. `html:` visual または inline SVG を含む場合は、front matter に `html: true` を設定してください。
 8. fontには Resolved Design Contract の brand fonts を優先し、不足時だけ日本語優先フォールバックスタック(例: `"Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif`)を指定してください。`@font-face` を宣言する場合は、`SLIDES.md` からの相対pathが実在するファイルのみを参照してください。pathが存在しない環境では `@font-face` を省略し、フォールバックスタックのみで描画してください。
-9. `SLIDES.md` のCSSは Resolved Design Contract の token 名と値を保持し、raw color、raw px、未提供 font-family の新規混入を避けてください。sectionごとの個別 `font-size`、`line-height`、`margin`、`padding` の追加ではなく、CSS custom property と用途別classで構成してください。
+9. `SLIDES.md` のCSSは Resolved Design Contract の token 名と値を保持し、raw color、raw px、未提供 font-family の新規混入を避けてください。sectionごとの個別 `font-size`、`line-height`、`margin`、`padding` の追加ではなく、CSS custom property と用途別classで構成してください。Design System の `guidance` / `source_catalog` に sample slide や template がある場合も、token と class の適用規約を優先し、特定 sample を固定的にコピーしないでください。
 10. render output の生成や品質判定は行わず、source artifact のassemblyに集中してください。
 
 **コンテキスト反映規約:**

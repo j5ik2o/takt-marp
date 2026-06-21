@@ -36,6 +36,7 @@
 - Design Contract Trace
   - `plan.md` と同じ contract_sha256 を示す
   - 各section/slideで参照すべき token constraints、layout / visual / density 制約、brand fonts、adherence availability を示す
+  - 各section/slideで使う Design System guidance、component prompt、card、sample slide、template があれば、その name/path と使い方を示す
 - Plan Findings Trace
   - 未解決findingと、blueprint上で修正すべきslide ID
 
@@ -43,6 +44,7 @@
 
 - `plan.md` と slide count、section range、coverage、deliverables が矛盾してはなりません。
 - `plan.md` の Design Contract section と contract_sha256、token constraints が矛盾してはなりません。
+- `plan.md` の Design Contract section と `guidance` / `source_catalog` の選定内容が矛盾してはなりません。Design System ごとに要素は異なるため、特定ドメインや特定 component 名を固定前提にしてはなりません。
 - 各 slide ID は `S001` 形式で連番にしてください。
 - `Visual` は `none`、`html: ...`、`svg: ...`、`inline-svg: ...`、`existing: ...` のいずれかです。
 - `Visual Strategy` には `render_owner: compose_sections` または `render_owner: generate_visuals`、HTML/CSSで組めるか、SVGを選ぶ場合はその理由を含めてください。

@@ -14,14 +14,14 @@ workflow 利用者は、資料ごとに `design-system.md` を作り直したく
 - `assemble_slides` は `design-system.md` を読み、`SLIDES.md` の front matter CSS を構成する。
 - `compose-review` は `plan` の `Layout` と `SLIDES.md` の `_class:` / style 定義 / `design-system.md` 文書化を照合する。
 - package-bundled workflow/facet template は no-copy contract により、通常実行では consumer workspace へコピーしない。
-- `DDD Lecture Design System.zip` の sample は `_ds_manifest.json`、`styles.css`、`tokens/*.css`、`_adherence.oxlintrc.json` を含む token bundle で、`components` は空でも valid な Claude Design Source として扱う必要がある。
+- Claude Design export zip は `_ds_manifest.json`、`styles.css`、`tokens/*.css`、`_adherence.oxlintrc.json` に加え、`SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets を含む場合がある。Design System ごとに要素は異なるため、特定ドメインや特定 component 名を固定してはならない。
 
 ## Desired Outcome
 
 - Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力として扱う。
 - 利用者は `slides/<deck>/design/` に Claude Design から export した `.zip` を置くだけで、`plan` / `compose` が同じ Resolved Design Contract（解決済みデザイン契約）を参照できる。
 - Design Contract（デザイン契約）は手書き入力ではなく、Claude Design Source から importer が生成する internal normalized artifact とする。
-- `plan` は Resolved Design Contract の source metadata、fingerprint、token summary、style constraints を記録するが、CSS は生成しない。
+- `plan` は Resolved Design Contract の source metadata、fingerprint、token summary、style constraints、guidance、source catalog を記録するが、CSS は生成しない。
 - `compose` は `plan` が参照した Resolved Design Contract と fingerprint を照合し、その契約から `SLIDES.md` front matter CSS、`_class`、section HTML/CSS、必要な visual source を生成する。
 - `design-system.md` は compose の canonical source artifact、override 条件、成功条件から外す。
 - review / smoke validation は Claude Design Source の import、Resolved Design Contract の記録、plan / compose の fingerprint 一致、CSS token 適用、no-copy 維持を検証する。
@@ -30,7 +30,7 @@ workflow 利用者は、資料ごとに `design-system.md` を作り直したく
 
 Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.zip` export に絞る。runner は `plan` / `compose` 実行前に `slides/<deck>/design/` から Claude Design zip を 1 件だけ解決し、manifest と token CSS を検証して Resolved Design Contract を `.takt/` 配下へ生成する。
 
-`plan` は marker 経由で Resolved Design Contract を読み、CSS を出さずに layout / visual / density の制約として使う。sample では `components` が空のため、layout vocabulary と visual component は Claude Design zip から必須取得しない。初期 scope では既存 slide workflow の layout vocabulary に Claude Design token constraints を接続する。
+`plan` は marker 経由で Resolved Design Contract を読み、CSS を出さずに layout / visual / density の制約として使う。`components`、cards、templates、sample slides、component prompts が存在する場合は brief に合うものだけを選定し、存在しない場合でも token constraints と既存 slide workflow の layout vocabulary で計画を継続する。
 
 `compose` は `plan` metadata と現在の Resolved Design Contract の fingerprint を照合し、一致した場合だけ CSS / `_class` / section source を生成する。不一致の場合は、古い plan で新しい design source を使った可能性を明示して失敗または blocker finding にする。
 
@@ -43,9 +43,9 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 - Claude Design zip を唯一の user-facing design system 入力として解決する規則。
 - `slides/<deck>/design/` の zip discovery、missing / ambiguous / invalid source の失敗規則。
 - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` の検証。
-- optional な `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css` の取り込み。
-- token-only Design Contract として、colors / typography / spacing / radius / shadow / brand fonts / adherence metadata を正規化する。
-- `components` が空でも valid な Claude Design Source として扱う。
+- optional な `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets の取り込み。
+- Resolved Design Contract として、colors / typography / spacing / radius / shadow / brand fonts / adherence metadata / guidance / source catalog を正規化する。
+- `components` が空でも valid な Claude Design Source として扱い、非空の場合は汎用 catalog として扱う。
 - `plan` が Resolved Design Contract を参照して、CSS を生成せず source metadata と制約を記録する規約。
 - `compose` が Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する規約。
 - `design-system.md` を compose canonical artifact、override 条件、success assertion から外す workflow / docs / validator 更新。

@@ -490,7 +490,12 @@ async function readSmokeResolvedDesignContract(targetInfo) {
   assert(contract.fingerprint?.source_sha256, "sequence:design-contract-artifact missing source fingerprint");
   assert(contract.fingerprint?.contract_sha256, "sequence:design-contract-artifact missing contract fingerprint");
   assert(contract.token_counts?.total === 6, `sequence:design-contract-artifact token count mismatch: ${JSON.stringify(contract.token_counts)}`);
-  assert(contract.components?.empty === true, `sequence:design-contract-artifact empty components must be valid: ${JSON.stringify(contract.components)}`);
+  assert(contract.components?.names?.includes("Metric"), `sequence:design-contract-artifact component catalog missing Metric: ${JSON.stringify(contract.components)}`);
+  assert(contract.guidance?.documents?.some((item) => item.path === "SKILL.md"), `sequence:design-contract-artifact guidance missing SKILL.md: ${JSON.stringify(contract.guidance)}`);
+  assert(contract.guidance?.documents?.some((item) => item.path === "readme.md"), `sequence:design-contract-artifact guidance missing readme.md: ${JSON.stringify(contract.guidance)}`);
+  assert(contract.guidance?.component_prompts?.some((item) => item.path === "components/demo/Metric.prompt.md"), `sequence:design-contract-artifact component prompt missing: ${JSON.stringify(contract.guidance)}`);
+  assert(contract.source_catalog?.templates?.some((item) => item.entryPath === "templates/generic-deck/GenericDeck.dc.html"), `sequence:design-contract-artifact template catalog missing: ${JSON.stringify(contract.source_catalog)}`);
+  assert(contract.source_catalog?.sample_slides?.some((item) => item.path === "slides/cover.html"), `sequence:design-contract-artifact sample slide catalog missing: ${JSON.stringify(contract.source_catalog)}`);
   assert(contract.adherence?.available === true, "sequence:design-contract-artifact adherence metadata must be available");
   return contract;
 }

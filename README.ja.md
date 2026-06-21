@@ -67,7 +67,7 @@ slides/<deck>/
   review/*.md
 ```
 
-`plan` と `compose` は `slides/<deck>/design/` 配下に Claude Design export zip が1つあることを前提にします。runner はこれを `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`plan` は metadata と fingerprint を記録し、`compose` は同じ token を `SLIDES.md` に適用します。
+`plan` と `compose` は `slides/<deck>/design/` 配下に Claude Design export zip が1つあることを前提にします。runner はこれを `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`plan` は metadata、fingerprint、`SKILL.md` / `readme.md` などの guidance、component/card/template/sample catalog を記録し、`compose` は同じ token と catalog を `SLIDES.md` に適用します。Design System は deck ごとに異なるため、特定ドメインや特定 component 名を固定前提にしません。
 
 ### 4. polishとdeliverの範囲
 

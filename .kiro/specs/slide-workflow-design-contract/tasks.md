@@ -10,9 +10,9 @@
   - _Depends:_ none
 
 - [x] 1.2 Claude Design Source の smoke fixture builder を追加する
-  - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json` を含む deterministic zip を検証実行時に生成できるようにする。
-  - fixture は `components: []` と optional adherence metadata を含み、binary zip を repository に直接追加しなくても smoke validation で利用できる。
-  - 完了条件: fixture builder が毎回同じ token 構成の Claude Design zip を生成し、生成物を importer の入力として使える。
+  - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md`、`readme.md`、component prompt、card、sample slide、template、asset を含む deterministic zip を検証実行時に生成できるようにする。
+  - fixture は generic component / catalog と optional adherence metadata を含み、binary zip を repository に直接追加しなくても smoke validation で利用できる。
+  - 完了条件: fixture builder が毎回同じ token / guidance / catalog 構成の Claude Design zip を生成し、生成物を importer の入力として使える。
   - _Requirements:_ 2.2, 2.6, 8.2
   - _Boundary:_ ValidationSurface
   - _Depends:_ 1.1
@@ -29,16 +29,16 @@
 
 - [x] 2.2 Claude Design importer を実装する
   - required files と required manifest fields を検証し、token list が空または manifest token と CSS custom property が一致しない場合は import を成功扱いしない。
-  - optional files、brand fonts、empty `components`、adherence metadata を取り込み、存在しない optional file だけで失敗しない。
+  - optional files、brand fonts、empty/non-empty `components`、adherence metadata、guidance documents、component prompts、cards、sample slides、templates、assets を取り込み、存在しない optional file だけで失敗しない。
   - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで分類する。
-  - 完了条件: sample zip から token counts、brand fonts、component count、adherence rule summary が Resolved Design Contract 候補として確認できる。
+  - 完了条件: sample zip から token counts、brand fonts、component count/names、adherence rule summary、guidance、source catalog が Resolved Design Contract 候補として確認できる。
   - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 6.4
   - _Boundary:_ ClaudeDesignImporter
   - _Depends:_ 1.1, 2.1
 
 - [x] 2.3 Resolved Design Contract の保存と fingerprint を固定する
   - normalized JSON を `.takt/design-contracts/<deck>/resolved-design-contract.json` に保存し、source zip SHA-256 と contract SHA-256 を分けて記録する。
-  - source path、manifest namespace、token counts、brand fonts、component count、adherence availability を report 可能な metadata として保持する。
+  - source path、manifest namespace、token counts、brand fonts、component count、adherence availability、guidance、source catalog を report 可能な metadata として保持する。
   - import failure 時に古い Resolved Design Contract へ fallback しない。
   - 完了条件: 同じ source から同じ contract fingerprint が再現し、source 変更時に fingerprint が変わることを検証できる。
   - _Requirements:_ 3.1, 3.2, 3.4
@@ -56,8 +56,8 @@
   - _Depends:_ 2.3
 
 - [x] 3.2 PlanFacetContract を Design Contract 参照へ更新する
-  - plan facets が marker と Resolved Design Contract を読み、token constraints、density hints、adherence rules、既存 layout vocabulary を計画へ反映する。
-  - Claude Design zip から layout vocabulary や components が得られない場合でも、既存 vocabulary と token constraints の範囲で `Layout` / `Visual Strategy` を記録する。
+  - plan facets が marker と Resolved Design Contract を読み、token constraints、density hints、adherence rules、guidance、source catalog、既存 layout vocabulary を計画へ反映する。
+  - Claude Design zip から components / cards / templates / sample slides / component prompts が得られない場合でも、既存 vocabulary と token constraints の範囲で `Layout` / `Visual Strategy` を記録する。得られる場合は brief に合う reusable element だけを選定する。
   - `plan.md` と `slide-blueprint.md` に contract metadata を残し、CSS、front matter style、`_class` style 定義は生成しない。
   - 完了条件: mock plan artifact に contract metadata があり、CSS/style 定義が plan artifact に混入していないことを検証できる。
   - _Requirements:_ 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 7.3, 9.1
@@ -103,7 +103,7 @@
 
 - [x] 5.2 smoke validation を Claude Design Source import path へ更新する
   - smoke fixture の Claude Design zip を使い、source 解決、Resolved Design Contract 生成、plan metadata、compose CSS token application、fingerprint match を検証する。
-  - `design-system.md` existence assertion を削除し、empty `components` と optional adherence metadata を valid sample として扱う。
+  - `design-system.md` existence assertion を削除し、guidance / source catalog と optional adherence metadata を valid sample として扱う。
   - validation failure 時に source file、対象 command、確認すべき artifact が分かる summary を出す。
   - 完了条件: `npm run slide:smoke -- --provider mock` が Claude Design Source 契約を通り、失敗時は missing / ambiguous / invalid / mismatch の原因が分かる。
   - _Requirements:_ 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.6, 3.1, 3.2, 3.3, 4.5, 5.1, 5.2, 5.3, 8.1, 8.2, 8.6

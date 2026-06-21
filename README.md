@@ -67,7 +67,7 @@ slides/<deck>/
   review/*.md
 ```
 
-`plan` and `compose` require exactly one Claude Design export zip under `slides/<deck>/design/`. The runner normalizes it into `.takt/design-contracts/<deck>/resolved-design-contract.json`; `plan` records metadata and fingerprints, while `compose` applies the same tokens to `SLIDES.md`.
+`plan` and `compose` require exactly one Claude Design export zip under `slides/<deck>/design/`. The runner normalizes it into `.takt/design-contracts/<deck>/resolved-design-contract.json`; `plan` records metadata, fingerprints, guidance such as `SKILL.md` / `readme.md`, and the component/card/template/sample catalog, while `compose` applies the same tokens and catalog to `SLIDES.md`. Each deck can use a different Design System, so the workflow must not assume a fixed domain or fixed component names.
 
 ### 4. Polish and delivery scope
 

@@ -1,8 +1,8 @@
 compose command の work 結果を、後続の review/fix/supervision が読める形で要約してください。
 
 **やること:**
-1. `.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract、`sections/manifest.md`、`sections/*.md`、`SLIDES.md`、HTML visual、`images/*` の存在と変更状況を確認してください。
-2. compose source artifacts が `plan.md`、`slide-blueprint.md` に記録された `contract_sha256` と Resolved Design Contract の `fingerprint.contract_sha256` に整合しているか確認してください。
+1. `.takt/workflow-current-target.json`、marker の `design_contract.path` が指す Resolved Design Contract、`sections/manifest.md`、`sections/*.md`、`SLIDES.md`、HTML visual、`images/*` の存在と変更状況を確認してください。Resolved Design Contract の `guidance` と `source_catalog` も確認してください。
+2. compose source artifacts が `plan.md`、`slide-blueprint.md` に記録された `contract_sha256` と Resolved Design Contract の `fingerprint.contract_sha256` に整合しているか確認してください。plan / blueprint が選定した Design System guidance、component prompt、card、sample、template が compose source に反映されているかも記録してください。
 3. render output を成功条件に含めず、source artifact の作成・変更だけを整理してください。
 4. `review/compose-work.md` に work summary を書いてください。
 

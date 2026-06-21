@@ -21,16 +21,19 @@ export const CLAUDE_DESIGN_OPTIONAL_FILES = Object.freeze([
 ]);
 
 const REQUIRED_MANIFEST_FIELDS = Object.freeze(["namespace", "globalCssPaths", "tokens"]);
+const PRIMARY_GUIDANCE_PATHS = Object.freeze(["SKILL.md", "readme.md", "README.md"]);
+const GUIDANCE_TEXT_LIMIT = 24_000;
+const COMPONENT_PROMPT_TEXT_LIMIT = 8_000;
 
 export function buildClaudeDesignSmokeFixtureZipBuffer() {
   const manifest = {
     namespace: "ClaudeDesignSmoke",
     source: "smoke-fixture",
     globalCssPaths: ["tokens/fonts.css", "tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
-    components: [],
+    components: [{ name: "Metric", sourcePath: "components/demo/Metric.jsx" }],
     startingPoints: [],
-    cards: [],
-    templates: [],
+    cards: [{ path: "guidelines/overview.card.html", group: "Guidelines", name: "Overview" }],
+    templates: [{ name: "Generic deck", description: "Generic editable deck template", folder: "templates/generic-deck", entryPath: "templates/generic-deck/GenericDeck.dc.html" }],
     themes: [],
     fonts: [],
     brandFonts: ["Noto Sans JP", "JetBrains Mono"],
@@ -56,6 +59,22 @@ export function buildClaudeDesignSmokeFixtureZipBuffer() {
     "tokens/colors.css": ":root {\n  --accent: #b0241d;\n  --bg-page: #faf7f1;\n}\n",
     "tokens/typography.css": ":root {\n  --font-body: 'Noto Sans JP', sans-serif;\n  --fs-md: 18px;\n}\n",
     "tokens/spacing.css": ":root {\n  --space-4: 16px;\n  --radius-md: 6px;\n}\n",
+    "SKILL.md": [
+      "---",
+      "name: generic-slide-design",
+      "description: Generic slide design system fixture for validation.",
+      "---",
+      "",
+      "Read `readme.md` and use the provided tokens, components, sample slides, and templates.",
+      "",
+    ].join("\n"),
+    "readme.md": "# Generic Slide Design System\n\nUse the provided tokens and examples. This fixture is intentionally not tied to a domain.\n",
+    "guidelines/overview.card.html": "<section>Generic guidance card</section>\n",
+    "components/demo/Metric.jsx": "export function Metric() { return null; }\n",
+    "components/demo/Metric.prompt.md": "Use Metric for compact numeric summaries when a deck needs a reusable data callout.\n",
+    "slides/cover.html": "<section>Generic cover sample</section>\n",
+    "templates/generic-deck/GenericDeck.dc.html": "<x-dc><!-- @template name=\"Generic deck\" --></x-dc>\n",
+    "assets/mark.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\"></svg>\n",
     "_adherence.oxlintrc.json": `${JSON.stringify({
       rules: {
         "no-restricted-syntax": [
@@ -154,10 +173,12 @@ export async function importClaudeDesignSourceArchive(archive, options = {}) {
   const manifestTokens = normalizeManifestTokens(manifest.tokens);
   assertTokenConsistency(manifestTokens, cssTokens, sourcePath);
   const adherence = await readAdherenceMetadata(archive);
+  const guidance = await readDesignGuidance(archive);
   const tokens = manifestTokens.map((token) => ({
     ...token,
     category: classifyToken(token),
   })).sort((left, right) => left.name.localeCompare(right.name));
+  const sourceCatalog = buildSourceCatalog(manifest, archive, guidance);
   const contractWithoutContractHash = {
     schema_version: 1,
     source: {
@@ -178,8 +199,11 @@ export async function importClaudeDesignSourceArchive(archive, options = {}) {
     components: {
       count: Array.isArray(manifest.components) ? manifest.components.length : 0,
       empty: !Array.isArray(manifest.components) || manifest.components.length === 0,
+      names: normalizeCatalogItems(manifest.components).map((item) => item.name).filter(Boolean).sort(),
     },
     adherence,
+    guidance,
+    source_catalog: sourceCatalog,
     tokens,
   };
   const contractSha256 = sha256Stable(contractWithoutContractHash);
@@ -362,6 +386,123 @@ async function readAdherenceMetadata(archive) {
   } catch (error) {
     throw new SlideWorkflowError(`Claude Design adherence metadata is malformed: ${error.message}`, "CLAUDE_DESIGN_SOURCE_INVALID");
   }
+}
+
+async function readDesignGuidance(archive) {
+  const documents = [];
+  for (const filePath of PRIMARY_GUIDANCE_PATHS) {
+    if (archive.hasEntry(filePath)) {
+      const kind = filePath.toLowerCase() === "skill.md" ? "skill" : "readme";
+      documents.push(await readGuidanceText(archive, filePath, kind, GUIDANCE_TEXT_LIMIT));
+    }
+  }
+
+  const componentPrompts = [];
+  for (const filePath of archive.entryNames().filter((name) => name.startsWith("components/") && name.endsWith(".prompt.md")).sort()) {
+    componentPrompts.push(await readGuidanceText(archive, filePath, "component_prompt", COMPONENT_PROMPT_TEXT_LIMIT));
+  }
+
+  return deepFreeze({
+    available: documents.length > 0 || componentPrompts.length > 0,
+    documents,
+    component_prompts: componentPrompts,
+  });
+}
+
+async function readGuidanceText(archive, filePath, kind, maxChars) {
+  const bytes = await archive.readEntry(filePath);
+  const text = bytes.toString("utf8");
+  return Object.freeze({
+    path: filePath,
+    kind,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    size_bytes: bytes.byteLength,
+    text: text.length > maxChars ? text.slice(0, maxChars) : text,
+    truncated: text.length > maxChars,
+  });
+}
+
+function buildSourceCatalog(manifest, archive, guidance) {
+  const entryNames = archive.entryNames();
+  const components = normalizeCatalogItems(manifest.components).map((item) => enrichComponentCatalogItem(item, entryNames));
+  const cards = normalizeCatalogItems(manifest.cards);
+  const templates = normalizeCatalogItems(manifest.templates);
+  const sampleSlides = collectFileCatalogEntries(entryNames, "slides/", (name) => name.endsWith(".html"))
+    .map((entry) => enrichCatalogEntryFromCards(entry, cards));
+  const guidelines = collectFileCatalogEntries(entryNames, "guidelines/", (name) => name.endsWith(".card.html"))
+    .map((entry) => enrichCatalogEntryFromCards(entry, cards));
+  const assets = collectFileCatalogEntries(entryNames, "assets/");
+
+  return deepFreeze({
+    counts: {
+      components: components.length,
+      cards: cards.length,
+      templates: templates.length,
+      sample_slides: sampleSlides.length,
+      guidelines: guidelines.length,
+      assets: assets.length,
+      guidance_documents: guidance.documents.length,
+      component_prompts: guidance.component_prompts.length,
+    },
+    components,
+    cards,
+    templates,
+    sample_slides: sampleSlides,
+    guidelines,
+    assets,
+  });
+}
+
+function normalizeCatalogItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items
+    .map((item, index) => normalizeCatalogItem(item, index))
+    .filter((item) => Object.keys(item).length > 0);
+}
+
+function normalizeCatalogItem(item, index) {
+  if (typeof item === "string") {
+    return Object.freeze({ name: item, index });
+  }
+  if (!item || typeof item !== "object") {
+    return Object.freeze({});
+  }
+  const normalized = { index };
+  for (const key of ["name", "title", "description", "path", "sourcePath", "entryPath", "folder", "group", "viewport", "subtitle", "kind", "category"]) {
+    if (typeof item[key] === "string" && item[key].trim()) {
+      normalized[key] = item[key].trim();
+    }
+  }
+  return Object.freeze(normalized);
+}
+
+function enrichComponentCatalogItem(item, entryNames) {
+  const componentName = item.name ?? path.basename(item.sourcePath ?? "", path.extname(item.sourcePath ?? ""));
+  const relatedFiles = componentName
+    ? entryNames.filter((entryName) => entryName.startsWith("components/") && path.basename(entryName).toLowerCase().startsWith(componentName.toLowerCase())).sort()
+    : [];
+  return Object.freeze({
+    ...item,
+    related_files: relatedFiles,
+    prompt_path: relatedFiles.find((filePath) => filePath.endsWith(".prompt.md")) ?? null,
+  });
+}
+
+function collectFileCatalogEntries(entryNames, prefix, predicate = () => true) {
+  return entryNames
+    .filter((name) => name.startsWith(prefix) && predicate(name))
+    .map((name) => Object.freeze({
+      path: name,
+      extension: path.extname(name),
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function enrichCatalogEntryFromCards(entry, cards) {
+  const card = cards.find((item) => item.path === entry.path);
+  return Object.freeze(card ? { ...entry, card } : entry);
 }
 
 function classifyToken(token) {

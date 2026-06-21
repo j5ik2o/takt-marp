@@ -226,6 +226,13 @@ Optional files:
 - `_ds_bundle.js`
 - `_adherence.oxlintrc.json`
 - `tokens/fonts.css`
+- `SKILL.md`
+- `readme.md` / `README.md`
+- `components/**/*.prompt.md`
+- `guidelines/*.card.html`
+- `slides/*.html`
+- `templates/**/*.dc.html`
+- `assets/*`
 
 Required manifest fields:
 
@@ -251,9 +258,9 @@ Optional manifest fields:
   "schema_version": 1,
   "source": {
     "kind": "claude-design-zip",
-    "path": "slides/example/design/DDD Lecture Design System.zip",
+    "path": "slides/example/design/Example Design System.zip",
     "sha256": "source-zip-sha256",
-    "namespace": "DDDLectureDesignSystem_a0d171",
+    "namespace": "ExampleDesignSystem_abcdef",
     "export_source": "spa"
   },
   "fingerprint": {
@@ -300,8 +307,9 @@ Optional manifest fields:
     }
   ],
   "components": {
-    "count": 0,
-    "names": []
+    "count": 2,
+    "empty": false,
+    "names": ["Callout", "Metric"]
   },
   "adherence": {
     "available": true,
@@ -309,9 +317,53 @@ Optional manifest fields:
     "component_count": 0,
     "rules": ["raw-hex-color", "raw-px-value", "unsupported-font-family"]
   },
-  "layout": {
-    "source": "slide-workflow-vocabulary",
-    "note": "Claude Design zip sample did not expose layout vocabulary."
+  "guidance": {
+    "available": true,
+    "documents": [
+      {
+        "path": "SKILL.md",
+        "kind": "skill",
+        "sha256": "sha256",
+        "size_bytes": 2048,
+        "text": "Design System usage guidance...",
+        "truncated": false
+      }
+    ],
+    "component_prompts": [
+      {
+        "path": "components/ui/Callout.prompt.md",
+        "kind": "component_prompt",
+        "sha256": "sha256",
+        "size_bytes": 512,
+        "text": "Component usage guidance...",
+        "truncated": false
+      }
+    ]
+  },
+  "source_catalog": {
+    "counts": {
+      "components": 2,
+      "cards": 8,
+      "templates": 1,
+      "sample_slides": 4,
+      "guidelines": 3,
+      "assets": 2,
+      "guidance_documents": 2,
+      "component_prompts": 2
+    },
+    "components": [
+      {
+        "name": "Callout",
+        "sourcePath": "components/ui/Callout.jsx",
+        "prompt_path": "components/ui/Callout.prompt.md",
+        "related_files": ["components/ui/Callout.jsx", "components/ui/Callout.prompt.md"]
+      }
+    ],
+    "cards": [],
+    "templates": [],
+    "sample_slides": [],
+    "guidelines": [],
+    "assets": []
   }
 }
 ```
@@ -326,18 +378,18 @@ Optional manifest fields:
 {
   "design_contract": {
     "source_kind": "claude-design-zip",
-    "source_path": "slides/example/design/DDD Lecture Design System.zip",
+    "source_path": "slides/example/design/Example Design System.zip",
     "source_sha256": "source-zip-sha256",
     "resolved_contract_path": ".takt/design-contracts/example/resolved-design-contract.json",
     "contract_sha256": "normalized-json-sha256",
-    "namespace": "DDDLectureDesignSystem_a0d171",
+    "namespace": "ExampleDesignSystem_abcdef",
     "token_counts": {
       "total": 119,
       "color": 49,
       "typography": 31,
       "spacing": 32
     },
-    "component_count": 0,
+    "component_count": 2,
     "adherence": {
       "available": true
     }
@@ -354,8 +406,8 @@ Optional manifest fields:
 ```yaml
 design_contract:
   source_kind: claude-design-zip
-  source_path: slides/example/design/DDD Lecture Design System.zip
-  namespace: DDDLectureDesignSystem_a0d171
+  source_path: slides/example/design/Example Design System.zip
+  namespace: ExampleDesignSystem_abcdef
   source_sha256: source-zip-sha256
   contract_sha256: normalized-json-sha256
   token_counts:
@@ -437,7 +489,9 @@ interface ZipArchiveReader {
 - required files と required manifest fields を検証する。
 - manifest token と CSS custom property の一致を検証する。
 - `_adherence.oxlintrc.json` がある場合は `x-omelette.tokens` / `x-omelette.components` の counts と review rule names を取り込む。
-- `components` が空でも token が有効なら成功する。
+- `SKILL.md` / `readme.md` / component prompt がある場合は `guidance` として取り込む。
+- components / cards / templates / sample slides / guidelines / assets がある場合は `source_catalog` として取り込む。
+- `components` が空でも token が有効なら成功する。非空の場合も特定ドメインに固定せず、汎用 catalog として扱う。
 - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで決定する。
 - `styles.css` は global entry point として hash / import path を記録するが、inline rule の存在を必須にしない。
 
@@ -516,7 +570,7 @@ interface ResolvedDesignContract {
 
 - fixture deck に `slides/<deck>/design/<sample>.zip` を用意する。
 - binary fixture を直接 commit せず、validator が text fixture から deterministic な zip を temp directory に生成する。
-- sample は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json` を含み、`components: []` を valid として検証する。
+- sample は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md` / `readme.md`、component prompt、card、sample slide、template、asset を含み、guidance / source_catalog の生成を検証する。
 - smoke は `design-system.md` の存在ではなく、marker `design_contract`、Resolved Design Contract JSON、plan metadata、compose CSS token application、fingerprint match を検証する。
 
 ### foundation validation
@@ -554,7 +608,7 @@ interface ResolvedDesignContract {
 | 2.3 | required manifest fields |
 | 2.4 | token list validation |
 | 2.5 | manifest / CSS token consistency |
-| 2.6 | `components: []` compatibility |
+| 2.6 | empty/non-empty catalog compatibility |
 | 2.7 | token category classification |
 | 3.1 | `.takt/design-contracts/<deck>/resolved-design-contract.json` |
 | 3.2 | Resolved Design Contract JSON |
@@ -563,7 +617,7 @@ interface ResolvedDesignContract {
 | 3.5 | marker field separation |
 | 4.1 | PlanFacetContract |
 | 4.2 | existing layout vocabulary fallback |
-| 4.3 | token-only visual planning |
+| 4.3 | catalog-aware visual planning |
 | 4.4 | plan CSS non-generation |
 | 4.5 | plan metadata |
 | 4.6 | plan finding semantics |
@@ -600,7 +654,7 @@ interface ResolvedDesignContract {
 ## リスクと緩和策
 
 - **Claude Design export schema が未公開**: importer は required files / fields / token consistency に絞る。schema が変わった場合は曖昧に fallback せず `CLAUDE_DESIGN_SOURCE_INVALID` にする。
-- **sample の `components` が空**: component import を必須にせず、初期 scope では existing layout / visual vocabulary と token constraints を接続する。
+- **Design System ごとの要素差分**: component / card / template の存在や名前を workflow に固定しない。importer は guidance / source_catalog へ正規化し、facet はその catalog を読んで deck ごとに選定する。
 - **token `kind` が semantic category と一致しない**: manifest `kind`、token name prefix、source CSS path を併用して分類する。
 - **zip dependency が workflow に漏れる**: `fflate` は `ZipArchiveReader` adapter に閉じ、facets は Resolved Design Contract JSON だけを読む。
 - **既存 facet に残る `design-system.md` 参照**: implementation tasks で `templates/project` と `.takt` の両方を更新し、foundation / drift check で同期漏れを検出する。

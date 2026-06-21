@@ -38,7 +38,7 @@
 
 2.1. Claude Design Source が解決されたとき、slide workflow は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` を必須 input として検証しなければならない。
 
-2.2. Claude Design Source に `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、または `tokens/fonts.css` が含まれる場合、slide workflow はそれらを optional metadata として取り込み、存在しないことだけを理由に import を失敗させてはならない。
+2.2. Claude Design Source に `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md` / `README.md`、`components/**/*.prompt.md`、`guidelines/*.card.html`、`slides/*.html`、`templates/**/*.dc.html`、または `assets/*` が含まれる場合、slide workflow はそれらを optional metadata、guidance、source catalog として取り込み、存在しないことだけを理由に import を失敗させてはならない。
 
 2.3. `_ds_manifest.json` が `namespace`、`globalCssPaths`、または `tokens` を欠く場合、slide workflow は Resolved Design Contract を生成せず、`CLAUDE_DESIGN_SOURCE_INVALID` と不足 field を表示しなければならない。
 
@@ -46,7 +46,7 @@
 
 2.5. manifest token と token CSS の custom property が一致しない場合、slide workflow は import を成功扱いせず、差分の概要を report しなければならない。
 
-2.6. `components`、`startingPoints`、`cards`、`templates`、`themes`、または `fonts` が空配列である場合でも、slide workflow は token が有効であれば Claude Design Source を valid として扱わなければならない。
+2.6. `components`、`startingPoints`、`cards`、`templates`、`themes`、または `fonts` が空配列である場合でも、slide workflow は token が有効であれば Claude Design Source を valid として扱わなければならない。これらが非空の場合、slide workflow は特定ドメインに固定せず、name/path/description などの汎用 catalog として Resolved Design Contract に記録しなければならない。
 
 2.7. slide workflow が token category を分類するとき、manifest の `kind` だけに依存せず、token name prefix と source CSS path も使って colors / typography / spacing / radius / shadow / font を分類しなければならない。
 
@@ -58,7 +58,7 @@
 
 3.1. Claude Design Source の import が成功したとき、slide workflow は Resolved Design Contract を `.takt/` 配下の workflow-managed artifact として保存しなければならない。
 
-3.2. Resolved Design Contract が保存されたとき、slide workflow は source path、source fingerprint、manifest namespace、token counts、brand fonts、component count、adherence metadata の有無を記録しなければならない。
+3.2. Resolved Design Contract が保存されたとき、slide workflow は source path、source fingerprint、manifest namespace、token counts、brand fonts、component count、adherence metadata の有無、`guidance`、`source_catalog` を記録しなければならない。
 
 3.3. `plan` または `compose` が実行されるとき、slide workflow は `.takt/workflow-current-target.json` に Resolved Design Contract の path と fingerprint を記録しなければならない。
 
@@ -76,7 +76,7 @@
 
 4.2. `plan` が `Layout` を生成するとき、slide workflow は Claude Design Source から直接 layout vocabulary が得られない場合でも、既存 slide workflow の許可済み layout vocabulary と token constraints の範囲で `Layout` を記録しなければならない。
 
-4.3. `plan` が `Visual` または `Visual Strategy` を生成するとき、slide workflow は `components` が空でも失敗せず、token constraints と既存 visual vocabulary で実現できる visual 種別を記録しなければならない。
+4.3. `plan` が `Visual` または `Visual Strategy` を生成するとき、slide workflow は `components` が空でも失敗せず、token constraints と既存 visual vocabulary で実現できる visual 種別を記録しなければならない。`source_catalog` に components、cards、sample slides、templates、component prompts が存在する場合は、brief に合うものだけを選定し、選定理由と不採用理由を記録しなければならない。
 
 4.4. `plan` が成功したとき、slide workflow は CSS、front matter style、または `_class` の style 定義を `plan` 成果物として生成してはならない。
 
@@ -148,7 +148,7 @@
 
 8.1. メンテナが smoke validation を実行したとき、slide workflow は `design-system.md` の存在ではなく、Claude Design Source の解決、Resolved Design Contract の生成、`plan` への反映、`compose` への適用を検証しなければならない。
 
-8.2. smoke validation が Claude Design Source の fixture を使うとき、slide workflow は `_ds_manifest.json`、token CSS、empty `components`、optional adherence metadata を含む sample を検証しなければならない。
+8.2. smoke validation が Claude Design Source の fixture を使うとき、slide workflow は `_ds_manifest.json`、token CSS、optional adherence metadata、`SKILL.md` / `readme.md` guidance、component prompt、card、sample slide、template、asset catalog を含む sample を検証しなければならない。
 
 8.3. メンテナが foundation validation を実行したとき、slide workflow は marker shape、plan metadata、compose fingerprint check、legacy `design-system.md` 非依存を検証しなければならない。
 

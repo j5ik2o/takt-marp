@@ -47,6 +47,7 @@ font style には日本語優先フォールバックスタックを必ず指定
 
 各deckは `slides/<deck>/design/` に Claude Design Source の zip を1つ置く。
 workflow runner は Claude Design Source を `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`.takt/workflow-current-target.json` の `design_contract` で plan / compose へ渡す。
+Claude Design Source の内容は deck ごとに異なる。Resolved Design Contract の `guidance` と `source_catalog` に含まれる `SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets をその deck 固有の入力として扱い、特定ドメインや特定 component 名を workflow 側に固定してはならない。
 `plan.md` と `slide-blueprint.md` は Design Contract metadata と fingerprint を記録するが、CSS、front matter style、`_class` style 定義は生成しない。
 `SLIDES.md` のfront matter CSSは、スライドごとの個別調整ではなく、Resolved Design Contract の token と用途別classで構成する。
 既存 deck に `design-system.md` が残っていても、Claude Design Source、override、compose 成功条件として扱わない。

@@ -201,8 +201,9 @@ takt-marp research slides/<deck>
 
 Claude Design Source は `slides/<deck>/design/` に置く Claude Design export zip である。
 Runner は `plan` / `compose` の開始前に Claude Design Source を読み、`.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化する。
-`plan.md` と `slide-blueprint.md` は source path、namespace、fingerprint、token summary、adherence availability を記録するが、CSS、front matter style、`_class` style 定義は生成しない。
+`plan.md` と `slide-blueprint.md` は source path、namespace、fingerprint、token summary、adherence availability、`guidance`、`source_catalog` を記録するが、CSS、front matter style、`_class` style 定義は生成しない。
 `SLIDES.md` のfront matter CSSは Resolved Design Contract の token をもとに構成し、スライドごとの個別調整を避ける。
+Design System は deck ごとに異なる。`SKILL.md`、`readme.md`、component prompt、card、sample slide、template、asset は Resolved Design Contract の generic catalog として参照し、特定ドメインや特定 component 名を workflow に固定しない。
 
 必須項目:
 
@@ -218,6 +219,13 @@ Runner は `plan` / `compose` の開始前に Claude Design Source を読み、`
 - `tokens/fonts.css`
 - `_ds_bundle.js`
 - `.thumbnail`
+- `SKILL.md`
+- `readme.md` / `README.md`
+- `components/**/*.prompt.md`
+- `guidelines/*.card.html`
+- `slides/*.html`
+- `templates/**/*.dc.html`
+- `assets/*`
 
 ## Workflow 一覧
 

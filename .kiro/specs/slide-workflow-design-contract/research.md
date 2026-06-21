@@ -112,42 +112,49 @@
 
 ### Claude Design export sample: DDD Lecture Design System.zip
 
-- **背景**: Google Drive 上の `DDD Lecture Design System.zip` を raw download し、`.takt/tmp/claude-design-export-discovery/case-01/` に展開して構造を観察した。
+- **背景**: 正式版の `DDD Lecture Design System.zip` をローカルで確認し、Claude Design Source の実 file set と manifest shape を観察した。この sample は DDD 講義向けだが、workflow 契約は DDD 固定ではなく任意の Design System を受け付ける前提にする。
 - **参照した情報源**:
-  - Google Drive file `DDD Lecture Design System.zip`
-  - 展開先 `.takt/tmp/claude-design-export-discovery/case-01/extracted/`
+  - local file `/Users/j5ik2o/Downloads/DDD Lecture Design System.zip`
 - **file tree**:
   - `.thumbnail` - WebP thumbnail。
   - `_ds_manifest.json` - Design System manifest。namespace、global CSS paths、tokens、brand fonts、component/card/template arrays を持つ。
-  - `_ds_bundle.js` - `@ds-bundle` comment を持つ小さな JavaScript bundle。今回の sample では components は空。
+  - `SKILL.md` - Design System の使い方を示す primary guidance。
+  - `readme.md` - audience、tone、copy、visual language、component usage などの詳細 guidance。
+  - `_ds_bundle.js` - `@ds-bundle` comment を持つ JavaScript bundle。
   - `_adherence.oxlintrc.json` - token adherence 用の lint rule と `x-omelette` metadata。
   - `styles.css` - `tokens/*.css` を import する global entry point。
   - `tokens/colors.css`、`tokens/fonts.css`、`tokens/spacing.css`、`tokens/typography.css` - CSS custom properties と font import。
+  - `components/**/*.jsx`、`components/**/*.d.ts`、`components/**/*.prompt.md`、`components/**/*.card.html` - reusable component と usage prompt。
+  - `guidelines/*.card.html` - Design System の foundation specimen。
+  - `slides/*.html` - sample slide types。
+  - `templates/**/*.dc.html`、support scripts - deck template。
+  - `assets/*` - brand / design assets。
 - **発見**:
   - manifest の `namespace` は `DDDLectureDesignSystem_a0d171`、`source` は `spa`。
   - manifest の `globalCssPaths` は `tokens/fonts.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`styles.css`。
-  - manifest token は 119 件。内訳は color 49、font 14、other 15、spacing 32、radius 5、shadow 4。
+  - manifest token は 119 件。importer 分類では color 56、typography 31、spacing 23、radius 5、shadow 4、other 0。
   - token 定義元は `tokens/colors.css` 56 件、`tokens/typography.css` 31 件、`tokens/spacing.css` 32 件。
   - `brandFonts` は `Noto Serif JP`、`Noto Sans JP`、`JetBrains Mono` の 3 件で、いずれも `status: "ok"`。
-  - `components`、`startingPoints`、`cards`、`templates`、`themes`、`fonts` は空配列。
-  - `_adherence.oxlintrc.json` の `x-omelette.tokens` も 119 件で manifest と一致する。`x-omelette.components` は空。
+  - `components` は 6 件、`cards` は 20 件、`templates` は 1 件。`startingPoints`、`themes`、`fonts` は空配列。
+  - `_adherence.oxlintrc.json` の `x-omelette.tokens` も 119 件で manifest と一致する。
   - adherence rules は raw hex color、raw px value、未提供 font-family を warning する。これは review / lint surface に使える。
   - `styles.css` は import entry のみで inline rule を持たない。実際の contract source は manifest と `tokens/*.css` である。
 - **含意**:
   - 初期 importer は `Claude Design Source` を zip file として受け取り、必須 file を `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` として検証できる。
   - `tokens/fonts.css` は font import の source として扱うが、network font availability は workflow 成功条件にしない。`brandFonts` と font token を report すればよい。
-  - layout vocabulary / visual component はこの sample から直接は得られない。初期 scope では token-only Design Contract とし、layout vocabulary は slide workflow 側の既存 layout vocabulary に接続する必要がある。
-  - `components` が空でも valid な Claude Design Source として扱う。component import を必須にすると、この sample を取り込めない。
+  - `SKILL.md`、`readme.md`、component prompt、cards、sample slides、templates は plan / compose が Design System の意図を読むための primary guidance / source catalog として使える。
+  - ただし sample は DDD 講義向けなので、workflow に DDD 専用 component 名や語彙を固定してはならない。importer は generic catalog として保持し、facet は brief に合う要素だけを選定する。
+  - `components` が空でも valid な Claude Design Source として扱う。非空の場合は component import を必須条件にせず、汎用 catalog として扱う。
   - importer は manifest token と CSS token の一致、`x-omelette.tokens` との一致、`globalCssPaths` の存在、source fingerprint を validation surface にする。
   - `kind` の分類には注意が必要である。sample では `--text-*` が `font`、`--fs-*` が `spacing` と分類されており、semantic category と CSS property category が一致しない場合がある。importer は token name prefix と CSS file path も併用して分類する。
 - **暫定 importer contract**:
   - Accepted source: `.zip` archive containing `_ds_manifest.json`.
   - Required files: `_ds_manifest.json`, `styles.css`, `tokens/colors.css`, `tokens/typography.css`, `tokens/spacing.css`.
-  - Optional files: `.thumbnail`, `_ds_bundle.js`, `_adherence.oxlintrc.json`, `tokens/fonts.css`.
+  - Optional files: `.thumbnail`, `_ds_bundle.js`, `_adherence.oxlintrc.json`, `tokens/fonts.css`, `SKILL.md`, `readme.md` / `README.md`, `components/**/*.prompt.md`, `guidelines/*.card.html`, `slides/*.html`, `templates/**/*.dc.html`, `assets/*`.
   - Required manifest fields: `namespace`, `globalCssPaths`, `tokens`.
   - Optional manifest fields: `components`, `startingPoints`, `cards`, `templates`, `themes`, `fonts`, `brandFonts`, `source`.
   - Failure cases: missing manifest, malformed JSON, missing required token CSS file, empty token list, manifest/CSS token mismatch, unreadable zip.
-  - Report fields: namespace, source, source fingerprint, file fingerprints, token counts by kind/file, brand fonts, component count, adherence availability.
+  - Report fields: namespace, source, source fingerprint, file fingerprints, token counts by kind/file, brand fonts, component count/name summary, adherence availability, guidance documents, component prompts, source catalog counts.
 
 ## アーキテクチャパターン評価
 
@@ -158,7 +165,7 @@
 | runner が Design Contract を解決し marker で渡す | package-bundled default と deck-local override を runner で解決する | no-copy、既存 command、既存 marker と整合する | 利用者が Markdown Design Contract を評価・編集する前提が残る | 旧案。Claude Design Source 方針で破棄予定 |
 | plan だけが Design Contract を読む | `plan` の layout / visual を制約する | plan 品質は上がる | `compose` の CSS / `_class` とのズレを防げない | 不採用 |
 | compose だけが Design Contract を読む | CSS 生成側だけを制約する | compose 差分は小さい | `plan` が実現不能な layout / visual を出し続ける | 不採用 |
-| Claude Design export を唯一の user-facing design source にする | Claude Design zip / handoff / HTML を importer が読み、Resolved Design Contract に正規化する | 利用者がテキスト Design Contract を評価・編集しなくてよい。Interface が小さくなる | sample 1 では components が空で、layout / visual vocabulary は別 surface に残る | 採用。初期 importer は zip token bundle を対象に requirements / design を改訂 |
+| Claude Design export を唯一の user-facing design source にする | Claude Design zip / handoff / HTML を importer が読み、Resolved Design Contract に正規化する | 利用者がテキスト Design Contract を評価・編集しなくてよい。Interface が小さくなる。Design System ごとの差分を guidance / source catalog として扱える | zip schema が変わる可能性があるため importer seam に閉じる必要がある | 採用。importer は token bundle だけでなく guidance / source catalog も Resolved Design Contract に取り込む |
 
 ## 設計判断
 
