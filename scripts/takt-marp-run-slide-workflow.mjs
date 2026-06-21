@@ -95,8 +95,14 @@ async function main() {
       `Command '${command}' already reached successful state. Use --force to invalidate and rerun.`,
       "RERUN_BLOCKED",
     );
-  } else if ((await commandSupervisionResult(targetInfo, command)) === "rejected") {
-    await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
+  } else {
+    const supervisionResult = await commandSupervisionResult(targetInfo, command);
+    if (supervisionResult === "rejected") {
+      if (command === "plan" || command === "compose") {
+        pendingDesignContract = await resolveClaudeDesignContract(targetInfo);
+      }
+      await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
+    }
   }
 
   if (command === "research" && !flags.force) {

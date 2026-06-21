@@ -575,10 +575,12 @@ interface ResolvedDesignContract {
 - `research` metadata と同じ marker に共存させるが、research input とは別 field とする。
 - marker payload は report と facet が読める summary に絞り、詳細 token list は `design_contract.path` の JSON へ置く。
 - `plan` / `compose --force` では Claude Design Source の import / validation を force invalidation 前に済ませるが、Resolved Design Contract の保存は `archiveCommandArtifacts` と `cleanGeneratedOutputs` が成功した後に行う。
+- `plan` / `compose` を rejected supervision から `--force` なしで再実行する場合も、Claude Design Source の import / validation を rejected artifact archive 前に済ませる。
 - force invalidation が失敗した場合は、旧 supervision / approval / generated output と旧 Resolved Design Contract を残し、古い source artifact と新しい contract だけが混在する状態を作らない。
 - `polish`、`deliver`、`research` のように新しい Design Contract を生成しない command では、同一 target の既存 marker または `.takt/design-contracts/<deck>/resolved-design-contract.json` から `design_contract` を引き継ぐ。
 - 既存 marker が malformed JSON の場合は marker を読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く。
 - 既存 marker の target が一致しても `design_contract.path` が存在しない場合は stale marker として扱い、その marker の `design_contract` を引き継がない。保存済み Resolved Design Contract が存在すればそこから復旧し、存在しなければ `null` にフォールバックする。
+- 保存済み Resolved Design Contract が malformed JSON または marker payload を作れない shape の場合は corrupt marker として扱い、`design_contract` を省略して Legacy Polish Path へフォールバックする。
 
 ### PlanFacetContract
 
@@ -638,7 +640,7 @@ interface ResolvedDesignContract {
 - plan / blueprint が `contract_sha256` を記録し、CSS を含まないことを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、stale Design Contract marker の破棄を検証する。
+- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker の破棄を検証する。
 - Design Contract なしの legacy polish path で inspect / fix が blocked にならないことを facet 文言として検証する。
 
 ### package / global install / no-copy validation
@@ -680,8 +682,10 @@ interface ResolvedDesignContract {
 | 3.4 | importer failure semantics |
 | 3.5 | marker field separation |
 | 3.6 | force validation/save ordering |
-| 3.7 | malformed marker recovery |
-| 3.8 | stale Design Contract marker handling |
+| 3.7 | rejected rerun validation/save ordering |
+| 3.8 | malformed marker recovery |
+| 3.9 | stale Design Contract marker handling |
+| 3.10 | corrupt stored Design Contract fallback |
 | 4.1 | PlanFacetContract |
 | 4.2 | existing layout vocabulary fallback |
 | 4.3 | catalog-aware visual planning |

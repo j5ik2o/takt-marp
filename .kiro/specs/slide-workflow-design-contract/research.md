@@ -169,8 +169,10 @@
   - `slides/<deck>/design/` に valid zip と invalid zip が同居する場合、valid zip を暗黙採用すると壊れた新規 export を無視して古い Design System で進んでしまう。最終実装では invalid sibling zip が 1 件でもあれば `CLAUDE_DESIGN_SOURCE_INVALID` として停止する。
   - `_ds_manifest.json` が JSON としては valid でも `null`、文字列、配列の場合、field access ではなく `CLAUDE_DESIGN_SOURCE_INVALID` として扱う必要がある。
   - `plan` / `compose --force` では、source validation は archive / clean 前に必要だが、Resolved Design Contract の保存まで先に行うと archive / clean 失敗時に旧成果物と新契約が混在する。最終実装では import / validation と保存を分け、保存は archive / clean 成功後に遅延する。
+  - `plan` / `compose` を rejected supervision から `--force` なしで再実行する場合も、source validation が rejected artifact archive より後だと、TAKT を起動できない失敗なのに review / supervision sidecar だけが history へ移動する。最終実装では rejected archive 前に import / validation を済ませる。
   - `polish`、`deliver`、`research` は新しい Design Contract を生成しないため、既存 marker が malformed の場合は読み捨て、保存済み Resolved Design Contract marker または `null` にフォールバックして新しい marker を書く必要がある。
   - 既存 marker の target が一致しても `design_contract.path` が存在しない場合、その marker を引き継ぐと存在しない Resolved Design Contract を facet に渡してしまう。最終実装では stale marker として扱い、保存済み Resolved Design Contract がなければ `design_contract` を持たない marker を書く。
+  - 保存済み Resolved Design Contract 自体が malformed JSON または marker payload を作れない shape の場合も、`polish` / `deliver` を中断するより、`design_contract` を省略して legacy path へフォールバックする方が既存 deck の移行安全性に合う。
   - Claude Design Source 導入前に compose 済みの既存 deck には Resolved Design Contract がない。`polish-inspect` / `polish-fix` は Design Contract 不在そのものを blocked にせず、render evidence と既存 source artifact の範囲で legacy visual/layout/render 修正を許可する。
 - **含意**:
   - Claude Design Source resolver は「valid が 1 件あるか」ではなく「design directory 全体が exactly one valid source として整理されているか」を検証する。
@@ -181,8 +183,10 @@
   - manifest `null` で importer が `CLAUDE_DESIGN_SOURCE_INVALID` を返す。
   - object 形式の `brandFonts` から `family` を抽出して `brand_fonts` に保持する。
   - `--force` archive 失敗時に新しい Resolved Design Contract を保存しない。
+  - rejected rerun で missing Claude Design Source の場合に supervision / review history を変更しない。
   - malformed marker から `polish` marker が保存済み Resolved Design Contract を復旧する。
   - `design_contract.path` が存在しない stale marker を `polish` marker に引き継がない。
+  - corrupt な保存済み Resolved Design Contract を `polish` marker に引き継がない。
 
 ## アーキテクチャパターン評価
 

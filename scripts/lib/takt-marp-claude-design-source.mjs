@@ -271,8 +271,34 @@ export async function loadResolvedDesignContractMarker(targetInfo, options = {})
   if (!existsSync(contractPath)) {
     return null;
   }
-  const contract = JSON.parse(await readFile(contractPath, "utf8"));
+  let contract;
+  try {
+    contract = JSON.parse(await readFile(contractPath, "utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError || error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+  if (!isResolvedDesignContractShape(contract)) {
+    return null;
+  }
   return designContractMarkerPayload(contract, contractPath, root);
+}
+
+function isResolvedDesignContractShape(contract) {
+  return isPlainObject(contract) &&
+    isPlainObject(contract.source) &&
+    typeof contract.source.namespace === "string" &&
+    isPlainObject(contract.fingerprint) &&
+    isPlainObject(contract.token_counts) &&
+    Array.isArray(contract.brand_fonts) &&
+    isPlainObject(contract.components) &&
+    isPlainObject(contract.adherence);
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 export function designContractMarkerPayload(contract, contractPath, root = process.cwd()) {

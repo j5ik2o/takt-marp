@@ -36,7 +36,7 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 
 この approach は、新しい top-level `design` command を追加せず、既存 ADR の `plan / compose / polish / deliver` command surface を維持する。通常実行で consumer workspace へ `.takt/workflows` / `.takt/facets` をコピーしない no-copy contract とも整合する。
 
-`--force` 再実行では、Claude Design Source の import / validation は既存成果物の invalidation 前に行うが、Resolved Design Contract の保存は archive / clean 成功後に遅延する。Claude Design Source 導入前に compose 済みの既存 deck については、`polish` が Design Contract 不在だけで blocked にならない legacy path を維持する。
+`--force` 再実行と rejected supervision からの再実行では、Claude Design Source の import / validation は既存成果物の invalidation 前に行うが、Resolved Design Contract の保存は archive / clean 成功後に遅延する。Claude Design Source 導入前に compose 済みの既存 deck については、`polish` が Design Contract 不在だけで blocked にならない legacy path を維持する。
 
 ## Scope
 
@@ -52,8 +52,8 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 - `compose` が Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する規約。
 - `design-system.md` を compose canonical artifact、override 条件、success assertion から外す workflow / docs / validator 更新。
 - compose report / review / supervision reports への Claude Design Source 使用記録。
-- `--force` 時の source validation / artifact invalidation / Resolved Design Contract 保存順序。
-- malformed / stale marker からの Design Contract marker 復旧または破棄。
+- `--force` / rejected rerun 時の source validation / artifact invalidation / Resolved Design Contract 保存順序。
+- malformed / stale / corrupt marker からの Design Contract marker 復旧または破棄。
 - Resolved Design Contract を持たない既存 deck の legacy polish path。
 - smoke validation、foundation validation、package/no-copy validation の更新。
 

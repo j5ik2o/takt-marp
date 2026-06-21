@@ -72,9 +72,13 @@
 
 3.6. `plan` または `compose` を `--force` で再実行する場合、slide workflow は既存成果物の archive / clean より前に Claude Design Source を import / validation しなければならない。ただし Resolved Design Contract の保存は archive / clean が成功した後に行い、archive / clean が失敗した場合は旧成果物と旧 Resolved Design Contract を不整合な状態にしてはならない。
 
-3.7. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 `.takt/workflow-current-target.json` が malformed でも停止せず読み捨て、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
+3.7. `plan` または `compose` を rejected supervision から `--force` なしで再実行する場合、slide workflow は rejected artifact の archive より前に Claude Design Source を import / validation し、validation 失敗時は既存 supervision / approval / review history を変更してはならない。
 
-3.8. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 marker の target が一致しても `design_contract.path` が存在しない場合、slide workflow は stale な Design Contract marker を引き継がず、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
+3.8. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 `.takt/workflow-current-target.json` が malformed でも停止せず読み捨て、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
+
+3.9. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、既存 marker の target が一致しても `design_contract.path` が存在しない場合、slide workflow は stale な Design Contract marker を引き継がず、保存済み Resolved Design Contract marker または `null` へフォールバックしなければならない。
+
+3.10. `polish`、`deliver`、`research` など新しい Design Contract を生成しない command が marker を作るとき、保存済み Resolved Design Contract が malformed JSON または marker payload を作れない shape の場合、slide workflow は停止せず `design_contract` を省略して Legacy Polish Path へフォールバックしなければならない。
 
 ### 要件 4: plan は Design Contract を使って実現可能な構成を計画する
 
@@ -168,7 +172,7 @@
 
 8.6. Claude Design Source の検証が失敗した場合、slide workflow は失敗した source file、対象 command、確認すべき artifact を利用者またはメンテナが特定できる結果を表示しなければならない。
 
-8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、malformed marker からの復旧、stale Design Contract marker の破棄を検証しなければならない。
+8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、`--force` archive 失敗時の Resolved Design Contract 非保存、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker の破棄を検証しなければならない。
 
 ### 要件 9: 既存 deck と既存成果物への影響を限定する
 
