@@ -41,6 +41,7 @@ export const REQUIRED_PACK_FILES = [
   "bin/takt-marp.mjs",
   "marp.config.mjs",
   "scripts/takt-marp-validate-design-contract-foundation.mjs",
+  "scripts/takt-marp-validate-content-acceptance.mjs",
   "scripts/takt-marp-run-slide-workflow.mjs",
   "scripts/takt-marp-validate-slide-workflow-smoke.mjs",
   "scripts/lib/takt-marp-claude-design-fixtures.mjs",
@@ -56,6 +57,7 @@ export const REQUIRED_PACK_FILES = [
   "scripts/lib/takt-marp-zip-archive.mjs",
 ];
 const SMOKE_FIXTURE_PREFIX = "fixtures/marp-slide-workflow/_workflow-smoke/";
+const CONTENT_ACCEPTANCE_FIXTURE_PREFIX = "fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/";
 
 const EXPECTED_FILES_ALLOWLIST = ["bin/", "scripts/", "templates/", "fixtures/marp-slide-workflow/", "marp.config.mjs"];
 const EXPECTED_BIN_NAME = "takt-marp";
@@ -201,6 +203,9 @@ export function checkPackContents(paths, templateEntries, addViolation) {
   }
   if (!paths.some((packedPath) => packedPath.startsWith(SMOKE_FIXTURE_PREFIX))) {
     addViolation("pack contents", `required smoke fixture missing from pack: no file under ${SMOKE_FIXTURE_PREFIX}`);
+  }
+  if (!paths.some((packedPath) => packedPath.startsWith(CONTENT_ACCEPTANCE_FIXTURE_PREFIX))) {
+    addViolation("pack contents", `required content acceptance fixture missing from pack: no file under ${CONTENT_ACCEPTANCE_FIXTURE_PREFIX}`);
   }
   for (const entry of templateEntries) {
     const expectedPath = `templates/project/${entry.relativePath}`;

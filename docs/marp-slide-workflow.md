@@ -440,6 +440,8 @@ Appendix は必要な場合だけ生成し、本編と明確に分離する。
 通常の `takt-marp build:*` と `npm run build` は target 省略時に `slides/` 配下の Markdown を変換対象にする。
 そのため smoke 用の入力は `slides/` 外に置き、実行確認時だけ `slides/_workflow-smoke/` にコピーする。
 
+Smoke fixture は workflow wiring / state / render evidence / delivery artifact の検証用であり、人間向け講義品質の確認対象ではない。`dist/_workflow-smoke/SLIDES.pdf` は smoke workflow が生成した `slides/_workflow-smoke/SLIDES.md` 由来のartifactとして扱う。
+
 ```text
 fixtures/marp-slide-workflow/_workflow-smoke/
   brief.md
@@ -452,6 +454,16 @@ Smoke 実行前:
 mkdir -p slides/_workflow-smoke
 cp fixtures/marp-slide-workflow/_workflow-smoke/brief.md slides/_workflow-smoke/brief.md
 ```
+
+## DDD content acceptance fixture
+
+DDD講義らしい内容密度、共通題材、Java風Before/After、演習、図解、Appendix断片、Design Contract token usage、PDF origin を短時間で確認する場合は、別fixtureを使う。
+
+```bash
+npm run slide:content-acceptance
+```
+
+この検証は `fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/` の precomputed `SLIDES.md` を `slides/_content-acceptance-ddd-slice/` にコピーし、`build:html` と `build:pdf` を実行する。full 100〜140枚講義や real provider 実行は acceptance の必須条件にしない。summary は `slides/_content-acceptance-ddd-slice/review/content-acceptance-summary.md` に残る。
 
 ## 運用コマンド
 

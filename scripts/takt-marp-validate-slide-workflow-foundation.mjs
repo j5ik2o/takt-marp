@@ -967,6 +967,7 @@ async function main() {
     const validPackPaths = [
       ...REQUIRED_PACK_FILES,
       "fixtures/marp-slide-workflow/_workflow-smoke/brief.md",
+      "fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/SLIDES.md",
       "templates/project/workflows/takt-marp-slide-plan.yaml",
       `templates/project/${researchReuseTemplatePath}`,
       "templates/project/facets/instructions/takt-marp-compose-fix.md",
@@ -3571,7 +3572,7 @@ async function main() {
   await check("package scripts expose canonical entrypoints only", async () => {
     const pkg = JSON.parse(await readFile(path.join(process.cwd(), "package.json"), "utf8"));
     const scripts = pkg.scripts ?? {};
-    for (const name of ["slide:research", "slide:plan", "slide:compose", "slide:polish", "slide:deliver", "slide:check-state", "slide:approve", "slide:validate-foundation"]) {
+    for (const name of ["slide:research", "slide:plan", "slide:compose", "slide:polish", "slide:deliver", "slide:check-state", "slide:approve", "slide:validate-foundation", "slide:content-acceptance"]) {
       assert(scripts[name], `missing package script ${name}`);
     }
     assert(
@@ -3587,6 +3588,7 @@ async function main() {
       assert(!scripts[oldName], `old package script remains: ${oldName}`);
     }
     assert(scripts.test?.includes("npm run slide:smoke -- --provider mock"), "npm test must require deterministic mock smoke");
+    assert(scripts.test?.includes("npm run slide:content-acceptance"), "npm test must require deterministic DDD content acceptance");
     assert(!scripts.test?.match(/--provider (?!mock\b)[^ ]+/), `npm test must not require real provider smoke: ${scripts.test}`);
   });
 

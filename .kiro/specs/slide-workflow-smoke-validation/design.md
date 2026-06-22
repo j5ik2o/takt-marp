@@ -2,7 +2,7 @@
 
 ## 概要
 
-`slide-workflow-smoke-validation` は、foundation と orchestration の契約を smoke deck で実行確認する integration validation です。既存の command/state model、approval ownership、report schema、workflow routing を再定義せず、`slides/<deck>` target の canonical sequence が `delivered` に到達することと、主要な failure/rerun/force path が設計どおり動くことを検証します。
+`slide-workflow-smoke-validation` は、foundation と orchestration の契約を Workflow Smoke（ワークフロースモーク）deck で実行確認する integration validation です。既存の command/state model、approval ownership、report schema、workflow routing を再定義せず、`slides/<deck>` target の canonical sequence が `delivered` に到達することと、主要な failure/rerun/force path が設計どおり動くことを検証します。Workflow Smoke は人間向け講義品質を判定せず、DDD講義の代表的な内容品質は Content Acceptance Slice（内容受け入れスライス）として別 target で検証します。
 
 ### 目標
 
@@ -13,6 +13,7 @@
 - supervision report、loop monitor、render evidence、delivery artifact の契約を検証する
 - successful rerun、rejected rerun、`--force` invalidation、history archive を検証する
 - smoke で見つかった integration issue を上流契約の範囲で最小修正する
+- Workflow Smoke と Content Acceptance Slice を分離し、PDF origin を追跡可能にする
 
 ### 非目標
 
@@ -40,6 +41,8 @@
 - foundation が所有する target resolver、front matter parser、approval writer、runner semantics の再設計
 - orchestration が所有する canonical workflow topology と facet/output-contract semantics の再設計
 - smoke deck 以外の実 deck 品質改善
+- full 100〜140枚講義の毎回生成
+- real provider content acceptance の必須化
 - source artifact を force invalidation で削除する挙動
 - Git 操作、commit、PR 作成
 
@@ -100,12 +103,14 @@ graph TB
 ### 作成するファイル
 
 - `scripts/takt-marp-validate-slide-workflow-smoke.mjs` — smoke deck setup、canonical sequence、failure path、evidence/artifact、rerun/force/history を検証する CLI。
+- `scripts/takt-marp-validate-content-acceptance.mjs` — Content Acceptance Slice の precomputed `SLIDES.md` を別 target にコピーし、HTML/PDF build、DDD content markers、Design Contract token usage、PDF origin、10分以内実行を検証する CLI。
 - `slides/_workflow-smoke/.gitkeep` または生成時のみの deck directory — smoke 実行時に fixture から再作成される作業 target。常設する場合は source artifact と generated artifact の境界を明示する。
 
 ### 変更するファイル
 
 - `fixtures/marp-slide-workflow/_workflow-smoke/README.md` —旧 command/旧 target の案内を canonical sequence と `slides/<deck>` target に更新する。
 - `fixtures/marp-slide-workflow/_workflow-smoke/brief.md` — plan が `plan.md` の `deliverables` へ正規化できる artifact request を `html`、`pdf`、必要に応じて `pptx` の範囲で明確になるよう最小更新する。
+- `fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/**` — Workflow Smoke とは別の bounded DDD content fixture。precomputed `SLIDES.md`、brief、Design Brief を持つ。
 - `package.json` — smoke validation 用 npm script を追加する。既存 `slide:*` command model の再設計は foundation の所有なので、この spec では smoke entrypoint だけを追加する。
 - `scripts/takt-marp-validate-slide-workflow-foundation.mjs` または foundation validation 周辺 — smoke で見つかった preflight/rerun/force の integration gap が既存 validation で捕捉できない場合のみ、最小の regression を追加する。
 - `.takt/workflows/*.yaml`、`.takt/facets/**/*.md` — smoke で見つかった orchestration の参照切れ、report schema 不一致、loop routing 不備だけを integration fix exception として最小修正する。
@@ -169,6 +174,8 @@ graph TB
 | DeliveryArtifactAssertions | Validation | `dist/<deck>/` clean と `plan.md` deliverables を検証する | 6.3, 6.4 | Marp delivery P0 | State |
 | RerunForceAssertions | Validation | successful rerun、rejected rerun、force archive/cleanup を検証する | 7.1, 7.2, 7.3, 7.4 | foundation runner P0 | Batch, State |
 | SmokeArtifactBoundary | Validation | source/evidence/delivery artifact の混同を防ぐ | 1.3, 6.4, 7.4 | filesystem P0 | State |
+| ContentAcceptanceFixture | Fixture | DDD講義の代表slice source と Design Brief を保持する | 9.3, 9.5 | fixture P0 | State |
+| ContentAcceptanceValidator | Validation | precomputed DDD slice の内容密度、Design Contract token usage、HTML/PDF build、PDF origin、10分以内実行を検証する | 9.4, 9.5, 9.6, 9.7 | Marp build P0 | Batch, State |
 | IntegrationFixLoop | Process | smoke で見つかったズレを分類し最小修正する | 8.1, 8.2, 8.3 | upstream specs P0 | State |
 | SmokeResultReporter | Validation | 実行 command、failure path、evidence、artifact、残存リスクを記録する | 2.3, 8.4 | validation CLI P1 | Batch |
 
@@ -195,6 +202,20 @@ Smoke result summary は `slides/<deck>/review/smoke-summary.md` に Markdown + 
 
 Final report format は `slides/<deck>/review/smoke-summary.md` に固定し、JSON を追加する場合も Markdown summary を authoritative にする。
 
+Smoke result summary は `acceptance_scope: workflow-wiring-only`、`content_quality_evidence: false`、`slides_source`、`pdf_output` を front matter に含める。body でも `_workflow-smoke` のPDFを DDD講義品質の証跡として扱わないことを明示する。
+
+### Batch Contract: content acceptance validation CLI
+
+- Trigger: `node scripts/takt-marp-validate-content-acceptance.mjs [slides/_content-acceptance-ddd-slice]`
+- Primary flow: fixture setup、Claude Design Source fixture 付与、precomputed `SLIDES.md` content marker 検査、Design Contract token usage 検査、`build:html`、`build:pdf`、PDF text marker 検査、no-copy assertion、summary output
+- Exit behavior: すべての必須 check が通った場合は zero exit。失敗時は failing check 名、期待値、観測値、関連 path を出して non-zero exit。
+- Runtime budget: 10分以内。real provider は起動しない。
+- Side effects: `slides/_content-acceptance-ddd-slice/`、`dist/_content-acceptance-ddd-slice/`、summary を作成できる。workflow/facet template asset は生成・変更しない。
+
+### State Contract: content acceptance summary
+
+Content acceptance summary は `slides/_content-acceptance-ddd-slice/review/content-acceptance-summary.md` に Markdown + YAML front matter で保存する。front matter には `acceptance_kind: ddd-content-slice`、`provider: deterministic-precomputed-source`、`workflow_smoke: false`、`full_deck_generated: false`、`slides_source`、`html_output`、`pdf_output`、`duration_budget_ms`、`elapsed_ms`、`result` を含める。
+
 ### State Contract: convergence negative harness
 
 Convergence negative harness は、実 deck の修正ループ品質に依存せず、workflow YAML の `loop_monitors` 設定を使って orchestration routing contract を決定論的に検証する。smoke validation は次の設定を検証入力として扱う。
@@ -213,6 +234,8 @@ smoke validation は `.takt/workflows/takt-marp-slide-*.yaml` の `loop_monitors
 - optional PDF rasterization missing は degraded evidence として扱い、HTML PNG evidence failure は blocker として扱う。
 - rejected rerun/force の history archive が観測できない場合は smoke failure とする。
 - integration issue が上流契約の曖昧さに由来する場合は、smoke 側で意味論を埋めず upstream feedback として明示する。
+- Content Acceptance Slice は precomputed source と Marp build を使い、real provider misconfiguration を failure reason にしない。
+- Content Acceptance Slice が10分予算を超える場合は validation failure とする。
 
 ## テスト戦略
 
@@ -225,6 +248,7 @@ smoke validation は `.takt/workflows/takt-marp-slide-*.yaml` の `loop_monitors
 - Delivery validation: `dist/<deck>/` clean 後に `plan.md` の deliverables が生成され、render evidence と混同されないことを確認する。
 - Rerun/force validation: successful rerun rejection、rejected rerun archive、force archive、generated output cleanup、source retention を確認する。
 - Regression validation: smoke で直した integration issue が再発しないよう、対応する assertion を smoke validation CLI または既存 validation に含める。
+- Content acceptance validation: DDD講義の代表sliceが9枚の bounded source であり、共通題材、Java Before/After、演習、模範回答、図解、Appendix断片、Design Contract token usage、HTML/PDF build、PDF origin、10分以内実行を確認する。
 
 ## 実装メモ
 
@@ -232,4 +256,5 @@ smoke validation は `.takt/workflows/takt-marp-slide-*.yaml` の `loop_monitors
 - fixture README の更新は smoke 実行方法の更新に限定し、workflow redesign の説明文書にしない。
 - validation script は command の出力全文を成功条件にせず、exit code、front matter、filesystem path、metadata を primary evidence として扱う。
 - `pdftoppm` availability は環境差があるため、必須成功条件は HTML PNG evidence と metadata 記録に置く。
+- Content Acceptance Slice のPDF本文確認は `pdftotext` がある環境では marker 検査まで行い、無い環境ではPDF file生成とorigin summaryを primary evidence にする。
 - この design では `research.md` を生成しない。ユーザー指定により spec directory 配下の生成対象を4ファイルに限定する。
