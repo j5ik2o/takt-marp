@@ -272,7 +272,7 @@ Optional manifest fields:
 - `fonts`
 - `brandFonts`
 
-`namespace` は空でない string、`globalCssPaths` と `tokens` は array として検証する。`brandFonts` は string 配列、または `family` を持つ object 配列を受け付け、引用符あり / なしの CSS font-family token と合わせて Resolved Design Contract の `brand_fonts` へ font family string として正規化する。font-family token は `--font*` prefix だけでなく `kind: "font"`、`family` を含む token 名、typography / fonts CSS path 由来の family 値も対象にし、font-size などの scalar 値は除外する。
+`namespace` は空でない string、`globalCssPaths` と `tokens` は array として検証する。`brandFonts` は string 配列、または `family` を持つ object 配列を受け付け、引用符あり / なしの CSS font-family token と合わせて Resolved Design Contract の `brand_fonts` へ font family string として正規化する。font-family token は `--font*` prefix だけでなく `kind: "font"`、`family` を含む token 名、typography / fonts CSS path 由来の family 値も対象にするが、font-size などの scalar 値、`clamp(...)` などの CSS function 値、`font-style` / `font-display` など family ではない font 関連 token 値は除外する。
 
 ### Resolved Design Contract JSON
 
@@ -407,7 +407,7 @@ Optional manifest fields:
 }
 ```
 
-`contract_sha256` は normalized JSON の stable stringify 結果から算出する。`source.sha256` は zip bytes の SHA-256 とする。保存済み Resolved Design Contract を marker payload に戻す場合も `contract_sha256` を再計算し、保存済み fingerprint と一致しない contract は corrupt として扱う。`compose` は `contract_sha256` を plan metadata と照合し、report には `source.sha256` も残す。
+`contract_sha256` は `source.path`、`source.sha256`、`fingerprint.source_sha256`、Design Brief authoring metadata を除いた normalized JSON の stable stringify 結果から算出する。`source.sha256` は zip bytes の SHA-256 とし、`fingerprint.source_sha256` とともに provenance として記録する。保存済み Resolved Design Contract を marker payload に戻す場合も同じ入力から `contract_sha256` を再計算し、保存済み fingerprint と一致しない contract は corrupt として扱う。`compose` は `contract_sha256` を plan metadata と照合し、report には `source.sha256` も残す。
 
 ### marker payload
 
@@ -637,7 +637,7 @@ interface ResolvedDesignContract {
 - 既存 marker の target が一致しても `design_contract.path` が存在しない場合は stale marker として扱い、その marker の `design_contract` を引き継がない。保存済み Resolved Design Contract が存在すればそこから復旧し、存在しなければ `null` にフォールバックする。
 - 既存 marker の target が一致し `design_contract.path` が存在する場合でも、その path の Resolved Design Contract を読み直して marker payload を作れない場合は、その marker の `design_contract` を引き継がない。
 - marker payload を作るには `source.path`、`source.sha256`、`source.namespace`、`fingerprint.source_sha256`、`fingerprint.contract_sha256` が必須であり、欠けている Resolved Design Contract は corrupt marker として扱う。
-- 保存済み Resolved Design Contract の `fingerprint.contract_sha256` は marker payload 作成時にも再計算し、一致しない場合は stale / corrupt contract として扱う。
+- 保存済み Resolved Design Contract の `fingerprint.contract_sha256` は marker payload 作成時にも、source path / raw zip hash provenance と Design Brief authoring metadata を除いた入力から再計算し、一致しない場合は stale / corrupt contract として扱う。
 - 保存済み Resolved Design Contract が malformed JSON または marker payload を作れない shape の場合は corrupt marker として扱い、`design_contract` を省略して Legacy Polish Path へフォールバックする。
 
 ### PlanFacetContract
@@ -709,7 +709,7 @@ interface ResolvedDesignContract {
 - Design Brief 欠落時は import failure ではなく warning / finding になり、Design Brief fingerprint 不一致時は compose / review blocker になることを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、plan review の Design Contract metadata gate、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
+- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、CSS function / font-style / font-display の brand font 除外、source provenance を除外した stable contract hash、引用符付き plan fingerprint、archive-only template catalog、optional catalog、plan review の Design Contract metadata gate、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
 - `polish-inspect` / `polish-fix` が通常 path で `design_contract.path`、`fingerprint.contract_sha256`、token drift、`guidance`、`source_catalog` を確認し、Design Contract なしの legacy path だけ fingerprint / token drift 判定をスキップすることを facet 文言として検証する。
 
 ### package / global install / no-copy validation

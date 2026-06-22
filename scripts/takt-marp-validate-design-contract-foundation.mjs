@@ -103,6 +103,11 @@ export async function runDesignContractFoundationChecks(check) {
       deckName: "demo",
       designBrief: { available: true, path: designBriefPath, sha256: changedDesignBriefSha256 },
     });
+    const renamedSource = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), {
+      sourcePath: path.join(ROOT_DIR, "slides", "demo", "design", "Renamed Claude Design Smoke.zip"),
+      root: ROOT_DIR,
+      deckName: "demo",
+    });
 
     assert(first.source.kind === "claude-design-zip", `unexpected design source kind: ${first.source.kind}`);
     assert(first.source.path === "slides/demo/design/Claude Design Smoke.zip", `source path must be project-relative: ${first.source.path}`);
@@ -129,9 +134,36 @@ export async function runDesignContractFoundationChecks(check) {
     assert(first.source_catalog.fonts.some((item) => item.family === "Noto Sans JP"), `font catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.assets.some((item) => item.path === "assets/mark.svg"), `asset catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
+    assert(first.source.path !== renamedSource.source.path, "renamed source fixture did not change source path metadata");
+    assert(first.fingerprint.contract_sha256 === renamedSource.fingerprint.contract_sha256, "source path metadata must not change contract fingerprint");
     assert(first.fingerprint.contract_sha256 === withDesignBrief.fingerprint.contract_sha256, "Design Brief metadata must not change contract fingerprint");
     assert(withDesignBrief.fingerprint.contract_sha256 === withChangedDesignBrief.fingerprint.contract_sha256, "Design Brief SHA drift must not change contract fingerprint");
     assert(withDesignBrief.authoring.design_brief.sha256 !== withChangedDesignBrief.authoring.design_brief.sha256, "Design Brief SHA drift must stay visible in authoring metadata");
+
+    const provenanceManifest = {
+      namespace: "ClaudeDesignProvenanceStable",
+      globalCssPaths: ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "styles.css"],
+      tokens: [
+        { name: "--accent", value: "#0050a4", kind: "color", definedIn: "tokens/colors.css" },
+        { name: "--font-body", value: "Inter, sans-serif", kind: "font", definedIn: "tokens/typography.css" },
+        { name: "--space-4", value: "16px", kind: "spacing", definedIn: "tokens/spacing.css" },
+      ],
+    };
+    const provenanceEntries = {
+      "_ds_manifest.json": `${JSON.stringify(provenanceManifest)}\n`,
+      "styles.css": "",
+      "tokens/colors.css": ":root { --accent: #0050a4; }\n",
+      "tokens/typography.css": ":root { --font-body: Inter, sans-serif; }\n",
+      "tokens/spacing.css": ":root { --space-4: 16px; }\n",
+    };
+    const provenanceBase = await importClaudeDesignSourceBuffer(createZipArchiveBuffer(provenanceEntries), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    const provenanceWithIgnoredEntry = await importClaudeDesignSourceBuffer(createZipArchiveBuffer({
+      ...provenanceEntries,
+      "ignored/internal-note.txt": "not part of the normalized Design Contract\n",
+    }), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    assert(provenanceBase.source.sha256 !== provenanceWithIgnoredEntry.source.sha256, "ignored archive entry did not change source SHA provenance");
+    assert(provenanceBase.fingerprint.source_sha256 !== provenanceWithIgnoredEntry.fingerprint.source_sha256, "ignored archive entry did not change source fingerprint provenance");
+    assert(provenanceBase.fingerprint.contract_sha256 === provenanceWithIgnoredEntry.fingerprint.contract_sha256, "source SHA provenance must not change contract fingerprint");
 
     const mismatchedManifest = {
       namespace: "ClaudeDesignMismatch",
@@ -177,6 +209,9 @@ export async function runDesignContractFoundationChecks(check) {
         { name: "--font-heading", value: "Inter, sans-serif", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--body-family", value: "IBM Plex Sans, sans-serif", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--text-body", value: "16px", kind: "font", definedIn: "tokens/typography.css" },
+        { name: "--fs-fluid", value: "clamp(1rem, 2vw, 2rem)", kind: "typography", definedIn: "tokens/typography.css" },
+        { name: "--font-style", value: "italic", kind: "font", definedIn: "tokens/typography.css" },
+        { name: "--font-display", value: "swap", kind: "font", definedIn: "tokens/fonts.css" },
         { name: "--button-text-size", value: "12px", kind: "spacing", definedIn: "tokens/spacing.css" },
         { name: "--bg-page", value: "#ffffff", kind: "color", definedIn: "tokens/colors.css" },
       ],
@@ -185,7 +220,8 @@ export async function runDesignContractFoundationChecks(check) {
       "_ds_manifest.json": `${JSON.stringify(compoundManifest)}\n`,
       "styles.css": "",
       "tokens/colors.css": ":root { --bg-page: #ffffff; }\n",
-      "tokens/typography.css": ":root { --font-heading: Inter, sans-serif; --body-family: IBM Plex Sans, sans-serif; --text-body: 16px; }\n",
+      "tokens/typography.css": ":root { --font-heading: Inter, sans-serif; --body-family: IBM Plex Sans, sans-serif; --text-body: 16px; --fs-fluid: clamp(1rem, 2vw, 2rem); --font-style: italic; }\n",
+      "tokens/fonts.css": ":root { --font-display: swap; }\n",
       "tokens/spacing.css": ":root { --button-text-size: 12px; }\n",
     }), { sourcePath, root: ROOT_DIR, deckName: "demo" });
     const categories = Object.fromEntries(classified.tokens.map((token) => [token.name, token.category]));
@@ -196,6 +232,9 @@ export async function runDesignContractFoundationChecks(check) {
     assert(classified.brand_fonts.includes("Inter"), `unquoted font token family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
     assert(classified.brand_fonts.includes("IBM Plex Sans"), `kind: font family token without --font prefix was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
     assert(!classified.brand_fonts.includes("16px"), `font-size token leaked into brand fonts: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(!classified.brand_fonts.includes("2rem)"), `CSS function comma value leaked into brand fonts: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(!classified.brand_fonts.includes("italic"), `font-style token leaked into brand fonts: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(!classified.brand_fonts.includes("swap"), `font-display token leaked into brand fonts: ${JSON.stringify(classified.brand_fonts)}`);
   });
 
   await check("slide commands resolve or preserve Design Contract by lifecycle phase", async () => {
@@ -536,6 +575,32 @@ export async function runDesignContractFoundationChecks(check) {
     assert(!existsSync(argsPath), "TAKT was invoked despite stale plan Design Contract fingerprint");
   });
 
+  await check("compose accepts quoted Design Contract fingerprints in approved plan artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-compose-quoted-plan-fingerprint-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const currentContract = (await resolveClaudeDesignContract(targetInfo, { root })).contract;
+    await writePlanDesignContractArtifacts(
+      targetInfo,
+      currentContract.fingerprint.contract_sha256,
+      currentContract.authoring.design_brief.sha256,
+      { contractQuote: "\"", designBriefQuote: "'" },
+    );
+    await writeSupervision(targetInfo, "plan", "planned", "passed", "run-plan");
+    await writeApproval(targetInfo, "plan", "foundation-test");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("compose");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-compose", "compose", "composed", "passed"));
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "compose", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8" },
+    );
+    assert(result.status === 0, `compose rejected quoted plan Design Contract fingerprint: ${result.stderr}`);
+    const composeSupervision = await readFile(supervisionPath(targetInfo, "compose"), "utf8");
+    assert(composeSupervision.includes("workflow_run_id: run-compose"), "TAKT was not invoked after accepting quoted plan fingerprints");
+  });
+
   await check("compose force validates Design Brief fingerprint before archiving artifacts", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-compose-force-design-brief-"));
     const targetInfo = await makeDeck(root, "demo");
@@ -733,17 +798,23 @@ async function markComposeApproved(targetInfo) {
   await writeApproval(targetInfo, "compose", "foundation-test");
 }
 
-async function writePlanDesignContractArtifacts(targetInfo, contractSha256, designBriefSha256 = null) {
+async function writePlanDesignContractArtifacts(targetInfo, contractSha256, designBriefSha256 = null, options = {}) {
+  const contractFingerprint = quoteScalar(contractSha256, options.contractQuote);
+  const designBriefFingerprint = designBriefSha256 ? quoteScalar(designBriefSha256, options.designBriefQuote) : null;
   const lines = [
     "# Slide Plan",
     "",
     "## Design Contract",
-    `- Contract fingerprint: ${contractSha256}`,
-    ...(designBriefSha256 ? [`- Design Brief fingerprint: ${designBriefSha256}`] : []),
+    `- Contract fingerprint: ${contractFingerprint}`,
+    ...(designBriefFingerprint ? [`- Design Brief fingerprint: ${designBriefFingerprint}`] : []),
     "",
   ].join("\n");
   await writeFile(path.join(targetInfo.deckPath, "plan.md"), lines, "utf8");
   await writeFile(path.join(targetInfo.deckPath, "slide-blueprint.md"), lines.replace("# Slide Plan", "# Slide Blueprint"), "utf8");
+}
+
+function quoteScalar(value, quote) {
+  return quote ? `${quote}${value}${quote}` : value;
 }
 
 function changedClaudeDesignSourceBuffer() {

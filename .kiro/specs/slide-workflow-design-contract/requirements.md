@@ -52,7 +52,7 @@
 
 2.7. slide workflow が token category を分類するとき、manifest の `kind` だけに依存せず、token name prefix と source CSS path も使って colors / typography / spacing / radius / shadow / font を分類しなければならない。
 
-2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は引用符あり / なしの CSS font-family token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。font-family token は `--font*` prefix だけでなく、`kind: "font"`、`family` を含む token 名、typography / fonts CSS path 由来の family 値も対象にし、font-size などの scalar 値は除外しなければならない。
+2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は引用符あり / なしの CSS font-family token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。font-family token は `--font*` prefix だけでなく、`kind: "font"`、`family` を含む token 名、typography / fonts CSS path 由来の family 値も対象にするが、font-size などの scalar 値、`clamp(...)` などの CSS function 値、`font-style` / `font-display` など family ではない font 関連 token 値は除外しなければならない。
 
 ### 要件 3: Resolved Design Contract を workflow に引き渡す
 
@@ -84,7 +84,7 @@
 
 3.12. Resolved Design Contract から marker payload を作る場合、slide workflow は `source.path`、`source.sha256`、`source.namespace`、`fingerprint.source_sha256`、`fingerprint.contract_sha256` を必須 field として扱い、欠けている場合は valid な Design Contract marker として扱ってはならない。
 
-3.13. 保存済み Resolved Design Contract から marker payload を作る場合、slide workflow は `fingerprint.contract_sha256` を再計算し、保存済み値と一致しない場合は valid な Design Contract marker として扱ってはならない。
+3.13. 保存済み Resolved Design Contract から marker payload を作る場合、slide workflow は `source.path`、`source.sha256`、`fingerprint.source_sha256`、Design Brief authoring metadata を除いた正規化済み契約内容から `fingerprint.contract_sha256` を再計算し、保存済み値と一致しない場合は valid な Design Contract marker として扱ってはならない。
 
 ### 要件 4: plan は Design Contract を使って実現可能な構成を計画する
 

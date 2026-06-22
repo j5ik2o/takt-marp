@@ -39,6 +39,23 @@ const GENERIC_FONT_FAMILIES = Object.freeze(new Set([
   "math",
   "fangsong",
 ]));
+const NON_FONT_FAMILY_VALUES = Object.freeze(new Set([
+  "normal",
+  "bold",
+  "bolder",
+  "lighter",
+  "inherit",
+  "initial",
+  "unset",
+  "italic",
+  "oblique",
+  "auto",
+  "swap",
+  "block",
+  "fallback",
+  "optional",
+  "none",
+]));
 
 export async function resolveAndSaveClaudeDesignContract(targetInfo, options = {}) {
   const resolved = await resolveClaudeDesignContract(targetInfo, options);
@@ -288,9 +305,14 @@ function hasMatchingStoredContractHash(contract) {
 
 function contractHashInput(contract) {
   const fingerprint = { ...contract.fingerprint };
+  delete fingerprint.source_sha256;
   delete fingerprint.contract_sha256;
+  const source = { ...contract.source };
+  delete source.path;
+  delete source.sha256;
   const hashInput = {
     ...contract,
+    source,
     fingerprint,
   };
   delete hashInput.authoring;
@@ -704,6 +726,9 @@ function isFontFamilyToken(token) {
   const name = token.name.toLowerCase();
   const kind = token.kind.toLowerCase();
   const definedIn = token.defined_in.toLowerCase();
+  if (cssFontFamilies(token.value).length === 0 || isNonFamilyFontTokenName(name)) {
+    return false;
+  }
   return name.startsWith("--font") ||
     name.includes("family") ||
     kind === "font" ||
@@ -711,10 +736,15 @@ function isFontFamilyToken(token) {
     definedIn.includes("fonts");
 }
 
+function isNonFamilyFontTokenName(name) {
+  return /(?:^|[-_])(display|feature|kerning|line-height|optical|size|smoothing|stretch|style|variation|weight)(?:$|[-_])/.test(name.replace(/^--/, ""));
+}
+
 function splitCssCommaList(value) {
   const items = [];
   let current = "";
   let quote = "";
+  let parenthesisDepth = 0;
   for (const char of String(value ?? "")) {
     if ((char === "\"" || char === "'") && !quote) {
       quote = char;
@@ -722,7 +752,13 @@ function splitCssCommaList(value) {
     } else if (char === quote) {
       quote = "";
       current += char;
-    } else if (char === "," && !quote) {
+    } else if (char === "(" && !quote) {
+      parenthesisDepth += 1;
+      current += char;
+    } else if (char === ")" && !quote) {
+      parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      current += char;
+    } else if (char === "," && !quote && parenthesisDepth === 0) {
       items.push(current);
       current = "";
     } else {
@@ -742,6 +778,9 @@ function isLikelyNonGenericFontFamily(family) {
     return false;
   }
   const normalized = family.toLowerCase();
+  if (NON_FONT_FAMILY_VALUES.has(normalized) || /^\d{3}$/.test(normalized)) {
+    return false;
+  }
   if (normalized.startsWith("var(")) {
     return false;
   }

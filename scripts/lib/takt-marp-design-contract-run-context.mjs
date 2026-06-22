@@ -142,8 +142,8 @@ async function assertComposePlanDesignContractMatches(command, targetInfo, contr
 
 function extractContractSha256(source) {
   for (const pattern of [
-    /\bcontract_sha256\s*[:=]\s*`?([a-f0-9]{64})`?/i,
-    /\bContract fingerprint:\s*`?([a-f0-9]{64})`?/i,
+    /\bcontract_sha256\s*[:=]\s*["'`]?([a-f0-9]{64})["'`]?/i,
+    /\bContract fingerprint:\s*["'`]?([a-f0-9]{64})["'`]?/i,
   ]) {
     const match = source.match(pattern);
     if (match) {
@@ -155,9 +155,9 @@ function extractContractSha256(source) {
 
 function extractDesignBriefSha256(source) {
   for (const pattern of [
-    /\bdesign_brief_sha256\s*[:=]\s*`?([a-f0-9]{64})`?/i,
-    /\bDesign Brief fingerprint:\s*`?([a-f0-9]{64})`?/i,
-    /\bDesign Brief SHA-?256:\s*`?([a-f0-9]{64})`?/i,
+    /\bdesign_brief_sha256\s*[:=]\s*["'`]?([a-f0-9]{64})["'`]?/i,
+    /\bDesign Brief fingerprint:\s*["'`]?([a-f0-9]{64})["'`]?/i,
+    /\bDesign Brief SHA-?256:\s*["'`]?([a-f0-9]{64})["'`]?/i,
   ]) {
     const match = source.match(pattern);
     if (match) {
