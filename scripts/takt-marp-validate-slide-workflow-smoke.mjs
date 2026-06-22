@@ -45,7 +45,8 @@ const RENDER_VALIDATION_TARGET = "slides/_workflow-smoke-render-validation";
 const WORKFLOW_COMMANDS = ["plan", "compose", "polish", "deliver"];
 const TEMPLATE_WORKFLOW_COMMANDS = ["research", ...WORKFLOW_COMMANDS];
 const SOURCE_FIXTURE_EXCLUDES = new Set(["README.md"]);
-const WORKFLOW_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
+const DEFAULT_WORKFLOW_COMMAND_TIMEOUT_MS = 45 * 60 * 1000;
+const WORKFLOW_COMMAND_TIMEOUT_MS = positiveIntegerEnv("TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS", DEFAULT_WORKFLOW_COMMAND_TIMEOUT_MS);
 const NODE_CHECK_TIMEOUT_MS = 2 * 60 * 1000;
 const CAPTURE_MAX_BUFFER = 64 * 1024 * 1024;
 const MOCK_GENERATED_AT = "2026-06-06T00:00:00.000Z";
@@ -84,6 +85,18 @@ const EXTERNAL_SOURCE_PATTERNS = Object.freeze([
   { pattern: /https?:\/\//i, label: "external URL" },
   { pattern: /\bgmail\b/i, label: "mail export reference" },
 ]);
+
+function positiveIntegerEnv(name, fallback) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") {
+    return fallback;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer number of milliseconds`);
+  }
+  return parsed;
+}
 
 async function main() {
   const options = parseSmokeArgs(process.argv.slice(2));
@@ -925,7 +938,7 @@ async function runResearchSequenceChecks(targetInfo, options) {
 
   const researchCommand = await runWorkflowCommand("sequence:research-command", "research", targetInfo, options);
   commands.push(researchCommand);
-  const artifactPaths = await assertResearchArtifacts(targetInfo);
+  const artifactPaths = await assertResearchArtifacts(targetInfo, options);
   observedPaths.push(...artifactPaths.map(relativePath));
   assert((await readFile(researchArtifacts.brief, "utf8")) === briefBefore, "sequence:research-brief-fixture research command changed research-brief.md");
   checks.push(pass("sequence:research-command", "slide:research completed for the smoke deck before plan."));
@@ -992,7 +1005,7 @@ async function runResearchReuseSequenceChecks(options) {
     });
     commands.push(reuseSuccess.commandLine);
     await assertCapturedWorkflow(successArgsPath, "takt-marp-slide-research-reuse.yaml", "sequence:research-reuse-success-command");
-    const artifactPaths = await assertResearchArtifacts(targetInfo);
+    const artifactPaths = await assertResearchArtifacts(targetInfo, options);
     observedPaths.push(...artifactPaths.map(relativePath));
     assert(!existsSync(sidecarPath), "sequence:research-reuse-success-sidecar-delete did not delete sidecar after reuse success");
     assert(
@@ -1170,7 +1183,7 @@ function shellSingleQuote(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-async function assertResearchArtifacts(targetInfo) {
+async function assertResearchArtifacts(targetInfo, options = {}) {
   const artifacts = researchArtifactPaths(targetInfo);
   const requiredPaths = [
     artifacts.report,
@@ -1190,8 +1203,16 @@ async function assertResearchArtifacts(targetInfo) {
   assert(supervision.data.result === "passed", `sequence:research-supervision expected passed, got ${supervision.data.result}`);
 
   const report = await readFile(artifacts.report, "utf8");
-  assert(report === MOCK_BUILTIN_RESEARCH_REPORT, "sequence:research-report-byte-copy research-report.md does not match the mock built-in report");
-  assert(!report.includes("Adapter Shadow Report"), "sequence:research-report-byte-copy adapter shadow report replaced the built-in report");
+  if (isMockProvider(options)) {
+    assert(report === MOCK_BUILTIN_RESEARCH_REPORT, "sequence:research-report-byte-copy research-report.md does not match the mock built-in report");
+    assert(!report.includes("Adapter Shadow Report"), "sequence:research-report-byte-copy adapter shadow report replaced the built-in report");
+  } else {
+    const builtInReport = await readCurrentBuiltInResearchReport(supervision.data.workflow_run_id);
+    assert(
+      report === builtInReport,
+      "sequence:research-report-byte-copy research-report.md does not match the current built-in deep-research source report",
+    );
+  }
 
   for (const [label, filePath] of [
     ["sources", artifacts.sources],
@@ -1215,6 +1236,36 @@ async function assertResearchArtifacts(targetInfo) {
   }
 
   return Object.freeze(requiredPaths);
+}
+
+async function readCurrentBuiltInResearchReport(workflowRunId) {
+  assert(workflowRunId, "sequence:research-report-byte-copy missing workflow_run_id in research supervision");
+  const reportsDir = path.join(ROOT, ".takt", "runs", workflowRunId, "reports");
+  assert(existsSync(reportsDir), `sequence:research-report-byte-copy missing current TAKT reports directory: ${relativePath(reportsDir)}`);
+  const candidates = (await listResearchReportFiles(reportsDir)).filter((filePath) => {
+    const relative = path.relative(reportsDir, filePath).split(path.sep).join("/");
+    return relative.startsWith("subworkflows/") && relative.includes("workflow-deep-research/");
+  });
+  assert(candidates.length > 0, `sequence:research-report-byte-copy missing built-in deep-research source report under ${relativePath(reportsDir)}`);
+  assert(
+    candidates.length === 1,
+    `sequence:research-report-byte-copy ambiguous built-in deep-research source reports: ${candidates.map(relativePath).join(", ")}`,
+  );
+  return readFile(candidates[0], "utf8");
+}
+
+async function listResearchReportFiles(directoryPath) {
+  const entries = await readdir(directoryPath, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const entryPath = path.join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...(await listResearchReportFiles(entryPath)));
+    } else if (entry.isFile() && entry.name === "research-report.md") {
+      files.push(entryPath);
+    }
+  }
+  return files;
 }
 
 async function runPlanSequenceChecks(targetInfo, options) {

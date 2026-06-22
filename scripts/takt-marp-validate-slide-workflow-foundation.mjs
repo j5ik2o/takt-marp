@@ -734,6 +734,75 @@ async function main() {
     assert(!existsSync(path.join(projectRoot, "workflows")), "bundled runtime cleanup left project workflows/ staging directory");
   });
 
+  await check("ejected research runtime stages callable deep research without mutating templates", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ejected-runtime-selected-research-"));
+    const projectRoot = path.join(root, "project");
+    const templateRoot = path.join(root, "templates", "project");
+    const ejectedRoot = path.join(projectRoot, ".takt");
+    const selectedResearchWorkflow = path.join(ejectedRoot, "workflows", "takt-marp-slide-research.yaml");
+    const selectedReuseWorkflow = researchReuseWorkflowFilePath(selectedResearchWorkflow);
+    await writeTemplateTree(ejectedRoot, new Map([
+      [
+        "workflows/takt-marp-slide-research.yaml",
+        [
+          "name: ejected-wrapper-runtime-source",
+          "steps:",
+          "  - name: deep_research",
+          "    call: deep-research",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "workflows/takt-marp-slide-research-reuse.yaml",
+        [
+          "name: ejected-reuse-runtime-source",
+          "steps:",
+          "  - name: adapt_research",
+          "",
+        ].join("\n"),
+      ],
+      ["facets/personas/takt-marp-slide-planner.md", "# Planner\n"],
+    ]));
+    assert(existsSync(selectedReuseWorkflow), `selected ejected research reuse workflow fixture was not created: ${selectedReuseWorkflow}`);
+
+    const prepared = await prepareBundledWorkflowRuntime(selectedResearchWorkflow, { projectRoot, templateRoot });
+    try {
+      const runtimeReuseWorkflow = researchReuseWorkflowFilePath(prepared.workflowFilePath);
+      const [runtimeWrapperSource, runtimeReuseSource, ejectedWrapperSource] = await Promise.all([
+        readFile(prepared.workflowFilePath, "utf8"),
+        readFile(runtimeReuseWorkflow, "utf8"),
+        readFile(selectedResearchWorkflow, "utf8"),
+      ]);
+      assert(
+        prepared.workflowFilePath !== selectedResearchWorkflow,
+        "ejected research runtime must stage a runtime copy instead of passing the project template directly",
+      );
+      assert(
+        runtimeWrapperSource.includes("ejected-wrapper-runtime-source"),
+        `staged ejected research wrapper did not come from selected template source: ${runtimeWrapperSource}`,
+      );
+      assert(
+        runtimeReuseSource.includes("ejected-reuse-runtime-source"),
+        `staged ejected research reuse workflow did not come from selected template source: ${runtimeReuseSource}`,
+      );
+      assert(
+        runtimeWrapperSource.includes("call: ./takt-marp-bundled-deep-research.yaml"),
+        `staged ejected research wrapper did not rewrite the built-in deep-research call: ${runtimeWrapperSource}`,
+      );
+      assert(
+        existsSync(path.join(path.dirname(prepared.workflowFilePath), "takt-marp-bundled-deep-research.yaml")),
+        "ejected research runtime did not stage the callable built-in deep-research workflow next to the wrapper",
+      );
+      assert(
+        ejectedWrapperSource.includes("call: deep-research"),
+        `ejected project template was mutated instead of staging a runtime copy: ${ejectedWrapperSource}`,
+      );
+    } finally {
+      await prepared.cleanup();
+    }
+    assert(!existsSync(path.join(projectRoot, "workflows")), "ejected research runtime cleanup left project workflows/ staging directory");
+  });
+
   await check("template sync validator detects byte drift between package template and dev .takt trees", async () => {
     const identicalRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-identical-"));
     const identicalTemplateRoot = path.join(identicalRoot, "templates", "project");
@@ -2965,6 +3034,31 @@ async function main() {
     assert(source.includes("real_provider:"), "real smoke summary must record the provider name as real provider evidence");
     assert(source.includes("smoke:selected-template-source"), "smoke validator must record the selected template source");
     assert(source.includes("smoke:template-assets-no-copy"), "smoke validator must assert workflow/facet templates were not generated");
+    assert(source.includes("TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS"), "real smoke workflow timeout must be overridable for local provider verification");
+  });
+
+  await check("smoke validator uses provider-aware research report source assertions", async () => {
+    const source = await readFile(path.join(SCRIPT_DIR, "takt-marp-validate-slide-workflow-smoke.mjs"), "utf8");
+    assert(source.includes("assertResearchArtifacts(targetInfo, options)"), "research sequence must pass provider options into artifact assertions");
+    assert(source.includes("isMockProvider(options)"), "research artifact assertion must branch on mock vs real provider");
+    assert(source.includes("readCurrentBuiltInResearchReport"), "real provider smoke must read the current run's built-in research source report");
+    assert(source.includes("workflow_run_id"), "real provider source lookup must use research-supervision workflow_run_id");
+    assert(source.includes('relative.startsWith("subworkflows/")'), "real provider source lookup must stay under TAKT subworkflow reports");
+    assert(source.includes('relative.includes("workflow-deep-research/")'), "real provider source lookup must select the deep-research source report");
+    const artifactAssertionIndex = source.indexOf("async function assertResearchArtifacts");
+    const providerBranchIndex = source.indexOf("if (isMockProvider(options))", artifactAssertionIndex);
+    const realProviderBranchIndex = source.indexOf("} else {", providerBranchIndex);
+    const adapterShadowGuardIndex = source.indexOf('assert(!report.includes("Adapter Shadow Report")', providerBranchIndex);
+    assert(artifactAssertionIndex >= 0, "research artifact assertion function must exist");
+    assert(providerBranchIndex >= 0 && realProviderBranchIndex > providerBranchIndex, "research artifact assertion must have mock and real provider branches");
+    assert(
+      adapterShadowGuardIndex > providerBranchIndex && adapterShadowGuardIndex < realProviderBranchIndex,
+      "adapter shadow substring guard must remain mock-only; real provider byte-copy uses the current built-in source report",
+    );
+    assert(
+      source.includes("current built-in deep-research source report"),
+      "real provider byte-copy failure must distinguish current source report from mock fixture mismatch",
+    );
   });
 
   await check("smoke validator selected source helpers cover bundled and ejected no-copy states", async () => {

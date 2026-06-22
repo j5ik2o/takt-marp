@@ -221,6 +221,8 @@ selected Research Workflow Wrapper: <workflowsDir>/takt-marp-slide-research.yaml
 selected Research Reuse Workflow: <workflowsDir>/takt-marp-slide-research-reuse.yaml
 ```
 
+Runner は full research mode では bundled template と ejected template のどちらでも selected Research Workflow Wrapper を runtime directory に stage し、`call: deep-research` を callable な built-in deep research wrapper への relative call に書き換える。これにより project-local `.takt/workflows/**` は変更せず、TAKT の callable subworkflow 制約を実行時だけ満たす。
+
 Runner は reuse mode を選択した後、selected Research Reuse Workflow の存在を TAKT 起動前に検証し、`runTakt` へ selected Research Reuse Workflow path を渡す。bundled template の場合は `prepareBundledWorkflowRuntime` が `templates/project/workflows/**` を runtime directory に copy した後、その runtime directory 内の sibling Research Reuse Workflow を使う。ejected template の場合は project-local `.takt/workflows/` の sibling Research Reuse Workflow を使う。`research-reuse` のような user-facing command 名は追加しない。
 
 ### 技術スタック
@@ -677,6 +679,7 @@ interface CommandConfigRegistry {
 
 - foundation validation は command registry、research prerequisite、force archive、template path を検証する。
 - smoke validation は mock research と既存 4 command の成功経路を検証する。
+- smoke validation は mock provider では deterministic mock built-in report を比較対象にし、real provider では `research-supervision.md` の `workflow_run_id` に紐づく当該 TAKT run の built-in deep-research source report と deck-local `research-report.md` を byte-for-byte で比較する。mock 用の adapter shadow sentinel 文字列チェックは real provider へ適用せず、real provider の置換検出は source report との byte 比較で行う。
 - `research --force` が review/approval を退避しないことを確認する。
 - Research Source Report Reuse は foundation validation で Research Reuse Sidecar lifecycle、brief digest mismatch、target mismatch、ambiguous candidate、`--force` bypass を検証する。
 - smoke validation は failed full research から reuse success までを mock provider で確認し、Research Reuse Workflow が deep research を呼ばないことを検証する。
@@ -786,6 +789,7 @@ interface ResearchReuseSidecar {
 
 - mock provider で `research` が `research-supervision.md` と research artifacts を `slides/<deck>/research/` に同期することを確認する。3.1-4.1
 - mock provider の built-in `research-report.md` が byte-for-byte で `slides/<deck>/research/research-report.md` に同期され、adapter 出力で置換されないことを確認する。3.1, 6.5
+- real provider の smoke では mock fixture の固定本文ではなく、当該 `workflow_run_id` の `reports/subworkflows/` 配下にある `workflow-deep-research` を含む source report を比較対象にすることを確認する。mock 用の adapter shadow sentinel 語が real provider の自然言語 report に説明として出現しても、それだけで失敗させない。3.1, 6.5, 7.5
 - mock provider の report に URL/取得日/claim-source 対応が欠ける場合、adapter が `not_present_in_builtin_report` を出し、追加調査や補完を行わないことを確認する。3.2-3.5, 6.5
 - mock failed research run から Research Reuse Sidecar を作成し、次回実行で deep research を再実行せず adapter/supervision artifacts を同期することを確認する。8.1, 8.7
 - Research Reuse Workflow が非 0 終了した場合、Research Reuse Sidecar が残り次回再試行できることを確認する。8.8

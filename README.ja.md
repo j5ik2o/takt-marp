@@ -102,6 +102,8 @@ takt-marp smoke --keep
 
 smoke validation は fixture から一時的な `_workflow-smoke` deck を作成し、invalid target、approval failure path、`plan` -> `compose` -> `polish` -> `deliver` の一連の実行、render evidence metadata、delivery artifact、rerun/force behavior を検証します。`--keep` を付けると、生成された deck と report を `slides/_workflow-smoke/` に残して確認できます。
 
+real provider smoke は既定の workflow ごとの timeout を超えることがあります。ローカル検証では `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS=7200000 npm run slide:smoke -- --provider claude --keep` のように `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS` で延長できます。
+
 ### Smoke fixture
 
 小さな入力fixtureがあります。
