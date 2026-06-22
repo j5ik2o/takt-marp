@@ -70,7 +70,7 @@ slides/<deck>/
 
 `design/design-brief.md` は Claude Design に渡す Design System 作成依頼です。`brief.md` / `brief.normalized.md` の資料要求、brand constraints、audience constraints、style constraints を primary input とし、通常 flow では生成済み `plan.md` / `slide-blueprint.md` を Claude Design 作成の primary input にしません。
 
-`plan` と `compose` は `slides/<deck>/design/` 配下に Claude Design export zip が1つあることを前提にします。runner はこれを `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`plan` は metadata、fingerprint、`SKILL.md` / `readme.md` などの guidance、component/starting point/card/template/theme/font/sample catalog を記録し、`compose` は同じ token と catalog を `SLIDES.md` に適用します。Design System は deck ごとに異なるため、特定ドメインや特定 component 名を固定前提にしません。`design/design-brief.md` がある場合は、その fingerprint も記録して drift 検出に使います。ない場合でも進行できますが、Design Brief drift protection は unavailable として記録します。
+`plan` と `compose` は `slides/<deck>/design/` 配下に Claude Design export zip が1つあることを前提にします。runner はこれを `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`plan` は metadata、fingerprint、`SKILL.md` / `readme.md` などの guidance、component/starting point/card/template/theme/font/sample catalog を記録します。template は manifest 記載分だけでなく、zip 内の `templates/**/*.dc.html` からも catalog 化します。`compose` は同じ token と catalog を `SLIDES.md`、section HTML/CSS、生成 visual source に適用します。Design System は deck ごとに異なるため、特定ドメインや特定 component 名を固定前提にしません。`design/design-brief.md` がある場合は、その fingerprint も記録して drift 検出に使います。ない場合でも進行できますが、Design Brief drift protection は unavailable として記録します。
 
 ### 4. polishとdeliverの範囲
 

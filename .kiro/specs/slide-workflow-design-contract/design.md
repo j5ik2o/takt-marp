@@ -272,7 +272,7 @@ Optional manifest fields:
 - `fonts`
 - `brandFonts`
 
-`namespace` は空でない string、`globalCssPaths` と `tokens` は array として検証する。`brandFonts` は string 配列、または `family` を持つ object 配列を受け付け、引用符あり / なしの CSS font-family token と合わせて Resolved Design Contract の `brand_fonts` へ font family string として正規化する。
+`namespace` は空でない string、`globalCssPaths` と `tokens` は array として検証する。`brandFonts` は string 配列、または `family` を持つ object 配列を受け付け、引用符あり / なしの CSS font-family token と合わせて Resolved Design Contract の `brand_fonts` へ font family string として正規化する。font-family token は `--font*` prefix だけでなく `kind: "font"`、`family` を含む token 名、typography / fonts CSS path 由来の family 値も対象にし、font-size などの scalar 値は除外する。
 
 ### Resolved Design Contract JSON
 
@@ -552,10 +552,10 @@ interface ZipArchiveReader {
 - `_ds_manifest.json` は JSON object であることを検証し、`null`、文字列、配列などは `CLAUDE_DESIGN_SOURCE_INVALID` とする。
 - `namespace` は空でない string、`globalCssPaths` と `tokens` は array であることを検証する。
 - manifest token と CSS custom property の名前と値の一致を検証する。
-- manifest `brandFonts` は string entry と object entry の `family` をどちらも font family として正規化し、引用符あり / なしの font token 由来 family と合わせて重複を除く。
+- manifest `brandFonts` は string entry と object entry の `family` をどちらも font family として正規化し、引用符あり / なしの font token 由来 family と合わせて重複を除く。`--font*` prefix 以外でも `kind: "font"` や `family` token 由来の font-family は取り込み、font-size / font-weight などの scalar 値は除外する。
 - `_adherence.oxlintrc.json` がある場合は `x-omelette.tokens` / `x-omelette.components` の counts と review rule names を取り込む。
 - `SKILL.md` / `readme.md` / component prompt がある場合は `guidance` として取り込む。
-- components / startingPoints / cards / templates / themes / fonts / sample slides / guidelines / assets がある場合は `source_catalog` として取り込む。
+- components / startingPoints / cards / templates / themes / fonts / sample slides / guidelines / assets がある場合は `source_catalog` として取り込む。`templates/**/*.dc.html` は manifest `templates` が省略または空でも archive entry から catalog に含める。
 - `components` が空でも token が有効なら成功する。非空の場合も特定ドメインに固定せず、汎用 catalog として扱う。
 - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで決定する。
 - `styles.css` は global entry point として hash / import path を記録するが、inline rule の存在を必須にしない。
@@ -656,9 +656,9 @@ interface ResolvedDesignContract {
 
 **責務と制約**
 
-- `compose_sections` は `plan.md`、`slide-blueprint.md`、Resolved Design Contract を読む。
+- `compose_sections` と `generate_visuals` は `plan.md`、`slide-blueprint.md`、Resolved Design Contract を読む。
 - `compose_sections` と compose review は、`plan.md` / `slide-blueprint.md` に記録された Design Brief SHA-256 と現在の Resolved Design Contract の `authoring.design_brief.sha256` を照合する。不一致の場合は re-plan または Claude Design Source 更新が必要な blocker とする。
-- `assemble_slides` は Resolved Design Contract の token を `SLIDES.md` front matter CSS と `_class` に写像する。
+- `assemble_slides` は Resolved Design Contract の token を `SLIDES.md` front matter CSS と `_class` に写像する。`generate_visuals` は SVG / inline SVG / existing image references を同じ token constraints、brand fonts、guidance、source catalog と矛盾しないように生成・接続する。
 - `design_system` step は削除し、`design-system.md` は compose source artifact に含めない。
 - `compose` は `contract_sha256` mismatch を blocker として扱う。
 - raw hex color、raw px value、unsupported font-family は `_adherence.oxlintrc.json` がある場合に review finding として扱う。
@@ -697,7 +697,7 @@ interface ResolvedDesignContract {
 - fixture deck に `slides/<deck>/design/<sample>.zip` を用意する。
 - fixture deck に `slides/<deck>/design/design-brief.md` も用意し、Resolved Design Contract と plan metadata に path / SHA-256 が記録されることを検証する。
 - binary fixture を直接 commit せず、validator が text fixture から deterministic な zip を temp directory に生成する。
-- sample は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md` / `readme.md`、component prompt、starting point、card、sample slide、template、theme、font、asset を含み、guidance / source_catalog の生成を検証する。
+- sample は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md` / `readme.md`、component prompt、starting point、card、sample slide、manifest template、archive-only template、theme、font、asset を含み、guidance / source_catalog の生成を検証する。
 - smoke は `design-system.md` の存在ではなく、marker `design_contract`、Resolved Design Contract JSON、plan metadata、compose CSS token application、fingerprint match を検証する。
 
 ### foundation validation
@@ -707,7 +707,7 @@ interface ResolvedDesignContract {
 - Design Brief 欠落時は import failure ではなく warning / finding になり、Design Brief fingerprint 不一致時は compose / review blocker になることを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
+- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
 - `polish-inspect` / `polish-fix` が通常 path で `design_contract.path`、`fingerprint.contract_sha256`、token drift、`guidance`、`source_catalog` を確認し、Design Contract なしの legacy path だけ fingerprint / token drift 判定をスキップすることを facet 文言として検証する。
 
 ### package / global install / no-copy validation

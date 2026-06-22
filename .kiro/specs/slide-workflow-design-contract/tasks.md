@@ -30,7 +30,7 @@
 
 - [x] 2.2 Claude Design importer を実装する
   - required files と required manifest fields を検証し、manifest が JSON object ではない、token list が空、または manifest token と CSS custom property の名前・値が一致しない場合は import を成功扱いしない。
-  - optional files、string / object `brandFonts`、引用符あり / なしの font token、empty/non-empty `components` / `startingPoints` / `cards` / `templates` / `themes` / `fonts`、adherence metadata、guidance documents、component prompts、sample slides、assets を取り込み、存在しない optional file だけで失敗しない。
+  - optional files、string / object `brandFonts`、引用符あり / なしの font token、`kind: font` family token、empty/non-empty `components` / `startingPoints` / `cards` / `templates` / `themes` / `fonts`、archive-only template、adherence metadata、guidance documents、component prompts、sample slides、assets を取り込み、存在しない optional file だけで失敗しない。
   - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで分類する。
   - 完了条件: sample zip から token counts、brand fonts、component count/names、adherence rule summary、guidance、source catalog が Resolved Design Contract 候補として確認できる。
   - _Requirements:_ 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 6.4
@@ -81,7 +81,7 @@
 
 - [x] 4.2 compose source generation を fingerprint と token constraints へ接続する
   - compose facets が marker の contract fingerprint と `plan.md` / `slide-blueprint.md` の fingerprint を照合し、不一致を blocker として扱う。`compose --force` では archive / clean 前に同じ fingerprint 不一致を検出する。
-  - fingerprint が一致する場合だけ、Resolved Design Contract の token constraints から `SLIDES.md` front matter CSS、layout class、section HTML/CSS、visual source を生成する。
+  - fingerprint が一致する場合だけ、Resolved Design Contract の token constraints から `SLIDES.md` front matter CSS、layout class、section HTML/CSS、visual source を生成する。`generate_visuals` も marker の `design_contract.path` を読み、SVG / inline SVG / existing image references を token constraints、brand fonts、guidance、source catalog と矛盾しないように扱う。
   - CSS custom properties は Claude Design Source の token 名と値を保持し、raw color、raw px、未提供 font-family の新規混入を避ける。
   - 完了条件: mock compose artifact に token-driven CSS と layout classes が生成され、fingerprint mismatch fixture では source artifact 成功にならない。
   - _Requirements:_ 5.1, 5.2, 5.3, 5.4, 5.5, 5.8
@@ -103,14 +103,14 @@
 - [x] 5.1 foundation validation を Design Contract 契約へ拡張する
   - marker shape、plan metadata、compose fingerprint check、legacy `design-system.md` 非依存を static assertion として検証する。
   - compose workflow から `design_system` step が消えていることと、facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-  - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt marker、stale contract hash の破棄、legacy polish path を検証する。
+  - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt marker、stale contract hash の破棄、legacy polish path を検証する。
   - 完了条件: foundation validation が marker / plan / compose / facet 文言 / hardening regression を path 付きで検出できる。
   - _Requirements:_ 2.8, 3.8, 5.6, 5.7, 8.3, 8.7, 9.2, 9.5
   - _Boundary:_ ValidationSurface
   - _Depends:_ 4.3
 
 - [x] 5.2 smoke validation を Claude Design Source import path へ更新する
-  - smoke fixture の Claude Design zip を使い、source 解決、Resolved Design Contract 生成、plan metadata、compose CSS token application、fingerprint match を検証する。
+  - smoke fixture の Claude Design zip を使い、source 解決、Resolved Design Contract 生成、plan metadata、compose CSS token application、manifest / archive entry 両方の template catalog、fingerprint match を検証する。
   - `design-system.md` existence assertion を削除し、guidance / source catalog と optional adherence metadata を valid sample として扱う。
   - validation failure 時に source file、対象 command、確認すべき artifact が分かる summary を出す。
   - 完了条件: `npm run slide:smoke -- --provider mock` が Claude Design Source 契約を通り、失敗時は missing / ambiguous / invalid / mismatch の原因が分かる。

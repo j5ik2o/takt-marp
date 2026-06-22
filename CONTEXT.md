@@ -93,7 +93,7 @@ Claude Design Source に含まれる `SKILL.md`、`readme.md`、component prompt
 _Avoid_: global instructions, fixed component rules, generated design-system.md
 
 **Source Catalog（ソースカタログ）**:
-Claude Design Source に含まれる components、starting points、cards、templates、sample slides、guidelines、themes、fonts、assets を、特定ドメイン名に固定せず列挙する Design Contract 内の再利用候補一覧。
+Claude Design Source に含まれる components、starting points、cards、templates、sample slides、guidelines、themes、fonts、assets を、特定ドメイン名に固定せず列挙する Design Contract 内の再利用候補一覧。templates は manifest entries だけでなく `templates/**/*.dc.html` archive entries からも検出する。
 _Avoid_: built-in component list, required component set, domain-specific catalog
 
 **Legacy Polish Path（レガシーpolish経路）**:

@@ -124,6 +124,7 @@ export async function runDesignContractFoundationChecks(check) {
     assert(first.source_catalog.cards.some((item) => item.path === "guidelines/overview.card.html"), `card catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.sample_slides.some((item) => item.path === "slides/cover.html"), `sample slide catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.templates.some((item) => item.entryPath === "templates/generic-deck/GenericDeck.dc.html"), `template catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
+    assert(first.source_catalog.templates.some((item) => item.path === "templates/archive-only/ArchiveOnly.dc.html"), `archive-only template catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.themes.some((item) => item.name === "High contrast light"), `theme catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.fonts.some((item) => item.family === "Noto Sans JP"), `font catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.assets.some((item) => item.path === "assets/mark.svg"), `asset catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
@@ -174,6 +175,7 @@ export async function runDesignContractFoundationChecks(check) {
       brandFonts: [{ family: "Noto Sans JP", status: "available" }],
       tokens: [
         { name: "--font-heading", value: "Inter, sans-serif", kind: "font", definedIn: "tokens/typography.css" },
+        { name: "--body-family", value: "IBM Plex Sans, sans-serif", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--text-body", value: "16px", kind: "font", definedIn: "tokens/typography.css" },
         { name: "--button-text-size", value: "12px", kind: "spacing", definedIn: "tokens/spacing.css" },
         { name: "--bg-page", value: "#ffffff", kind: "color", definedIn: "tokens/colors.css" },
@@ -183,7 +185,7 @@ export async function runDesignContractFoundationChecks(check) {
       "_ds_manifest.json": `${JSON.stringify(compoundManifest)}\n`,
       "styles.css": "",
       "tokens/colors.css": ":root { --bg-page: #ffffff; }\n",
-      "tokens/typography.css": ":root { --font-heading: Inter, sans-serif; --text-body: 16px; }\n",
+      "tokens/typography.css": ":root { --font-heading: Inter, sans-serif; --body-family: IBM Plex Sans, sans-serif; --text-body: 16px; }\n",
       "tokens/spacing.css": ":root { --button-text-size: 12px; }\n",
     }), { sourcePath, root: ROOT_DIR, deckName: "demo" });
     const categories = Object.fromEntries(classified.tokens.map((token) => [token.name, token.category]));
@@ -192,6 +194,8 @@ export async function runDesignContractFoundationChecks(check) {
     assert(categories["--bg-page"] === "color", `color path token misclassified: ${JSON.stringify(categories)}`);
     assert(classified.brand_fonts.includes("Noto Sans JP"), `object brandFonts family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
     assert(classified.brand_fonts.includes("Inter"), `unquoted font token family was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(classified.brand_fonts.includes("IBM Plex Sans"), `kind: font family token without --font prefix was not preserved: ${JSON.stringify(classified.brand_fonts)}`);
+    assert(!classified.brand_fonts.includes("16px"), `font-size token leaked into brand fonts: ${JSON.stringify(classified.brand_fonts)}`);
   });
 
   await check("slide commands resolve or preserve Design Contract by lifecycle phase", async () => {
@@ -249,6 +253,7 @@ export async function runDesignContractFoundationChecks(check) {
       const composeInstructionPaths = [
         "takt-marp-compose-sections.md",
         "takt-marp-assemble-slides.md",
+        "takt-marp-visual-generate.md",
         "takt-marp-compose-review.md",
         "takt-marp-compose-work-summary.md",
       ];
@@ -261,6 +266,11 @@ export async function runDesignContractFoundationChecks(check) {
           assert(source.includes("各 `Layout`"), `${rootRelativePath}/${fileName} must compare planned Layout entries`);
           assert(source.includes("slide `_class:`"), `${rootRelativePath}/${fileName} must compare planned Layout to slide _class`);
           assert(source.includes("front matter CSS / token-driven class 定義"), `${rootRelativePath}/${fileName} must compare planned Layout to CSS definitions`);
+        }
+        if (fileName === "takt-marp-visual-generate.md") {
+          assert(source.includes("raw hex color"), `${rootRelativePath}/${fileName} must prevent raw visual colors outside the Design Contract`);
+          assert(source.includes("brand fonts"), `${rootRelativePath}/${fileName} must apply Design Contract brand fonts`);
+          assert(source.includes("visual source を成功扱いで更新しない"), `${rootRelativePath}/${fileName} must block visual updates on Design Contract mismatch`);
         }
       }
 

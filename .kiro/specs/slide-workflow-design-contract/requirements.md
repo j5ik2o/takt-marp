@@ -40,7 +40,7 @@
 
 2.1. Claude Design Source が解決されたとき、slide workflow は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` を必須 input として検証しなければならない。
 
-2.2. Claude Design Source に `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md` / `README.md`、`components/**/*.prompt.md`、`guidelines/*.card.html`、`slides/*.html`、`templates/**/*.dc.html`、または `assets/*` が含まれる場合、slide workflow はそれらを optional metadata、guidance、source catalog として取り込み、存在しないことだけを理由に import を失敗させてはならない。
+2.2. Claude Design Source に `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md` / `README.md`、`components/**/*.prompt.md`、`guidelines/*.card.html`、`slides/*.html`、`templates/**/*.dc.html`、または `assets/*` が含まれる場合、slide workflow はそれらを optional metadata、guidance、source catalog として取り込み、存在しないことだけを理由に import を失敗させてはならない。`templates/**/*.dc.html` は manifest `templates` が省略または空でも archive entry から catalog に取り込まなければならない。
 
 2.3. `_ds_manifest.json` が JSON object ではない場合、`namespace`、`globalCssPaths`、`tokens` を欠く場合、`namespace` が空でない string ではない場合、または `globalCssPaths` / `tokens` が array ではない場合、slide workflow は Resolved Design Contract を生成せず、`CLAUDE_DESIGN_SOURCE_INVALID` と原因または不足 field を表示しなければならない。
 
@@ -52,7 +52,7 @@
 
 2.7. slide workflow が token category を分類するとき、manifest の `kind` だけに依存せず、token name prefix と source CSS path も使って colors / typography / spacing / radius / shadow / font を分類しなければならない。
 
-2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は引用符あり / なしの CSS font-family token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。
+2.8. manifest の `brandFonts` が string 配列または `family` を持つ object 配列である場合、slide workflow は引用符あり / なしの CSS font-family token から抽出した font family と合わせて、重複を除いた `brand_fonts` として Resolved Design Contract に記録しなければならない。font-family token は `--font*` prefix だけでなく、`kind: "font"`、`family` を含む token 名、typography / fonts CSS path 由来の family 値も対象にし、font-size などの scalar 値は除外しなければならない。
 
 ### 要件 3: Resolved Design Contract を workflow に引き渡す
 
@@ -114,7 +114,7 @@
 
 5.2. fingerprint が一致しない場合、slide workflow は compose の `needs_input` または review blocker として不一致を報告し、`SLIDES.md` や `sections/*` の生成を成功扱いしてはならない。
 
-5.3. fingerprint が一致したとき、slide workflow は Resolved Design Contract の token constraints から `SLIDES.md` front matter CSS、layout class、section HTML/CSS、必要な visual source を生成しなければならない。
+5.3. fingerprint が一致したとき、slide workflow は Resolved Design Contract の token constraints から `SLIDES.md` front matter CSS、layout class、section HTML/CSS、必要な visual source を生成しなければならない。`generate_visuals` が生成・接続する SVG / inline SVG / existing image references も marker の `design_contract.path` を読み、同じ fingerprint、token constraints、brand fonts、guidance、source catalog に従わなければならない。
 
 5.4. `compose` が CSS custom properties を生成するとき、slide workflow は Claude Design Source の token 名と値を保持し、raw color、raw px、未提供 font-family の新規混入を避けなければならない。
 
@@ -136,7 +136,7 @@
 
 6.2. `compose-review` が実行されたとき、slide workflow は `SLIDES.md` の `_class` と style 定義が Resolved Design Contract の token constraints に対応していることを確認しなければならない。
 
-6.3. `compose-review` が実行されたとき、slide workflow は HTML visual component が Resolved Design Contract の token constraints と既存 visual vocabulary に従っていることを確認しなければならない。
+6.3. `compose-review` が実行されたとき、slide workflow は HTML visual component、SVG / inline SVG、existing image references が Resolved Design Contract の token constraints、brand fonts、guidance、source catalog、既存 visual vocabulary に従っていることを確認しなければならない。
 
 6.4. `_adherence.oxlintrc.json` が Claude Design Source に含まれる場合、slide workflow は raw hex color、raw px value、未提供 font-family の混入を review finding として報告しなければならない。ただし Resolved Design Contract 由来の custom property 定義そのものは正当な token 定義として扱い、finding 対象にしてはならない。
 
@@ -184,7 +184,7 @@
 
 8.6. Claude Design Source の検証が失敗した場合、slide workflow は失敗した source file、対象 command、確認すべき artifact を利用者またはメンテナが特定できる結果を表示しなければならない。
 
-8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、stale contract hash の破棄を検証しなければならない。
+8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、stale contract hash の破棄を検証しなければならない。
 
 ### 要件 9: 既存 deck と既存成果物への影響を限定する
 

@@ -51,6 +51,7 @@ export function buildClaudeDesignSmokeFixtureZipBuffer() {
     "components/demo/Metric.prompt.md": "Use Metric for compact numeric summaries when a deck needs a reusable data callout.\n",
     "slides/cover.html": "<section>Generic cover sample</section>\n",
     "templates/generic-deck/GenericDeck.dc.html": "<x-dc><!-- @template name=\"Generic deck\" --></x-dc>\n",
+    "templates/archive-only/ArchiveOnly.dc.html": "<x-dc><!-- @template name=\"Archive only\" --></x-dc>\n",
     "assets/mark.svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1 1\"></svg>\n",
     "_adherence.oxlintrc.json": `${JSON.stringify({
       rules: {

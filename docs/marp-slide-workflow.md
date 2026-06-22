@@ -208,7 +208,7 @@ Runner は `plan` / `compose` の開始前に Claude Design Source を読み、`
 `plan.md` と `slide-blueprint.md` は source path、namespace、fingerprint、Design Brief fingerprint、token summary、adherence availability、`guidance`、`source_catalog` を記録するが、CSS、front matter style、`_class` style 定義は生成しない。
 `compose` または review が `plan.md` / `slide-blueprint.md` に記録された Design Brief fingerprint と現在の Design Brief fingerprint の不一致を見つけた場合は、re-plan または Claude Design Source 更新が必要な blocker として扱う。
 `SLIDES.md` のfront matter CSSは Resolved Design Contract の token をもとに構成し、スライドごとの個別調整を避ける。
-Design System は deck ごとに異なる。`SKILL.md`、`readme.md`、component prompt、starting point、card、sample slide、template、theme、font、asset は Resolved Design Contract の generic catalog として参照し、特定ドメインや特定 component 名を workflow に固定しない。
+Design System は deck ごとに異なる。`SKILL.md`、`readme.md`、component prompt、starting point、card、sample slide、template、theme、font、asset は Resolved Design Contract の generic catalog として参照し、特定ドメインや特定 component 名を workflow に固定しない。template は manifest 記載分だけに依存せず、zip 内の `templates/**/*.dc.html` も catalog に取り込む。
 
 必須項目:
 
@@ -294,7 +294,7 @@ Steps:
 
 ### takt-marp-slide-compose
 
-承認済みの `plan.md` と Resolved Design Contract から、section source、`SLIDES.md`、必要な visual source を生成する。
+承認済みの `plan.md` と Resolved Design Contract から、section source、`SLIDES.md`、必要な visual source を生成する。`generate_visuals` も marker の `design_contract.path` を読み、SVG / inline SVG / existing image 接続を token constraints、brand fonts、guidance、source catalog と矛盾しないように扱う。
 
 Steps:
 

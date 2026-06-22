@@ -538,7 +538,7 @@ function buildSourceCatalog(manifest, archive, guidance) {
   const components = normalizeCatalogItems(manifest.components).map((item) => enrichComponentCatalogItem(item, entryNames));
   const startingPoints = normalizeCatalogItems(manifest.startingPoints);
   const cards = normalizeCatalogItems(manifest.cards);
-  const templates = normalizeCatalogItems(manifest.templates);
+  const templates = buildTemplateCatalog(manifest.templates, entryNames);
   const themes = normalizeCatalogItems(manifest.themes);
   const fonts = normalizeCatalogItems(manifest.fonts);
   const sampleSlides = collectFileCatalogEntries(entryNames, "slides/", (name) => name.endsWith(".html"))
@@ -610,6 +610,26 @@ function enrichComponentCatalogItem(item, entryNames) {
   });
 }
 
+function buildTemplateCatalog(manifestTemplates, entryNames) {
+  const templates = normalizeCatalogItems(manifestTemplates);
+  const knownPaths = new Set(templates.flatMap(templateCatalogPaths).map(normalizeCatalogPath));
+  const archiveTemplates = collectFileCatalogEntries(entryNames, "templates/", (name) => name.endsWith(".dc.html"))
+    .filter((entry) => !knownPaths.has(normalizeCatalogPath(entry.path)))
+    .map((entry) => Object.freeze({
+      ...entry,
+      entryPath: entry.path,
+    }));
+  return Object.freeze([...templates, ...archiveTemplates]);
+}
+
+function templateCatalogPaths(item) {
+  return [item.path, item.entryPath, item.sourcePath].filter((value) => typeof value === "string" && value.trim());
+}
+
+function normalizeCatalogPath(value) {
+  return value.replace(/\\/g, "/").toLowerCase();
+}
+
 function collectFileCatalogEntries(entryNames, prefix, predicate = () => true) {
   return entryNames
     .filter((name) => name.startsWith(prefix) && predicate(name))
@@ -665,7 +685,7 @@ function tokenCounts(tokens) {
 function brandFonts(manifest, tokens) {
   const fonts = new Set(manifestBrandFontFamilies(manifest.brandFonts));
   for (const token of tokens) {
-    if (token.name.startsWith("--font")) {
+    if (isFontFamilyToken(token)) {
       for (const family of cssFontFamilies(token.value)) {
         fonts.add(family);
       }
@@ -677,7 +697,18 @@ function brandFonts(manifest, tokens) {
 function cssFontFamilies(value) {
   return splitCssCommaList(value)
     .map((family) => family.trim().replace(/^['"]|['"]$/g, "").trim())
-    .filter((family) => family && !isGenericFontFamily(family));
+    .filter(isLikelyNonGenericFontFamily);
+}
+
+function isFontFamilyToken(token) {
+  const name = token.name.toLowerCase();
+  const kind = token.kind.toLowerCase();
+  const definedIn = token.defined_in.toLowerCase();
+  return name.startsWith("--font") ||
+    name.includes("family") ||
+    kind === "font" ||
+    definedIn.includes("typography") ||
+    definedIn.includes("fonts");
 }
 
 function splitCssCommaList(value) {
@@ -704,6 +735,26 @@ function splitCssCommaList(value) {
 
 function isGenericFontFamily(family) {
   return GENERIC_FONT_FAMILIES.has(family.toLowerCase());
+}
+
+function isLikelyNonGenericFontFamily(family) {
+  if (!family || isGenericFontFamily(family)) {
+    return false;
+  }
+  const normalized = family.toLowerCase();
+  if (normalized.startsWith("var(")) {
+    return false;
+  }
+  if (/^[a-z-]+\(/i.test(normalized)) {
+    return false;
+  }
+  if (/^-?\d+(\.\d+)?(px|r?em|%|vh|vw|vmin|vmax|ch|ex|pt|pc|in|cm|mm)?$/.test(normalized)) {
+    return false;
+  }
+  if (/^(normal|bold|bolder|lighter|inherit|initial|unset)$/.test(normalized)) {
+    return false;
+  }
+  return /[A-Za-z\u0080-\uFFFF]/.test(family);
 }
 
 function manifestBrandFontFamilies(brandFonts) {

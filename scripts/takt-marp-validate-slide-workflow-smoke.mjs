@@ -498,6 +498,7 @@ async function readSmokeResolvedDesignContract(targetInfo) {
   assert(contract.guidance?.documents?.some((item) => item.path === "readme.md"), `sequence:design-contract-artifact guidance missing readme.md: ${JSON.stringify(contract.guidance)}`);
   assert(contract.guidance?.component_prompts?.some((item) => item.path === "components/demo/Metric.prompt.md"), `sequence:design-contract-artifact component prompt missing: ${JSON.stringify(contract.guidance)}`);
   assert(contract.source_catalog?.templates?.some((item) => item.entryPath === "templates/generic-deck/GenericDeck.dc.html"), `sequence:design-contract-artifact template catalog missing: ${JSON.stringify(contract.source_catalog)}`);
+  assert(contract.source_catalog?.templates?.some((item) => item.path === "templates/archive-only/ArchiveOnly.dc.html"), `sequence:design-contract-artifact archive-only template catalog missing: ${JSON.stringify(contract.source_catalog)}`);
   assert(contract.source_catalog?.sample_slides?.some((item) => item.path === "slides/cover.html"), `sequence:design-contract-artifact sample slide catalog missing: ${JSON.stringify(contract.source_catalog)}`);
   assert(contract.source_catalog?.starting_points?.some((item) => item.name === "Lecture kickoff"), `sequence:design-contract-artifact starting point catalog missing: ${JSON.stringify(contract.source_catalog)}`);
   assert(contract.source_catalog?.themes?.some((item) => item.name === "High contrast light"), `sequence:design-contract-artifact theme catalog missing: ${JSON.stringify(contract.source_catalog)}`);
