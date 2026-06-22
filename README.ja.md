@@ -102,7 +102,17 @@ takt-marp smoke --keep
 
 smoke validation は fixture から一時的な `_workflow-smoke` deck を作成し、invalid target、approval failure path、`plan` -> `compose` -> `polish` -> `deliver` の一連の実行、render evidence metadata、delivery artifact、rerun/force behavior を検証します。`--keep` を付けると、生成された deck と report を `slides/_workflow-smoke/` に残して確認できます。
 
+smoke deck は workflow wiring の証跡に限定します。生成された `SLIDES.md` / PDF を、人間向けDDD講義品質の証跡として読んではいけません。
+
 real provider smoke は既定の workflow ごとの timeout を超えることがあります。ローカル検証では `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS=7200000 npm run slide:smoke -- --provider claude --keep` のように `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS` で延長できます。
+
+DDD講義らしい品質の代表sliceを確認する場合は、deterministic content acceptance を使います。
+
+```bash
+npm run slide:content-acceptance
+```
+
+content acceptance は precomputed fixture から `slides/_content-acceptance-ddd-slice/` を作成し、HTML/PDFをbuildし、DDD content markers、Design Contract token usage、PDF origin を確認して `slides/_content-acceptance-ddd-slice/review/content-acceptance-summary.md` に記録します。full 100〜140枚講義は生成せず、real provider も使わないため、CIと通常ローカル検証に収まります。
 
 ### Smoke fixture
 
@@ -113,3 +123,9 @@ fixtures/marp-slide-workflow/_workflow-smoke/
 ```
 
 新しいbriefを作らずにworkflow全体を試したい場合は、`slides/` 配下へコピーして使います。
+
+DDD content acceptance 用のbounded fixtureはこちらです。
+
+```text
+fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/
+```

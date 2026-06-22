@@ -170,3 +170,36 @@
     - _Requirements:_ 6.4, 8.2, 8.3, 8.4
     - _Boundary:_ IntegrationFixLoop, SmokeResultReporter
     - _Depends:_ none
+
+- [x] 8. Workflow Smoke と Content Acceptance Slice を分離する
+  - [x] 8.1 Workflow Smoke の責務境界をsummaryとfixture docsに明示する
+    - smoke summary が `acceptance_scope: workflow-wiring-only`、`content_quality_evidence: false`、`slides_source`、`pdf_output` を記録する。
+    - `_workflow-smoke` fixture README が、DDD講義品質確認ではなく workflow/state/template/Design Contract wiring 用であることを明示する。
+    - smoke summary が mock/real provider kind とPDF originを確認できる。
+    - _Requirements:_ 9.1, 9.2
+    - _Boundary:_ SmokeResultReporter, SmokeArtifactBoundary
+    - _Depends:_ none
+
+  - [x] 8.2 DDD content acceptance fixture を別targetとして追加する
+    - `fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/` に precomputed `SLIDES.md`、brief、Design Brief を置く。
+    - fixture は full 100〜140枚講義ではなく、9枚のbounded representative sliceとして定義する。
+    - fixture は共通題材、Java Before/After、演習、模範回答、図解、Appendix断片、Design Contract token usage を含む。
+    - _Requirements:_ 9.3, 9.5
+    - _Boundary:_ ContentAcceptanceFixture
+    - _Depends:_ none
+
+  - [x] 8.3 Content Acceptance Slice validator を追加する
+    - validator が fixture を `slides/_content-acceptance-ddd-slice/` にコピーし、Claude Design Source fixture を付与する。
+    - validator が content markers、Design Contract token usage、HTML/PDF build、PDF text marker、PDF origin summary、10分以内実行を検証する。
+    - validator は real provider を起動せず、workflow/facet template asset を生成・変更しない。
+    - _Requirements:_ 9.4, 9.5, 9.6, 9.7
+    - _Boundary:_ ContentAcceptanceValidator
+    - _Depends:_ 8.2
+
+  - [x] 8.4 deterministic validation と docs へ接続する
+    - `package.json` に `slide:content-acceptance` を追加し、`npm test` に組み込む。
+    - README / workflow docs が Workflow Smoke と Content Acceptance Slice の使い分けを説明する。
+    - package boundary validation が content acceptance script と fixture の配布を確認する。
+    - _Requirements:_ 9.1, 9.4, 9.6, 9.7
+    - _Boundary:_ ContentAcceptanceValidator, ValidationSurface
+    - _Depends:_ 8.3

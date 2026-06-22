@@ -24,6 +24,14 @@ _Avoid_: template copy script, local template fork, package assets only
 slide workflow の command/state/artifact/template smoke behavior を deterministic に固定する検証境界。
 _Avoid_: ad hoc test script, manual QA, CI only
 
+**Workflow Smoke（ワークフロースモーク）**:
+workflow routing、state gate、template selection、Design Contract wiring、render evidence、delivery artifact、rerun/force behavior を合成fixtureで検証する Validation Surface。人間向け講義品質や実deck内容密度の受け入れ判断ではない。
+_Avoid_: lecture quality check, DDD content acceptance, final deck preview
+
+**Content Acceptance Slice（内容受け入れスライス）**:
+full deck や real provider run を必須にせず、代表的な precomputed slide source で内容密度、題材一貫性、Design Contract token usage、HTML/PDF生成結果を検証する bounded acceptance fixture。
+_Avoid_: workflow smoke, full deck acceptance, mandatory real provider E2E
+
 **Research Handoff Contract（調査引き渡し契約）**:
 user-facing deck target と TAKT research brief target を分け、runner から workflow/facets へ渡す target metadata の契約。
 _Avoid_: implicit target, target guess, task path as deck target

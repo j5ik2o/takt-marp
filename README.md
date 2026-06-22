@@ -102,7 +102,17 @@ takt-marp smoke --keep
 
 The smoke validation creates a temporary `_workflow-smoke` deck from the fixture, exercises invalid target and approval failure paths, runs the `plan` -> `compose` -> `polish` -> `deliver` sequence, verifies render evidence metadata, checks delivery artifacts, and covers rerun/force behavior. `--keep` leaves the generated deck and reports under `slides/_workflow-smoke/` for inspection.
 
+The smoke deck is workflow wiring evidence only. Its generated `SLIDES.md` / PDF must not be read as human-facing DDD lecture quality evidence.
+
 Real provider smoke can take longer than the default per-workflow timeout. For local verification, extend it with `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS`, for example `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS=7200000 npm run slide:smoke -- --provider claude --keep`.
+
+Use deterministic content acceptance when you need a bounded DDD lecture quality slice:
+
+```bash
+npm run slide:content-acceptance
+```
+
+Content acceptance creates `slides/_content-acceptance-ddd-slice/` from a precomputed fixture, builds HTML/PDF, checks DDD content markers, verifies Design Contract token usage, and writes `slides/_content-acceptance-ddd-slice/review/content-acceptance-summary.md`. It does not generate the full 100-140 slide lecture and does not use a real provider, so it stays suitable for CI and normal local verification.
 
 ### Smoke fixture
 
@@ -113,3 +123,9 @@ fixtures/marp-slide-workflow/_workflow-smoke/
 ```
 
 Copy it under `slides/` when you want to run the full workflow without creating a new brief.
+
+The bounded DDD content fixture is available at:
+
+```text
+fixtures/marp-slide-workflow/_content-acceptance-ddd-slice/
+```

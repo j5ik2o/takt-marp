@@ -2,14 +2,16 @@
 
 ## 概要
 
-`slide-workflow-smoke-validation` は、`slide-workflow-foundation` と `slide-workflow-orchestration` が定めた Marp slide workflow の契約を、smoke deck の実行で end-to-end に検証する spec です。
+`slide-workflow-smoke-validation` は、`slide-workflow-foundation` と `slide-workflow-orchestration` が定めた Marp slide workflow の契約を、Workflow Smoke（ワークフロースモーク）deck の実行で end-to-end に検証する spec です。
 
 現在は再設計後の canonical sequence が定義されている一方で、target validation、approval gate、report front matter、loop monitor routing、render evidence、delivery artifact の契約が全体 sequence で噛み合うことはまだ証明されていません。この spec では新しい command/state model や workflow semantics を導入せず、smoke deck を通じて invalid target、approval、render evidence、deliver artifact、rerun/force/history の実挙動を確認し、発見した integration issue を最小限に収束させます。
 
+Workflow Smoke は人間向け講義品質や実 deck の内容密度を判定しません。DDD講義の代表的な内容品質は、別 target の Content Acceptance Slice（内容受け入れスライス）で bounded に確認します。
+
 ## 境界コンテキスト
 
-- **対象**: smoke deck 準備、canonical command sequence の実行検証、invalid target と preflight failure の検証、approval flow の検証、render evidence の検証、delivery artifact の検証、rerun/force/history の検証、smoke で見つかった integration issue の最小修正
-- **対象外**: command/state model の再設計、旧 command 互換 alias、approval ownership 変更、`html`/`pdf`/`pptx` 以外の deliverable 追加、PPTX visual inspection の `polish` 組み込み、GitHub PR automation
+- **対象**: Workflow Smoke deck 準備、canonical command sequence の実行検証、invalid target と preflight failure の検証、approval flow の検証、render evidence の検証、delivery artifact の検証、rerun/force/history の検証、smoke で見つかった integration issue の最小修正、Content Acceptance Slice の bounded validation
+- **対象外**: command/state model の再設計、旧 command 互換 alias、approval ownership 変更、`html`/`pdf`/`pptx` 以外の deliverable 追加、PPTX visual inspection の `polish` 組み込み、GitHub PR automation、full 100〜140枚講義の毎回生成、real provider content acceptance の必須化
 - **隣接する期待**: foundation は deterministic scripts、runner preflight、approval、render evidence foundation を提供し、orchestration は canonical 4 workflow と report contract を提供する。この spec はそれらの契約を実行で検証し、矛盾が見つかった場合は upstream feedback として扱う。
 
 ## 要件
@@ -123,3 +125,23 @@
 8.3. If integration issue が上流 spec と矛盾する場合, the slide workflow smoke validation shall 修正を upstream feedback として明示し、smoke spec 内で新しい意味論として隠さない。
 
 8.4. When smoke validation が完了する場合, the slide workflow smoke validation shall `slides/<deck>/review/smoke-summary.md` に、実行した command、検証した failure path、生成された evidence/artifacts、残存リスクを確認できる結果を残す。
+
+### 要件 9: Workflow Smoke と Content Acceptance Slice を分離する
+
+**目的:** メンテナとして、workflow wiring の検証結果とDDD講義の内容品質確認を混同せず、マージ前に短時間の代表slice品質を確認したい。
+
+#### 受け入れ条件
+
+9.1. When Workflow Smoke summary または fixture README を確認する場合, the slide workflow smoke validation shall `_workflow-smoke` が workflow/state/template/Design Contract wiring 用であり、人間向け講義品質の証跡ではないことを明示しなければならない。
+
+9.2. When Workflow Smoke が delivery artifact を生成する場合, the slide workflow smoke validation shall mock/real provider kind、`SLIDES.md` origin、PDF output origin を summary から確認できるようにしなければならない。
+
+9.3. The slide workflow smoke validation shall DDD講義用の Content Acceptance Slice を `_workflow-smoke` とは別 target として定義しなければならない。
+
+9.4. When Content Acceptance Slice を実行する場合, the slide workflow smoke validation shall full 100〜140枚講義や real provider run を必須にせず、precomputed `SLIDES.md` からHTML/PDFをbuildして10分以内に検証できなければならない。
+
+9.5. When Content Acceptance Slice を検証する場合, the slide workflow smoke validation shall DDD講義らしい内容密度、共通題材、Java風Before/After、演習、模範回答、図解、Appendix断片、Design Contract token usage を確認しなければならない。
+
+9.6. When Content Acceptance Slice がPDFを生成する場合, the slide workflow smoke validation shall 生成元 `SLIDES.md`、HTML/PDF output path、real provider不使用、full deck不生成を summary に記録しなければならない。
+
+9.7. The slide workflow smoke validation shall Content Acceptance Slice を通常の deterministic validation に含め、no-copy contract を維持しなければならない。

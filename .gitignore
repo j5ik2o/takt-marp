@@ -223,3 +223,4 @@ fabric.properties
 dist/
 slides/**/*.html
 slides/_workflow-smoke/
+slides/_content-acceptance-ddd-slice/
