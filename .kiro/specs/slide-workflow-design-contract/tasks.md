@@ -64,7 +64,7 @@
   - plan facets が marker と Resolved Design Contract を読み、token constraints、density hints、adherence rules、guidance、source catalog、既存 layout vocabulary を計画へ反映する。
   - Claude Design zip から components / starting points / cards / templates / themes / fonts / sample slides / component prompts が得られない場合でも、既存 vocabulary と token constraints の範囲で `Layout` / `Visual Strategy` を記録する。得られる場合は brief に合う reusable element だけを選定する。
   - `plan.md` と `slide-blueprint.md` に contract metadata を残し、CSS、front matter style、`_class` style 定義は生成しない。
-  - plan work summary / review / fix が Design Contract section、`contract_sha256`、Design Brief fingerprint、`guidance`、`source_catalog` の欠落や不一致を承認前の `needs_fix` finding として扱う。
+  - plan work summary / review / fix が Design Contract section、`contract_sha256`、available な Design Brief fingerprint、missing Design Brief の drift protection unavailable note、`guidance`、`source_catalog` の欠落や不一致を承認前の `needs_fix` finding として扱う。
   - 完了条件: mock plan artifact に contract metadata があり、CSS/style 定義が plan artifact に混入していないことを検証できる。
   - _Requirements:_ 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 7.3, 9.1
   - _Boundary:_ PlanFacetContract
@@ -157,7 +157,7 @@
 
 - [x] 7.2 Resolved Design Contract / marker / plan metadata に Design Brief fingerprint を記録する
   - Resolved Design Contract の `authoring.design_brief` に path、SHA-256、availability、provenance verification status を記録する。
-  - `.takt/workflow-current-target.json` の `design_contract.authoring` summary と `plan.md` / `slide-blueprint.md` の Design Contract section に Design Brief fingerprint を記録する。
+  - `.takt/workflow-current-target.json` の `design_contract.authoring` summary と `plan.md` / `slide-blueprint.md` の Design Contract section に Design Brief status/fingerprint を記録する。Design Brief missing の場合は fingerprint 欠落だけで止めず、drift protection unavailable note を残す。
   - `contract_sha256` は Design Brief authoring metadata を含めず、Design Brief drift は `authoring.design_brief.sha256` の専用比較で検出する。
   - 完了条件: mock plan artifact と marker payload が Design Brief metadata を含み、Design Brief 変更時に Design Brief fingerprint mismatch が検出される。
   - _Requirements:_ 10.4, 10.6

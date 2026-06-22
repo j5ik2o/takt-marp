@@ -32,7 +32,7 @@
   - Appendix Coverage: 参考文献、用語集、演習模範回答、実践チェックリスト、導入時注意、既存システム適用手順ごとに対応 slide ID を示す
   - Quality Checklist Coverage: brief の品質チェック項目ごとに対応 slide ID または review gate を示す
 - Design Contract
-  - Resolved Design Contract の source path、namespace、source_sha256、contract_sha256、Design Brief fingerprint、token summary、brand fonts、adherence availability を示す
+  - Resolved Design Contract の source path、namespace、source_sha256、contract_sha256、Design Brief status/fingerprint、token summary、brand fonts、adherence availability を示す
   - `guidance` の primary documents(`SKILL.md` / `readme.md` 等)と component prompts の有無、`source_catalog` の components / starting_points / cards / templates / sample_slides / guidelines / themes / fonts / assets の概要を示す
   - brief と一致する reusable element、sample、template、component prompt、starting point、theme、font を選定した場合は、名前/path、選定理由、使わない主要候補の理由を示す
   - layout / visual / density planning で使う token constraints と、brief 要求との整合・制約を示す

@@ -8,7 +8,7 @@ plan command の成果物をレビューしてください。
 5. `brief.md` / `brief.normalized.md` の重要情報が `plan.md` と `slide-blueprint.md` に残っているか completeness gate として検査してください。単なる矛盾チェックで終わらせないでください。
 6. `plan.md` の `Coverage Matrix` を検査し、固定アウトラインの章・節・leaf項目、章別要素、コード例、演習、巻末資料、品質チェック項目、Visual Rendering Coverage が slide ID または plan finding に対応していることを確認してください。
 7. `Target slide count` と固定アウトライン・情報密度・講義本体要件の矛盾を検査してください。`Target slide count: 5` なのに期待値 `slides.md` 相当の講義本体を求めている場合は、target を100〜140または期待値相当(例:119)へ修正する必要がある、という blocker または major finding にしてください。勝手に119枚へ拡張した plan も、勝手に5枚へ圧縮した plan も finding 対象です。
-8. `plan.md` と `slide-blueprint.md` の Design Contract section を検査し、marker の `design_contract.fingerprint.contract_sha256` と `contract_sha256` が一致すること、Design Brief fingerprint が current Resolved Design Contract と一致すること、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` が欠けていないことを確認してください。Design Contract section 欠落、`contract_sha256` 欠落・不一致、Design Brief fingerprint 欠落・不一致、`guidance` / `source_catalog` 欠落は `needs_fix` finding としてください。
+8. `plan.md` と `slide-blueprint.md` の Design Contract section を検査し、marker の `design_contract.fingerprint.contract_sha256` と `contract_sha256` が一致すること、Design Brief が available の場合は fingerprint が current Resolved Design Contract と一致すること、Design Brief が missing の場合は drift protection unavailable note と推奨配置先が残っていること、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` が欠けていないことを確認してください。Design Contract section 欠落、`contract_sha256` 欠落・不一致、available な Design Brief fingerprint 欠落・不一致、missing Design Brief の unavailable note 欠落、`guidance` / `source_catalog` 欠落は `needs_fix` finding としてください。
 9. 修正が必要な finding だけを stable `finding_id` 付きで記録してください。
 10. `review/plan-review.md` を書いてください。
 
@@ -20,7 +20,7 @@ plan command の成果物をレビューしてください。
 - `brief.normalized.md` の `Example Policy` にある共通題材・具体例方針が全章・コード例・演習で一貫していること。章ごとに題材を変えたり、brief で指定された語彙を別題材へ置換した場合は major 以上です。
 - `brief.normalized.md` のコード例方針と演習方針が coverage 対象になっていること。言語、Before/After、業務意味、フレームワーク依存可否、個人/グループ、模範回答、巻末資料などの明示制約を落とした場合は major 以上です。
 - Visual Strategy が各スライドに存在し、`render_owner: compose_sections` / `render_owner: generate_visuals` のどちらかを明示していること。
-- `plan.md` と `slide-blueprint.md` の Design Contract section に `contract_sha256`、Design Brief fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` があり、marker / Resolved Design Contract と一致していること。欠落・不一致は major 以上です。
+- `plan.md` と `slide-blueprint.md` の Design Contract section に `contract_sha256`、Design Brief status/fingerprint または drift protection unavailable note、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` があり、marker / Resolved Design Contract と一致していること。available な Design Brief fingerprint の欠落・不一致、または missing Design Brief の unavailable note 欠落は major 以上です。
 - カード、2列比較、Before/After、表、短い手順、軽量タイムラインが `html:` ではなく `svg:` にされている場合は major finding として扱うこと。SVGを使うなら座標制御・複雑な矢印・再利用・単体レビューの理由が必要です。
 - `slide-blueprint.md` の `Slide Blueprint Table` に全slide IDが存在し、`Section Assembly Manifest` が section file名、slide ID範囲、想定slide countを持つこと。欠落は major 以上です。
 

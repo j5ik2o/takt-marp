@@ -243,6 +243,7 @@ export async function runDesignContractFoundationChecks(check) {
 	      assert(planWorkSummary.includes("Design Contract section"), `${rootRelativePath} plan work summary must check Design Contract section`);
 	      assert(planWorkSummary.includes("contract_sha256"), `${rootRelativePath} plan work summary must check contract_sha256`);
 	      assert(planWorkSummary.includes("Design Brief fingerprint"), `${rootRelativePath} plan work summary must check Design Brief fingerprint`);
+	      assert(planWorkSummary.includes("drift protection unavailable"), `${rootRelativePath} plan work summary must allow missing Design Brief with unavailable metadata`);
 	      assert(planWorkSummary.includes("guidance"), `${rootRelativePath} plan work summary must check guidance metadata`);
 	      assert(planWorkSummary.includes("source_catalog"), `${rootRelativePath} plan work summary must check source_catalog metadata`);
 
@@ -251,6 +252,7 @@ export async function runDesignContractFoundationChecks(check) {
 	      assert(planReview.includes("design_contract.fingerprint.contract_sha256"), `${rootRelativePath} plan review must compare marker contract fingerprint`);
 	      assert(planReview.includes("contract_sha256"), `${rootRelativePath} plan review must check plan contract_sha256`);
 	      assert(planReview.includes("Design Brief fingerprint"), `${rootRelativePath} plan review must check Design Brief fingerprint`);
+	      assert(planReview.includes("missing Design Brief の unavailable note"), `${rootRelativePath} plan review must not fail missing Design Brief solely for absent fingerprint`);
 	      assert(planReview.includes("needs_fix"), `${rootRelativePath} plan review must route metadata gaps to needs_fix`);
 
 	      const planFix = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan-fix.md"), "utf8");

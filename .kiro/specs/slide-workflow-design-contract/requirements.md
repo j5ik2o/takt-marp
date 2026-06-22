@@ -104,7 +104,7 @@
 
 4.6. Resolved Design Contract と brief の要求が両立しない場合、slide workflow は推測で layout や visual を補完せず、利用者が修正対象を確認できる finding または失敗情報を残さなければならない。
 
-4.7. `plan-work-summary` と `plan-review` が実行されたとき、slide workflow は `plan.md` と `slide-blueprint.md` の Design Contract section、`contract_sha256`、Design Brief fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` を検査し、欠落または marker / Resolved Design Contract との不一致を `needs_fix` finding として扱わなければならない。
+4.7. `plan-work-summary` と `plan-review` が実行されたとき、slide workflow は `plan.md` と `slide-blueprint.md` の Design Contract section、`contract_sha256`、Design Brief status/fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` を検査しなければならない。Design Brief が available の場合は fingerprint 欠落または marker / Resolved Design Contract との不一致を `needs_fix` finding として扱い、Design Brief が missing の場合は fingerprint 欠落だけでは止めず、drift protection unavailable note の欠落を `needs_fix` finding として扱わなければならない。
 
 ### 要件 5: compose は同じ Design Contract から slide source を生成する
 

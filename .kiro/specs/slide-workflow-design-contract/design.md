@@ -651,7 +651,7 @@ interface ResolvedDesignContract {
 - Claude Design zip の `components` / `startingPoints` / `cards` / `templates` / `themes` / `fonts` が空でも plan を失敗させない。
 - CSS、front matter style、`_class` style 定義は plan artifact に出力しない。
 - `plan.md` と `slide-blueprint.md` に contract metadata を記録する。
-- `plan-work-summary` と `plan-review` は `plan.md` / `slide-blueprint.md` の Design Contract section、`contract_sha256`、Design Brief fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` を確認し、marker / Resolved Design Contract との不一致または欠落を `needs_fix` finding として扱う。
+- `plan-work-summary` と `plan-review` は `plan.md` / `slide-blueprint.md` の Design Contract section、`contract_sha256`、Design Brief status/fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` を確認する。Design Brief が available の場合は fingerprint 欠落または marker / Resolved Design Contract との不一致を `needs_fix` finding として扱い、Design Brief が missing の場合は fingerprint 欠落だけでは止めず、drift protection unavailable note の欠落を `needs_fix` finding として扱う。
 - `plan-fix` は Design Contract metadata finding を `.takt/workflow-current-target.json` と `design_contract.path` の Resolved Design Contract から `plan.md` / `slide-blueprint.md` に反映する。
 
 ### ComposeFacetContract
@@ -705,7 +705,7 @@ interface ResolvedDesignContract {
 ### foundation validation
 
 - `.takt/workflow-current-target.json` に `design_contract` が入ることを検証する。
-- plan / blueprint が `contract_sha256` と Design Brief fingerprint を記録し、CSS を含まないことを検証する。
+- plan / blueprint が `contract_sha256` と Design Brief status/fingerprint または drift protection unavailable note を記録し、CSS を含まないことを検証する。
 - Design Brief 欠落時は import failure ではなく warning / finding になり、Design Brief fingerprint 不一致時は compose / review blocker になることを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
