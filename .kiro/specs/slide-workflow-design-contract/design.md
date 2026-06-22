@@ -4,11 +4,12 @@
 
 この機能は、Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力として受け取り、workflow が読める Resolved Design Contract（解決済みデザイン契約）へ正規化する。
 
-利用者は Claude Design から export した `.zip` を `slides/<deck>/design/` に配置する。Workflow Runner（ワークフローランナー）は `plan` / `compose` 実行前に zip を解決し、manifest と token CSS を検証し、`.takt/design-contracts/<deck>/resolved-design-contract.json` を生成する。`--force` 再実行では、既存成果物の archive / clean 前に import / validation だけを行い、Resolved Design Contract の保存は archive / clean 成功後に遅延する。`plan` はこの契約を layout / visual / density の制約として参照するだけで CSS を生成しない。`compose` は `plan` が記録した contract fingerprint と現在の fingerprint を照合し、一致した場合だけ `SLIDES.md` front matter CSS、`_class`、section HTML/CSS、visual source を生成する。
+利用者は Claude Design に渡す作成依頼を `slides/<deck>/design/design-brief.md` として残し、Claude Design から export した `.zip` を同じ `slides/<deck>/design/` に配置する。Workflow Runner（ワークフローランナー）は `plan` / `compose` 実行前に zip を解決し、manifest と token CSS を検証し、存在する Design Brief（デザインブリーフ）の path / fingerprint も含めて `.takt/design-contracts/<deck>/resolved-design-contract.json` を生成する。`--force` 再実行では、既存成果物の archive / clean 前に import / validation だけを行い、Resolved Design Contract の保存は archive / clean 成功後に遅延する。`plan` はこの契約を layout / visual / density の制約として参照するだけで CSS を生成しない。`compose` は `plan` が記録した contract fingerprint と現在の fingerprint を照合し、一致した場合だけ `SLIDES.md` front matter CSS、`_class`、section HTML/CSS、visual source を生成する。
 
 ### 目標
 
 - Claude Design zip を唯一の user-facing design system 入力として固定する。
+- Design Brief を Claude Design Source の authoring input として固定し、`plan.md` を Design System 作成の primary input にしない。
 - Claude Design zip の schema 依存を importer に閉じ込め、workflow/facet は Resolved Design Contract だけを読む。
 - `plan` と `compose` が同じ contract source と fingerprint を参照する状態を検証可能にする。
 - `design-system.md` を compose の canonical source artifact、override 条件、success assertion から外す。
@@ -19,6 +20,7 @@
 
 - 新しい top-level `design` command、`design:approve`、Design Contract 専用 approval command は追加しない。
 - 手書き `design-contract.md`、package 側の default design input、deck-local Markdown override は実装しない。
+- `plan.md` / `slide-blueprint.md` を Claude Design Source 作成の通常 primary input にしない。既存 plan を参考に再設計した場合も、更新後の Claude Design Source から re-plan する。
 - `plan` は CSS、front matter style、`_class` の style 定義を生成しない。
 - PDF / PPTX / standalone HTML export、Claude Design `/design-sync` の repo 更新形式は初期 scope に含めない。
 - Claude Design zip 内の `components` が空であることを失敗条件にしない。
@@ -30,6 +32,7 @@
 ### このスペックが所有するもの
 
 - `slides/<deck>/design/` から Claude Design zip を一意に解決する規則。
+- `slides/<deck>/design/design-brief.md` の authoring metadata と drift warning / blocker の扱い。
 - Claude Design zip の required / optional files、manifest fields、token consistency の validation。
 - Resolved Design Contract の JSON shape、path、fingerprint、marker payload。
 - `--force` 再実行時に、source validation と Resolved Design Contract 保存を分離する preflight / invalidation 順序。
@@ -60,6 +63,7 @@
 ### 再検証トリガー
 
 - Claude Design zip の accepted file set、required manifest fields、token consistency rule を変える場合。
+- Design Brief の path、必須性、fingerprint 算出、plan / compose での drift 判定を変える場合。
 - invalid sibling zip や malformed manifest の扱いを変える場合。
 - Resolved Design Contract JSON shape、path、fingerprint 算出方法を変える場合。
 - marker の `design_contract` shape、path 形式、source enum を変える場合。
@@ -119,6 +123,7 @@ flowchart LR
 ```text
 slides/<deck>/
 └── design/
+    ├── design-brief.md                # Claude Design に渡す authoring input
     └── <claude-design-export>.zip       # 利用者が置く唯一の design input
 
 .takt/
@@ -214,6 +219,16 @@ sequenceDiagram
 
 ## データモデル
 
+### Design Brief
+
+`slides/<deck>/design/design-brief.md` は、Claude Design に渡す authoring input の正である。内容は `brief.md` / `brief.normalized.md` の資料要求、brand constraints、audience constraints、style constraints を Claude Design 向けに整えたものにする。
+
+Design Brief は Claude Design Source の生成意図と provenance を記録する artifact であり、Claude Design Source や Resolved Design Contract の代替入力ではない。新規 / 既存 deck を問わず、Design Brief が存在しない場合でも Claude Design Source import は継続できる。ただし runner / plan / review は drift protection が無効であることを warning または finding として報告する。
+
+通常 flow では `plan.md` / `slide-blueprint.md` を Design Brief の primary input にしない。既存 plan を参考に Design Brief または Claude Design Source を作り直した場合、更新後の Claude Design Source から `plan` を再実行する。
+
+Design Brief が存在する場合、Resolved Design Contract は repo root relative path と SHA-256 を `authoring.design_brief` として記録する。Design Brief は Design Contract の代替入力ではないため、`contract_sha256` は zip 由来の token / guidance / source catalog 契約を表し、Design Brief metadata を混ぜない。Design Brief の変更は `authoring.design_brief.sha256` と `plan.md` / `slide-blueprint.md` の metadata 比較で検出する。
+
 ### Claude Design Source
 
 初期 scope の accepted source は `_ds_manifest.json` を含む `.zip` archive とする。
@@ -270,6 +285,14 @@ Optional manifest fields:
     "sha256": "source-zip-sha256",
     "namespace": "ExampleDesignSystem_abcdef",
     "export_source": "spa"
+  },
+  "authoring": {
+    "design_brief": {
+      "available": true,
+      "path": "slides/example/design/design-brief.md",
+      "sha256": "design-brief-sha256"
+    },
+    "provenance_verified": false
   },
   "fingerprint": {
     "source_sha256": "source-zip-sha256",
@@ -400,6 +423,12 @@ Optional manifest fields:
       "namespace": "ExampleDesignSystem_abcdef",
       "export_source": "spa"
     },
+    "authoring": {
+      "design_brief_available": true,
+      "design_brief_path": "slides/example/design/design-brief.md",
+      "design_brief_sha256": "design-brief-sha256",
+      "provenance_verified": false
+    },
     "path": ".takt/design-contracts/example/resolved-design-contract.json",
     "fingerprint": {
       "source_sha256": "source-zip-sha256",
@@ -429,6 +458,10 @@ Optional manifest fields:
 design_contract:
   source_kind: claude-design-zip
   source_path: slides/example/design/Example Design System.zip
+  design_brief_available: true
+  design_brief_path: slides/example/design/design-brief.md
+  design_brief_sha256: design-brief-sha256
+  design_brief_provenance_verified: false
   namespace: ExampleDesignSystem_abcdef
   source_sha256: source-zip-sha256
   contract_sha256: normalized-json-sha256
@@ -447,19 +480,20 @@ design_contract:
 
 | コンポーネント | レイヤー | 意図 | 要件カバー範囲 | 契約 |
 |----------------|----------|------|----------------|------|
-| ClaudeDesignSourceResolver | runner library | target deck の Claude Design zip を一意に解決する | 1, 7, 9 | Service |
+| ClaudeDesignSourceResolver | runner library | target deck の Claude Design zip と Design Brief metadata を解決する | 1, 7, 9, 10 | Service |
 | ZipArchiveReader | runner library | zip entry list / byte read を提供する | 1, 2, 8 | Adapter |
-| ClaudeDesignImporter | runner library | manifest / token CSS を Resolved Design Contract に正規化する | 2, 3, 8 | Service |
-| WorkflowHandoffMarker | runner state | Resolved Design Contract を workflow に渡す | 3, 4, 5, 6, 7 | State |
-| PlanFacetContract | workflow facets | contract 制約で plan / blueprint を作る | 4, 7, 9 | File contract |
-| ComposeFacetContract | workflow facets | contract に従い source artifacts を生成する | 5, 6, 9 | File contract |
-| ValidationSurface | validation scripts | smoke / foundation / package / no-copy を更新する | 1, 2, 3, 5, 6, 7, 8, 9 | Batch |
+| ClaudeDesignImporter | runner library | manifest / token CSS / authoring metadata を Resolved Design Contract に正規化する | 2, 3, 8, 10 | Service |
+| WorkflowHandoffMarker | runner state | Resolved Design Contract を workflow に渡す | 3, 4, 5, 6, 7, 10 | State |
+| PlanFacetContract | workflow facets | contract 制約で plan / blueprint を作る | 4, 7, 9, 10 | File contract |
+| ComposeFacetContract | workflow facets | contract に従い source artifacts を生成する | 5, 6, 9, 10 | File contract |
+| ValidationSurface | validation scripts | smoke / foundation / package / no-copy を更新する | 1, 2, 3, 5, 6, 7, 8, 9, 10 | Batch |
 
 ### ClaudeDesignSourceResolver
 
 **責務と制約**
 
 - target deck の `slides/<deck>/design/` を見る。
+- 同じ directory の `design-brief.md` が存在する場合は repo root relative path と SHA-256 を取得する。存在しない場合は import を止めず、drift protection unavailable の診断材料として扱う。
 - `.zip` file を列挙し、0 件なら `CLAUDE_DESIGN_SOURCE_MISSING` とする。
 - `.zip` file が unreadable、malformed、または `_ds_manifest.json` を含まない場合は `CLAUDE_DESIGN_SOURCE_INVALID` とする。valid zip が 1 件あっても invalid sibling zip が同居する場合は、壊れた新規 export を無視して古い valid export を使わないため invalid とする。
 - `_ds_manifest.json` を含む zip が 2 件以上ある場合は `CLAUDE_DESIGN_SOURCE_AMBIGUOUS` とする。
@@ -483,6 +517,10 @@ interface ClaudeDesignSource {
   displayPath: string;
   sha256: string;
   entries: string[];
+  designBrief: null | {
+    path: string;
+    sha256: string;
+  };
 }
 ```
 
@@ -521,6 +559,7 @@ interface ZipArchiveReader {
 - `components` が空でも token が有効なら成功する。非空の場合も特定ドメインに固定せず、汎用 catalog として扱う。
 - token category は manifest `kind`、token name prefix、source CSS path の組み合わせで決定する。
 - `styles.css` は global entry point として hash / import path を記録するが、inline rule の存在を必須にしない。
+- Design Brief metadata がある場合は `authoring.design_brief` に path / SHA-256 を記録し、ない場合は `authoring.design_brief.available: false` とする。
 
 **サービスインターフェース**
 
@@ -541,6 +580,14 @@ interface ResolvedDesignContract {
     sha256: string;
     namespace: string;
     export_source: string | null;
+  };
+  authoring: {
+    design_brief: {
+      available: boolean;
+      path: string | null;
+      sha256: string | null;
+    };
+    provenance_verified: boolean;
   };
   fingerprint: {
     source_sha256: string;
@@ -579,6 +626,7 @@ interface ResolvedDesignContract {
 
 - `plan` と `compose` で `design_contract` を marker に書く。
 - `research` metadata と同じ marker に共存させるが、research input とは別 field とする。
+- Design Brief metadata がある場合は marker summary に path / SHA-256 を含める。ない場合は marker には unavailable を明示し、plan / review が warning または finding として扱えるようにする。
 - marker payload は report と facet が読める summary に絞り、詳細 token list は `design_contract.path` の JSON へ置く。
 - `plan` / `compose --force` では Claude Design Source の import / validation を force invalidation 前に済ませる。`compose --force` では承認済み `plan.md` / `slide-blueprint.md` の `contract_sha256` と新しい Resolved Design Contract も force invalidation 前に照合する。
 - Resolved Design Contract の保存は `archiveCommandArtifacts` と `cleanGeneratedOutputs` が成功した後に行う。
@@ -597,9 +645,10 @@ interface ResolvedDesignContract {
 **責務と制約**
 
 - `takt-marp-plan.md` は `.takt/workflow-current-target.json` を読み、`design_contract.path` の JSON を参照する。
+- Design Brief metadata がある場合は `plan.md` / `slide-blueprint.md` に path、SHA-256、provenance verification status を記録する。ない場合は drift protection unavailable を non-blocking finding として残す。
 - `Layout` は既存 slide workflow の layout vocabulary または許可された `custom:` 拡張形式だけを使う。
 - `Visual Strategy` は token constraints、density hints、adherence rules、既存 visual vocabulary に従う。
-- Claude Design zip の `components` が空でも plan を失敗させない。
+- Claude Design zip の `components` / `startingPoints` / `cards` / `templates` / `themes` / `fonts` が空でも plan を失敗させない。
 - CSS、front matter style、`_class` style 定義は plan artifact に出力しない。
 - `plan.md` と `slide-blueprint.md` に contract metadata を記録する。
 
@@ -608,6 +657,7 @@ interface ResolvedDesignContract {
 **責務と制約**
 
 - `compose_sections` は `plan.md`、`slide-blueprint.md`、Resolved Design Contract を読む。
+- `compose_sections` と compose review は、`plan.md` / `slide-blueprint.md` に記録された Design Brief SHA-256 と現在の Resolved Design Contract の `authoring.design_brief.sha256` を照合する。不一致の場合は re-plan または Claude Design Source 更新が必要な blocker とする。
 - `assemble_slides` は Resolved Design Contract の token を `SLIDES.md` front matter CSS と `_class` に写像する。
 - `design_system` step は削除し、`design-system.md` は compose source artifact に含めない。
 - `compose` は `contract_sha256` mismatch を blocker として扱う。
@@ -632,6 +682,9 @@ interface ResolvedDesignContract {
 | `CLAUDE_DESIGN_SOURCE_MISSING` | `slides/<deck>/design/` に `.zip` file がない | Claude Design zip の配置先を示す |
 | `CLAUDE_DESIGN_SOURCE_AMBIGUOUS` | valid zip 候補が複数ある | 候補一覧と 1 件に絞る必要を示す |
 | `CLAUDE_DESIGN_SOURCE_INVALID` | zip / manifest / token CSS が invalid、または invalid sibling zip が同居する | 欠けた file / field、非 object manifest、token mismatch、invalid zip path を示す |
+| `DESIGN_BRIEF_DRIFT` | plan / blueprint に記録された Design Brief fingerprint と current contract の Design Brief fingerprint が違う | re-plan または Claude Design Source 更新確認が必要と示す |
+| `DESIGN_BRIEF_MISSING` | Claude Design Source は存在するが `slides/<deck>/design/design-brief.md` がない | import は継続し、drift protection が無効であることと推奨配置先を示す |
+| `DESIGN_BRIEF_INVALID` | `slides/<deck>/design/design-brief.md` が存在するが読めず SHA-256 を算出できない | Design Brief metadata を信頼できないため plan / compose の開始前に停止し、path と OS error を示す |
 | OS write error | Resolved Design Contract を `.takt/` に書けない | path と OS error を表示し、TAKT 起動前に停止する |
 | compose `needs_input` / review blocker | plan metadata と current contract の fingerprint が違う | re-plan または source 更新確認が必要と示す |
 
@@ -642,6 +695,7 @@ interface ResolvedDesignContract {
 ### smoke validation
 
 - fixture deck に `slides/<deck>/design/<sample>.zip` を用意する。
+- fixture deck に `slides/<deck>/design/design-brief.md` も用意し、Resolved Design Contract と plan metadata に path / SHA-256 が記録されることを検証する。
 - binary fixture を直接 commit せず、validator が text fixture から deterministic な zip を temp directory に生成する。
 - sample は `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md` / `readme.md`、component prompt、starting point、card、sample slide、template、theme、font、asset を含み、guidance / source_catalog の生成を検証する。
 - smoke は `design-system.md` の存在ではなく、marker `design_contract`、Resolved Design Contract JSON、plan metadata、compose CSS token application、fingerprint match を検証する。
@@ -649,7 +703,8 @@ interface ResolvedDesignContract {
 ### foundation validation
 
 - `.takt/workflow-current-target.json` に `design_contract` が入ることを検証する。
-- plan / blueprint が `contract_sha256` を記録し、CSS を含まないことを検証する。
+- plan / blueprint が `contract_sha256` と Design Brief fingerprint を記録し、CSS を含まないことを検証する。
+- Design Brief 欠落時は import failure ではなく warning / finding になり、Design Brief fingerprint 不一致時は compose / review blocker になることを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
 - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
@@ -667,7 +722,7 @@ interface ResolvedDesignContract {
 - 既存 deck に `design-system.md` が残っていても、それだけを理由に `plan` / `compose` を失敗させない。
 - 既存 deck に Claude Design Source がない場合は missing source として失敗する。`design-system.md` から暗黙移行しない。
 - 既存 `SLIDES.md`、`sections/*`、`images/*` は自動全面再生成しない。
-- 移行案内は `slides/<deck>/design/` に Claude Design zip を 1 件置くことに限定する。
+- 移行案内は `slides/<deck>/design/design-brief.md` と `slides/<deck>/design/` の Claude Design zip 1 件を基本形として示す。ただし Design Brief 欠落は新規 / 既存 deck を問わず import failure にしない。
 - Claude Design Source 導入前に compose 済みで Resolved Design Contract を持たない deck でも、`polish` は legacy path として render evidence と既存 source artifact の範囲で検査・修正できる。
 
 ## 要件トレーサビリティ
@@ -735,6 +790,13 @@ interface ResolvedDesignContract {
 | 9.3 | no implicit migration |
 | 9.4 | migration guidance |
 | 9.5 | legacy polish without Design Contract |
+| 10.1 | Design Brief data model |
+| 10.2 | Design Brief primary input rule |
+| 10.3 | resolver exclusion rule, Design Brief non-input semantics |
+| 10.4 | Resolved Design Contract JSON, marker payload, plan metadata |
+| 10.5 | `DESIGN_BRIEF_MISSING`, Migration / Compatibility |
+| 10.6 | `DESIGN_BRIEF_DRIFT`, ComposeFacetContract |
+| 10.7 | PlanFacetContract, re-plan finding semantics |
 
 ## リスクと緩和策
 

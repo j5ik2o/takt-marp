@@ -82,5 +82,6 @@ takt-sdd deck の実運用で判明したギャップへの対応。workflow 産
 ## Design Contract Specs (dependency order)
 
 `compose` が毎回 `design-system.md` を生成する現行形では、デザインシステムが資料ごとの一時成果物になり、再利用される Design Contract（デザイン契約）として扱いにくい。Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力とし、workflow は内部の Resolved Design Contract（解決済みデザイン契約）へ正規化する。`plan` は CSS を生成せず source metadata と制約だけを記録し、`compose` が同じ Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する。
+Design Brief（デザインブリーフ）は Claude Design Source を作るための authoring input として `slides/<deck>/design/design-brief.md` に残すが、Design Contract の代替入力にはしない。
 
 - [x] slide-workflow-design-contract -- Claude Design zip を Design Contract へ正規化し、Resolved Design Contract を `plan` / `compose` / review / smoke validation に接続する。手書き `design-contract.md`、package default design input、deck-local Markdown override は初期 scope に含めない。Dependencies: slide-workflow-orchestration, slide-workflow-quality-uplift, takt-marp-global-installer

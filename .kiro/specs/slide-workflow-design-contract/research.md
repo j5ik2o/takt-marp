@@ -117,7 +117,7 @@
   - local file `/Users/j5ik2o/Downloads/DDD Lecture Design System.zip`
 - **file tree**:
   - `.thumbnail` - WebP thumbnail。
-  - `_ds_manifest.json` - Design System manifest。namespace、global CSS paths、tokens、brand fonts、component/card/template arrays を持つ。
+  - `_ds_manifest.json` - Design System manifest。namespace、global CSS paths、tokens、brand fonts、component / starting point / card / template / theme / font arrays を持つ。
   - `SKILL.md` - Design System の使い方を示す primary guidance。
   - `readme.md` - audience、tone、copy、visual language、component usage などの詳細 guidance。
   - `_ds_bundle.js` - `@ds-bundle` comment を持つ JavaScript bundle。
@@ -142,7 +142,7 @@
 - **含意**:
   - 初期 importer は `Claude Design Source` を zip file として受け取り、必須 file を `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` として検証できる。
   - `tokens/fonts.css` は font import の source として扱うが、network font availability は workflow 成功条件にしない。`brandFonts` が string 配列でも object 配列でも family を抽出し、font token と合わせて `brand_fonts` を report すればよい。
-  - `SKILL.md`、`readme.md`、component prompt、cards、sample slides、templates は plan / compose が Design System の意図を読むための primary guidance / source catalog として使える。
+  - `SKILL.md`、`readme.md`、component prompt、starting points、cards、sample slides、templates、themes、fonts は plan / compose が Design System の意図を読むための primary guidance / source catalog として使える。
   - ただし sample は DDD 講義向けなので、workflow に DDD 専用 component 名や語彙を固定してはならない。importer は generic catalog として保持し、facet は brief に合う要素だけを選定する。
   - `components` が空でも valid な Claude Design Source として扱う。非空の場合は component import を必須条件にせず、汎用 catalog として扱う。
   - importer は manifest token と CSS token の一致、`x-omelette.tokens` との一致、`globalCssPaths` の存在、source fingerprint を validation surface にする。

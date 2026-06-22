@@ -11,7 +11,7 @@
   - _Depends:_ none
 
 - [x] 1.2 Claude Design Source の smoke fixture builder を追加する
-  - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md`、`readme.md`、component prompt、card、sample slide、template、asset を含む deterministic zip を検証実行時に生成できるようにする。
+  - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css`、`_adherence.oxlintrc.json`、`SKILL.md`、`readme.md`、component prompt、starting point、card、sample slide、template、theme、font、asset を含む deterministic zip を検証実行時に生成できるようにする。
   - fixture は generic component / catalog と optional adherence metadata を含み、binary zip を repository に直接追加しなくても smoke validation で利用できる。
   - 完了条件: fixture builder が毎回同じ token / guidance / catalog 構成の Claude Design zip を生成し、生成物を importer の入力として使える。
   - _Requirements:_ 2.2, 2.6, 8.2
@@ -62,7 +62,7 @@
 
 - [x] 3.2 PlanFacetContract を Design Contract 参照へ更新する
   - plan facets が marker と Resolved Design Contract を読み、token constraints、density hints、adherence rules、guidance、source catalog、既存 layout vocabulary を計画へ反映する。
-  - Claude Design zip から components / cards / templates / sample slides / component prompts が得られない場合でも、既存 vocabulary と token constraints の範囲で `Layout` / `Visual Strategy` を記録する。得られる場合は brief に合う reusable element だけを選定する。
+  - Claude Design zip から components / starting points / cards / templates / themes / fonts / sample slides / component prompts が得られない場合でも、既存 vocabulary と token constraints の範囲で `Layout` / `Visual Strategy` を記録する。得られる場合は brief に合う reusable element だけを選定する。
   - `plan.md` と `slide-blueprint.md` に contract metadata を残し、CSS、front matter style、`_class` style 定義は生成しない。
   - 完了条件: mock plan artifact に contract metadata があり、CSS/style 定義が plan artifact に混入していないことを検証できる。
   - _Requirements:_ 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 7.3, 9.1
@@ -143,3 +143,40 @@
   - _Requirements:_ 7.1, 7.2, 7.3, 7.4, 8.1, 8.3, 8.4, 8.5, 8.6, 9.1
   - _Boundary:_ ValidationSurface
   - _Depends:_ 5.2, 5.3, 6.1
+
+- [x] 7. 追補: Design Brief authoring contract と drift 検出を追加する
+- [x] 7.1 Design Brief metadata を resolver / importer に追加する
+  - `slides/<deck>/design/design-brief.md` を Claude Design authoring input として解決し、存在する場合は repo root relative path と SHA-256 を取得する。
+  - Design Brief が存在しない場合は新規 / 既存 deck を問わず Claude Design Source import を失敗させず、drift protection unavailable の診断を出せる metadata を返す。
+  - `plan.md` / `slide-blueprint.md` を Design Brief の通常 primary input として扱わないことを runner / facet の診断に残す。
+  - 完了条件: Design Brief あり / なしの fixture で importer が path、SHA-256、availability を Resolved Design Contract 候補へ反映できる。
+  - _Requirements:_ 10.1, 10.2, 10.3, 10.5
+  - _Boundary:_ ClaudeDesignSourceResolver, ClaudeDesignImporter
+  - _Depends:_ 2.3
+
+- [x] 7.2 Resolved Design Contract / marker / plan metadata に Design Brief fingerprint を記録する
+  - Resolved Design Contract の `authoring.design_brief` に path、SHA-256、availability、provenance verification status を記録する。
+  - `.takt/workflow-current-target.json` の `design_contract.authoring` summary と `plan.md` / `slide-blueprint.md` の Design Contract section に Design Brief fingerprint を記録する。
+  - `contract_sha256` は Design Brief authoring metadata を含めず、Design Brief drift は `authoring.design_brief.sha256` の専用比較で検出する。
+  - 完了条件: mock plan artifact と marker payload が Design Brief metadata を含み、Design Brief 変更時に Design Brief fingerprint mismatch が検出される。
+  - _Requirements:_ 10.4, 10.6
+  - _Boundary:_ WorkflowHandoffMarker, PlanFacetContract
+  - _Depends:_ 7.1
+
+- [x] 7.3 compose / review / polish の Design Brief drift finding を追加する
+  - `compose` は `plan.md` / `slide-blueprint.md` に記録された Design Brief SHA-256 と current Resolved Design Contract の Design Brief SHA-256 を照合する。
+  - 不一致の場合は source artifact 生成を成功扱いせず、re-plan または Claude Design Source 更新が必要な blocker として報告する。
+  - 既存 plan を参考に Design Brief または Claude Design Source を作り直した場合は、その plan を design authoring の primary input として扱わず、更新後の source から re-plan する finding を残す。
+  - 完了条件: Design Brief fingerprint mismatch fixture が compose / review blocker になり、missing Design Brief fixture は warning / finding で継続する。
+  - _Requirements:_ 10.2, 10.3, 10.5, 10.6, 10.7
+  - _Boundary:_ ComposeFacetContract, PolishFacetContract
+  - _Depends:_ 7.2
+
+- [x] 7.4 validation surface と docs を Design Brief 契約へ更新する
+  - smoke fixture に `design/design-brief.md` を追加し、Resolved Design Contract、marker、plan metadata へ Design Brief fingerprint が入ることを検証する。
+  - foundation validation に Design Brief missing warning、Design Brief drift blocker、`plan.md` 非 primary input の文言検証を追加する。
+  - README / workflow docs / facet output contract で、`brief.md`、`research/research-brief.md`、`design/design-brief.md` の責務を分離して説明する。
+  - 完了条件: `npm run slide:validate-foundation`、template drift check、package boundary check が Design Brief 契約を検出できる。
+  - _Requirements:_ 8.1, 8.2, 8.3, 8.6, 10.1, 10.2, 10.4, 10.5, 10.6
+  - _Boundary:_ ValidationSurface
+  - _Depends:_ 7.3

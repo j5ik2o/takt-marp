@@ -487,6 +487,9 @@ async function readSmokeResolvedDesignContract(targetInfo) {
   assert(contract.source?.kind === "claude-design-zip", `sequence:design-contract-artifact unexpected source kind: ${JSON.stringify(contract.source)}`);
   assert(contract.source?.path === `${targetInfo.target}/design/Claude Design Smoke.zip`, `sequence:design-contract-artifact source path mismatch: ${contract.source?.path}`);
   assert(contract.source?.namespace === "ClaudeDesignSmoke", `sequence:design-contract-artifact namespace mismatch: ${contract.source?.namespace}`);
+  assert(contract.authoring?.design_brief?.available === true, `sequence:design-contract-artifact missing Design Brief metadata: ${JSON.stringify(contract.authoring)}`);
+  assert(contract.authoring?.design_brief?.path === `${targetInfo.target}/design/design-brief.md`, `sequence:design-contract-artifact Design Brief path mismatch: ${JSON.stringify(contract.authoring)}`);
+  assert(contract.authoring?.design_brief?.sha256, `sequence:design-contract-artifact missing Design Brief SHA: ${JSON.stringify(contract.authoring)}`);
   assert(contract.fingerprint?.source_sha256, "sequence:design-contract-artifact missing source fingerprint");
   assert(contract.fingerprint?.contract_sha256, "sequence:design-contract-artifact missing contract fingerprint");
   assert(contract.token_counts?.total === 6, `sequence:design-contract-artifact token count mismatch: ${JSON.stringify(contract.token_counts)}`);
@@ -1891,11 +1894,19 @@ async function writeReportCopies(reviewPath, reportsPath, reportName, content) {
 }
 
 function smokeDesignContractLines(designContract) {
+  const designBrief = designContract.authoring?.design_brief;
   return [
     `- Source: ${designContract.source.path}`,
     `- Namespace: ${designContract.source.namespace}`,
     `- Source fingerprint: ${designContract.fingerprint.source_sha256}`,
     `- Contract fingerprint: ${designContract.fingerprint.contract_sha256}`,
+    ...(designBrief?.available
+      ? [
+          `- Design Brief path: ${designBrief.path}`,
+          `- Design Brief fingerprint: ${designBrief.sha256}`,
+          `- Design Brief provenance verified: ${designContract.authoring.provenance_verified ? "yes" : "no"}`,
+        ]
+      : ["- Design Brief: missing (drift protection unavailable)"]),
     `- Token counts: total=${designContract.token_counts.total}, color=${designContract.token_counts.color}, typography=${designContract.token_counts.typography}, spacing=${designContract.token_counts.spacing}`,
     `- Brand fonts: ${designContract.brand_fonts.join(", ")}`,
     `- Component count: ${designContract.components.count}`,

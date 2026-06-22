@@ -14,12 +14,13 @@ workflow 利用者は、資料ごとに `design-system.md` を作り直したく
 - `assemble_slides` は `design-system.md` を読み、`SLIDES.md` の front matter CSS を構成する。
 - `compose-review` は `plan` の `Layout` と `SLIDES.md` の `_class:` / style 定義 / `design-system.md` 文書化を照合する。
 - package-bundled workflow/facet template は no-copy contract により、通常実行では consumer workspace へコピーしない。
-- Claude Design export zip は `_ds_manifest.json`、`styles.css`、`tokens/*.css`、`_adherence.oxlintrc.json` に加え、`SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets を含む場合がある。Design System ごとに要素は異なるため、特定ドメインや特定 component 名を固定してはならない。
+- Claude Design export zip は `_ds_manifest.json`、`styles.css`、`tokens/*.css`、`_adherence.oxlintrc.json` に加え、`SKILL.md`、`readme.md`、component prompts、starting points、cards、sample slides、templates、themes、fonts、assets を含む場合がある。Design System ごとに要素は異なるため、特定ドメインや特定 component 名を固定してはならない。
 
 ## Desired Outcome
 
+- Design Brief（デザインブリーフ）を `slides/<deck>/design/design-brief.md` に置き、Claude Design に Design System 作成を依頼する authoring input として扱う。
 - Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力として扱う。
-- 利用者は `slides/<deck>/design/` に Claude Design から export した `.zip` を置くだけで、`plan` / `compose` が同じ Resolved Design Contract（解決済みデザイン契約）を参照できる。
+- 利用者は `slides/<deck>/design/design-brief.md` を Claude Design に渡し、`slides/<deck>/design/` に Claude Design から export した `.zip` を置くことで、`plan` / `compose` が同じ Resolved Design Contract（解決済みデザイン契約）を参照できる。
 - Design Contract（デザイン契約）は手書き入力ではなく、Claude Design Source から importer が生成する internal normalized artifact とする。
 - `plan` は Resolved Design Contract の source metadata、fingerprint、token summary、style constraints、guidance、source catalog を記録するが、CSS は生成しない。
 - `compose` は `plan` が参照した Resolved Design Contract と fingerprint を照合し、その契約から `SLIDES.md` front matter CSS、`_class`、section HTML/CSS、必要な visual source を生成する。
@@ -28,7 +29,7 @@ workflow 利用者は、資料ごとに `design-system.md` を作り直したく
 
 ## Approach
 
-Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.zip` export に絞る。runner は `plan` / `compose` 実行前に `slides/<deck>/design/` が exactly one valid Claude Design Source として整理されていることを確認し、manifest と token CSS を検証して Resolved Design Contract を `.takt/` 配下へ生成する。valid zip と invalid sibling zip が同居する場合は、古い valid export を暗黙採用せず失敗する。
+Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.zip` export に絞る。Design Brief は `brief.md` / `brief.normalized.md` の資料要求、brand constraints、audience constraints、style constraints を Claude Design 向けに整えた authoring artifact とし、通常 flow では生成済み `plan.md` / `slide-blueprint.md` を Claude Design Source 作成の primary input にしない。runner は `plan` / `compose` 実行前に `slides/<deck>/design/` が exactly one valid Claude Design Source として整理されていることを確認し、manifest と token CSS と Design Brief metadata を検証して Resolved Design Contract を `.takt/` 配下へ生成する。valid zip と invalid sibling zip が同居する場合は、古い valid export を暗黙採用せず失敗する。
 
 `plan` は marker 経由で Resolved Design Contract を読み、CSS を出さずに layout / visual / density の制約として使う。`components`、cards、templates、sample slides、component prompts が存在する場合は brief に合うものだけを選定し、存在しない場合でも token constraints と既存 slide workflow の layout vocabulary で計画を継続する。
 
@@ -43,12 +44,14 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 **In**:
 
 - Claude Design zip を唯一の user-facing design system 入力として解決する規則。
+- `slides/<deck>/design/design-brief.md` を Claude Design authoring input として扱い、path / fingerprint を記録する規則。
 - `slides/<deck>/design/` の zip discovery、missing / ambiguous / invalid source、invalid sibling zip 同居の失敗規則。
 - `_ds_manifest.json`、`styles.css`、`tokens/colors.css`、`tokens/typography.css`、`tokens/spacing.css` の検証。
-- optional な `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md`、component prompts、cards、sample slides、templates、assets の取り込み。
+- optional な `.thumbnail`、`_ds_bundle.js`、`_adherence.oxlintrc.json`、`tokens/fonts.css`、`SKILL.md`、`readme.md`、component prompts、starting points、cards、sample slides、templates、themes、fonts、assets の取り込み。
 - Resolved Design Contract として、colors / typography / spacing / radius / shadow / string/object `brandFonts` / font token / adherence metadata / guidance / source catalog を正規化する。
 - `components` が空でも valid な Claude Design Source として扱い、非空の場合は汎用 catalog として扱う。
 - `plan` が Resolved Design Contract を参照して、CSS を生成せず source metadata と制約を記録する規約。
+- `compose` / review が Design Brief fingerprint drift を re-plan または Claude Design Source 更新が必要な blocker として扱う規約。
 - `compose` が Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する規約。
 - `design-system.md` を compose canonical artifact、override 条件、success assertion から外す workflow / docs / validator 更新。
 - compose report / review / supervision reports への Claude Design Source 使用記録。
@@ -63,6 +66,7 @@ Claude Design Source の初期対応範囲は、`_ds_manifest.json` を含む `.
 - Claude Design Source 以外の manual `design-contract.md` 入力。
 - package 側の default design input。
 - deck-local Markdown override。
+- `plan.md` / `slide-blueprint.md` を Claude Design Source 作成の通常 primary input にする flow。
 - PDF / PPTX / standalone HTML export の primary import 対応。
 - Claude Design `/design-sync` の repo 更新形式への対応。
 - visual render review の multimodal 化。

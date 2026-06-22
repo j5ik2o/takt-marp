@@ -51,6 +51,7 @@ export async function resolveClaudeDesignContract(targetInfo, options = {}) {
     root: options.root ?? process.cwd(),
     sourcePath: source.sourcePath,
     deckName: targetInfo.deckName,
+    designBrief: source.designBrief,
   });
   return Object.freeze({
     contract,
@@ -122,7 +123,8 @@ export async function resolveClaudeDesignSource(targetInfo, options = {}) {
       "CLAUDE_DESIGN_SOURCE_INVALID",
     );
   }
-  return valid[0];
+  const designBrief = await resolveDesignBriefMetadata(designDir, root);
+  return Object.freeze({ ...valid[0], designBrief });
 }
 
 export async function importClaudeDesignSourceBuffer(buffer, options = {}) {
@@ -146,6 +148,7 @@ export async function importClaudeDesignSourceArchive(archive, options = {}) {
     category: classifyToken(token),
   })).sort((left, right) => left.name.localeCompare(right.name));
   const sourceCatalog = buildSourceCatalog(manifest, archive, guidance);
+  const authoring = designContractAuthoring(options.designBrief);
   const contractWithoutContractHash = {
     schema_version: 1,
     source: {
@@ -155,6 +158,7 @@ export async function importClaudeDesignSourceArchive(archive, options = {}) {
       namespace: manifest.namespace,
       export_source: manifest.source ?? null,
     },
+    authoring,
     fingerprint: {
       source_sha256: sourceSha256,
     },
@@ -173,13 +177,38 @@ export async function importClaudeDesignSourceArchive(archive, options = {}) {
     source_catalog: sourceCatalog,
     tokens,
   };
-  const contractSha256 = sha256Stable(contractWithoutContractHash);
+  const contractSha256 = sha256Stable(contractHashInput(contractWithoutContractHash));
   return deepFreeze({
     ...contractWithoutContractHash,
     fingerprint: {
       ...contractWithoutContractHash.fingerprint,
       contract_sha256: contractSha256,
     },
+  });
+}
+
+async function resolveDesignBriefMetadata(designDir, root) {
+  const designBriefPath = path.join(designDir, "design-brief.md");
+  if (!existsSync(designBriefPath)) {
+    return Object.freeze({
+      available: false,
+      path: null,
+      sha256: null,
+    });
+  }
+  let bytes;
+  try {
+    bytes = await readFile(designBriefPath);
+  } catch (error) {
+    throw new SlideWorkflowError(
+      `Design Brief could not be read: ${projectRelativePath(designBriefPath, root)} (${error.code ?? error.message})`,
+      "DESIGN_BRIEF_INVALID",
+    );
+  }
+  return Object.freeze({
+    available: true,
+    path: projectRelativePath(designBriefPath, root),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
   });
 }
 
@@ -249,7 +278,8 @@ function isResolvedDesignContractShape(contract) {
     isPlainObject(contract.token_counts) &&
     Array.isArray(contract.brand_fonts) &&
     isPlainObject(contract.components) &&
-    isPlainObject(contract.adherence);
+    isPlainObject(contract.adherence) &&
+    isValidAuthoringShape(contract.authoring);
 }
 
 function hasMatchingStoredContractHash(contract) {
@@ -259,10 +289,12 @@ function hasMatchingStoredContractHash(contract) {
 function contractHashInput(contract) {
   const fingerprint = { ...contract.fingerprint };
   delete fingerprint.contract_sha256;
-  return {
+  const hashInput = {
     ...contract,
     fingerprint,
   };
+  delete hashInput.authoring;
+  return hashInput;
 }
 
 function isPlainObject(value) {
@@ -272,6 +304,7 @@ function isPlainObject(value) {
 export function designContractMarkerPayload(contract, contractPath, root = process.cwd()) {
   return Object.freeze({
     source: contract.source,
+    authoring: designContractMarkerAuthoring(contract.authoring),
     path: projectRelativePath(contractPath, root),
     fingerprint: contract.fingerprint,
     namespace: contract.source.namespace,
@@ -280,6 +313,60 @@ export function designContractMarkerPayload(contract, contractPath, root = proce
     component_count: contract.components.count,
     adherence_available: contract.adherence.available,
   });
+}
+
+function designContractAuthoring(designBrief) {
+  const normalized = normalizeDesignBriefMetadata(designBrief);
+  return Object.freeze({
+    design_brief: normalized,
+    provenance_verified: false,
+  });
+}
+
+function normalizeDesignBriefMetadata(designBrief) {
+  if (designBrief?.available === true) {
+    return Object.freeze({
+      available: true,
+      path: designBrief.path,
+      sha256: designBrief.sha256,
+    });
+  }
+  return Object.freeze({
+    available: false,
+    path: null,
+    sha256: null,
+  });
+}
+
+function designContractMarkerAuthoring(authoring) {
+  const normalized = designContractAuthoring(authoring?.design_brief);
+  return Object.freeze({
+    design_brief_available: normalized.design_brief.available,
+    design_brief_path: normalized.design_brief.path,
+    design_brief_sha256: normalized.design_brief.sha256,
+    provenance_verified: normalized.provenance_verified,
+  });
+}
+
+function isValidAuthoringShape(authoring) {
+  if (authoring === undefined) {
+    return true;
+  }
+  if (!isPlainObject(authoring) || !isPlainObject(authoring.design_brief)) {
+    return false;
+  }
+  const designBrief = authoring.design_brief;
+  if (designBrief.available === true) {
+    return typeof designBrief.path === "string" &&
+      designBrief.path.length > 0 &&
+      typeof designBrief.sha256 === "string" &&
+      /^[a-f0-9]{64}$/.test(designBrief.sha256) &&
+      typeof authoring.provenance_verified === "boolean";
+  }
+  return designBrief.available === false &&
+    designBrief.path === null &&
+    designBrief.sha256 === null &&
+    typeof authoring.provenance_verified === "boolean";
 }
 
 function missingSourceMessage(targetInfo) {

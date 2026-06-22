@@ -69,6 +69,15 @@ export async function writeClaudeDesignSmokeFixture(targetInfo, options = {}) {
   const root = options.root ?? process.cwd();
   const designDir = path.join(root, "slides", targetInfo.deckName, "design");
   await mkdir(designDir, { recursive: true });
+  if (options.writeDesignBrief !== false) {
+    await writeFile(path.join(designDir, "design-brief.md"), [
+      "# Design Brief",
+      "",
+      "Create a generic, high-contrast slide design system for a workflow validation deck.",
+      "Use the normalized brief, audience constraints, brand constraints, and style constraints as the primary authoring input.",
+      "",
+    ].join("\n"), "utf8");
+  }
   const filePath = path.join(designDir, "Claude Design Smoke.zip");
   await writeFile(filePath, buildClaudeDesignSmokeFixtureZipBuffer());
   return filePath;

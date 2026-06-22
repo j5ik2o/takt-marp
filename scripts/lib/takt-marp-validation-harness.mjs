@@ -30,7 +30,10 @@ export async function makeDeck(root, deckName, options = {}) {
   await writeFile(path.join(deckPath, "brief.md"), "# Brief\n", "utf8");
   const targetInfo = resolveDeckTarget(`slides/${deckName}`, { root });
   if (options.writeClaudeDesignSource !== false) {
-    await writeClaudeDesignSmokeFixture(targetInfo, { root });
+    await writeClaudeDesignSmokeFixture(targetInfo, {
+      root,
+      writeDesignBrief: options.writeDesignBrief,
+    });
   }
   return targetInfo;
 }

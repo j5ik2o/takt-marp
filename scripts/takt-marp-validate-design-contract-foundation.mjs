@@ -88,10 +88,29 @@ export async function runDesignContractFoundationChecks(check) {
     const sourcePath = path.join(ROOT_DIR, "slides", "demo", "design", "Claude Design Smoke.zip");
     const first = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
     const second = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), { sourcePath, root: ROOT_DIR, deckName: "demo" });
+    const designBriefPath = "slides/demo/design/design-brief.md";
+    const designBriefSha256 = "a".repeat(64);
+    const changedDesignBriefSha256 = "b".repeat(64);
+    const withDesignBrief = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), {
+      sourcePath,
+      root: ROOT_DIR,
+      deckName: "demo",
+      designBrief: { available: true, path: designBriefPath, sha256: designBriefSha256 },
+    });
+    const withChangedDesignBrief = await importClaudeDesignSourceBuffer(buildClaudeDesignSmokeFixtureZipBuffer(), {
+      sourcePath,
+      root: ROOT_DIR,
+      deckName: "demo",
+      designBrief: { available: true, path: designBriefPath, sha256: changedDesignBriefSha256 },
+    });
 
     assert(first.source.kind === "claude-design-zip", `unexpected design source kind: ${first.source.kind}`);
     assert(first.source.path === "slides/demo/design/Claude Design Smoke.zip", `source path must be project-relative: ${first.source.path}`);
     assert(first.source.namespace === "ClaudeDesignSmoke", `namespace mismatch: ${first.source.namespace}`);
+    assert(first.authoring?.design_brief?.available === false, `missing Design Brief must be explicit unavailable metadata: ${JSON.stringify(first.authoring)}`);
+    assert(withDesignBrief.authoring?.design_brief?.path === designBriefPath, `Design Brief path was not preserved: ${JSON.stringify(withDesignBrief.authoring)}`);
+    assert(withDesignBrief.authoring?.design_brief?.sha256 === designBriefSha256, `Design Brief SHA was not preserved: ${JSON.stringify(withDesignBrief.authoring)}`);
+    assert(withDesignBrief.authoring?.provenance_verified === false, `Design Brief provenance must not be implicitly verified: ${JSON.stringify(withDesignBrief.authoring)}`);
     assert(first.token_counts.color >= 2, `color token count too small: ${JSON.stringify(first.token_counts)}`);
     assert(first.token_counts.typography >= 2, `typography token count too small: ${JSON.stringify(first.token_counts)}`);
     assert(first.token_counts.spacing >= 1, `spacing token count too small: ${JSON.stringify(first.token_counts)}`);
@@ -109,6 +128,9 @@ export async function runDesignContractFoundationChecks(check) {
     assert(first.source_catalog.fonts.some((item) => item.family === "Noto Sans JP"), `font catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.source_catalog.assets.some((item) => item.path === "assets/mark.svg"), `asset catalog was not captured: ${JSON.stringify(first.source_catalog)}`);
     assert(first.fingerprint.contract_sha256 === second.fingerprint.contract_sha256, "contract fingerprint must be deterministic");
+    assert(first.fingerprint.contract_sha256 === withDesignBrief.fingerprint.contract_sha256, "Design Brief metadata must not change contract fingerprint");
+    assert(withDesignBrief.fingerprint.contract_sha256 === withChangedDesignBrief.fingerprint.contract_sha256, "Design Brief SHA drift must not change contract fingerprint");
+    assert(withDesignBrief.authoring.design_brief.sha256 !== withChangedDesignBrief.authoring.design_brief.sha256, "Design Brief SHA drift must stay visible in authoring metadata");
 
     const mismatchedManifest = {
       namespace: "ClaudeDesignMismatch",
@@ -279,6 +301,12 @@ export async function runDesignContractFoundationChecks(check) {
     assert(marker.design_contract?.path === ".takt/design-contracts/demo/resolved-design-contract.json", `plan marker missing design_contract path: ${JSON.stringify(marker)}`);
     assert(marker.design_contract?.source?.path === "slides/demo/design/Claude Design Smoke.zip", `plan marker missing source path: ${JSON.stringify(marker)}`);
     assert(marker.design_contract?.fingerprint?.contract_sha256, `plan marker missing contract fingerprint: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.authoring?.design_brief_available === true, `plan marker missing Design Brief availability: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.authoring?.design_brief_path === "slides/demo/design/design-brief.md", `plan marker missing Design Brief path: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.authoring?.design_brief_sha256, `plan marker missing Design Brief SHA: ${JSON.stringify(marker)}`);
+    const contract = JSON.parse(await readFile(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json"), "utf8"));
+    assert(contract.authoring?.design_brief?.available === true, `resolved contract missing Design Brief metadata: ${JSON.stringify(contract.authoring)}`);
+    assert(contract.authoring?.design_brief?.path === "slides/demo/design/design-brief.md", `resolved contract missing Design Brief path: ${JSON.stringify(contract.authoring)}`);
     assert(
       existsSync(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json")),
       "runner did not write resolved design contract",
@@ -288,10 +316,34 @@ export async function runDesignContractFoundationChecks(check) {
     assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
   });
 
+  await check("runner accepts missing Design Brief as non-blocking authoring metadata", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-missing-design-brief-"));
+    await makeDeck(root, "demo", { writeDesignBrief: false });
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status === 0, `runner rejected missing Design Brief despite valid Claude Design Source: ${result.stderr}`);
+    assert(existsSync(argsPath), "TAKT was not invoked for missing Design Brief non-blocking path");
+    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
+    assert(marker.design_contract?.authoring?.design_brief_available === false, `marker did not mark missing Design Brief unavailable: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.authoring?.design_brief_path === null, `marker missing Design Brief path must be null: ${JSON.stringify(marker)}`);
+    assert(marker.design_contract?.authoring?.design_brief_sha256 === null, `marker missing Design Brief SHA must be null: ${JSON.stringify(marker)}`);
+    const contract = JSON.parse(await readFile(path.join(root, ".takt", "design-contracts", "demo", "resolved-design-contract.json"), "utf8"));
+    assert(contract.authoring?.design_brief?.available === false, `resolved contract did not mark missing Design Brief unavailable: ${JSON.stringify(contract.authoring)}`);
+  });
+
   await check("runner rejects missing Claude Design Source before TAKT for plan", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-missing-design-source-"));
     const deckPath = path.join(root, "slides", "demo");
     await mkdir(path.join(deckPath, "review"), { recursive: true });
+    await mkdir(path.join(deckPath, "design", "design-brief.md"), { recursive: true });
     await writeFile(path.join(deckPath, "brief.md"), "# Brief\n", "utf8");
     const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
     const fakePackage = await makeFakePackageRoot();
@@ -307,6 +359,27 @@ export async function runDesignContractFoundationChecks(check) {
     assert(result.stderr.includes("CLAUDE_DESIGN_SOURCE_MISSING:"), `missing design source did not surface CLAUDE_DESIGN_SOURCE_MISSING: ${result.stderr}`);
     assert(result.stderr.includes("slides/demo/design"), `missing design source message did not identify design directory: ${result.stderr}`);
     assert(!existsSync(argsPath), "TAKT was invoked despite missing Claude Design Source");
+  });
+
+  await check("runner rejects unreadable Design Brief after valid Claude Design Source before TAKT", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-invalid-design-brief-"));
+    const targetInfo = await makeDeck(root, "demo");
+    await rm(path.join(targetInfo.deckPath, "design", "design-brief.md"), { force: true });
+    await mkdir(path.join(targetInfo.deckPath, "design", "design-brief.md"), { recursive: true });
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "runner unexpectedly accepted unreadable Design Brief");
+    assert(result.stderr.includes("DESIGN_BRIEF_INVALID:"), `invalid Design Brief did not surface DESIGN_BRIEF_INVALID: ${result.stderr}`);
+    assert(result.stderr.includes("slides/demo/design/design-brief.md"), `invalid Design Brief message did not identify file: ${result.stderr}`);
+    assert(!existsSync(argsPath), "TAKT was invoked despite unreadable Design Brief");
   });
 
   await check("runner rejects invalid sibling Claude Design zip before TAKT for plan", async () => {
@@ -431,6 +504,38 @@ export async function runDesignContractFoundationChecks(check) {
     assert(existsSync(path.join(root, "dist", "demo", "SLIDES.pdf")), "compose force cleaned generated outputs before validating plan Design Contract fingerprint");
     assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "compose force created review history before validating plan Design Contract fingerprint");
     assert(!existsSync(argsPath), "TAKT was invoked despite stale plan Design Contract fingerprint");
+  });
+
+  await check("compose force validates Design Brief fingerprint before archiving artifacts", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-compose-force-design-brief-"));
+    const targetInfo = await makeDeck(root, "demo");
+    const currentContract = (await resolveClaudeDesignContract(targetInfo, { root })).contract;
+    await writePlanDesignContractArtifacts(
+      targetInfo,
+      currentContract.fingerprint.contract_sha256,
+      currentContract.authoring.design_brief.sha256,
+    );
+    await markComposeApproved(targetInfo);
+    await mkdir(path.join(root, "dist", "demo"), { recursive: true });
+    await writeFile(path.join(root, "dist", "demo", "SLIDES.pdf"), "old pdf", "utf8");
+    await writeFile(path.join(targetInfo.deckPath, "design", "design-brief.md"), "# Design Brief\n\nChanged after plan approval.\n", "utf8");
+    const selectedWorkflowPath = await makeSelectedWorkflowFile("compose");
+    const fakePackage = await makeFakePackageRoot();
+    await makeTaktExecutable(fakePackage.packageRoot, fakeCommandTaktScript("run-compose", "compose", "composed", "passed"));
+    const argsPath = path.join(root, "takt-args.txt");
+
+    const result = spawnSync(
+      process.execPath,
+      [fakePackage.runnerScript, "compose", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock", "--force"],
+      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
+    );
+    assert(result.status !== 0, "compose force unexpectedly accepted stale Design Brief fingerprint");
+    assert(result.stderr.includes("DESIGN_BRIEF_DRIFT:"), `compose force Design Brief drift did not surface DESIGN_BRIEF_DRIFT: ${result.stderr}`);
+    assert(existsSync(supervisionPath(targetInfo, "compose")), "compose force archived supervision before validating Design Brief fingerprint");
+    assert(existsSync(approvalPath(targetInfo, "compose")), "compose force archived approval before validating Design Brief fingerprint");
+    assert(existsSync(path.join(root, "dist", "demo", "SLIDES.pdf")), "compose force cleaned generated outputs before validating Design Brief fingerprint");
+    assert(!existsSync(path.join(targetInfo.reviewPath, "history")), "compose force created review history before validating Design Brief fingerprint");
+    assert(!existsSync(argsPath), "TAKT was invoked despite stale Design Brief fingerprint");
   });
 
   await check("runner preserves Design Contract marker for polish", async () => {
@@ -598,12 +703,13 @@ async function markComposeApproved(targetInfo) {
   await writeApproval(targetInfo, "compose", "foundation-test");
 }
 
-async function writePlanDesignContractArtifacts(targetInfo, contractSha256) {
+async function writePlanDesignContractArtifacts(targetInfo, contractSha256, designBriefSha256 = null) {
   const lines = [
     "# Slide Plan",
     "",
     "## Design Contract",
     `- Contract fingerprint: ${contractSha256}`,
+    ...(designBriefSha256 ? [`- Design Brief fingerprint: ${designBriefSha256}`] : []),
     "",
   ].join("\n");
   await writeFile(path.join(targetInfo.deckPath, "plan.md"), lines, "utf8");

@@ -56,6 +56,7 @@ Human approval is recorded by `takt-marp approve` for `plan` and `compose` only.
 
 ```text
 slides/<deck>/
+  design/design-brief.md
   design/<claude-design-export>.zip
   brief.normalized.md
   plan.md
@@ -67,7 +68,9 @@ slides/<deck>/
   review/*.md
 ```
 
-`plan` and `compose` require exactly one Claude Design export zip under `slides/<deck>/design/`. The runner normalizes it into `.takt/design-contracts/<deck>/resolved-design-contract.json`; `plan` records metadata, fingerprints, guidance such as `SKILL.md` / `readme.md`, and the component/card/template/sample catalog, while `compose` applies the same tokens and catalog to `SLIDES.md`. Each deck can use a different Design System, so the workflow must not assume a fixed domain or fixed component names.
+`design/design-brief.md` is the Design System authoring request given to Claude Design. It is derived from `brief.md` / `brief.normalized.md`, brand constraints, audience constraints, and style constraints. In the normal flow, generated `plan.md` / `slide-blueprint.md` files are not the primary input for Claude Design authoring.
+
+`plan` and `compose` require exactly one Claude Design export zip under `slides/<deck>/design/`. The runner normalizes it into `.takt/design-contracts/<deck>/resolved-design-contract.json`; `plan` records metadata, fingerprints, guidance such as `SKILL.md` / `readme.md`, and the component/starting point/card/template/theme/font/sample catalog, while `compose` applies the same tokens and catalog to `SLIDES.md`. Each deck can use a different Design System, so the workflow must not assume a fixed domain or fixed component names. When `design/design-brief.md` exists, its fingerprint is recorded for drift detection. When it is missing, the workflow can continue and records Design Brief drift protection as unavailable.
 
 ### 4. Polish and delivery scope
 

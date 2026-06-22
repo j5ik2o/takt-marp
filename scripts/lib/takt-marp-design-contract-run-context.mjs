@@ -88,7 +88,7 @@ async function assertComposePlanDesignContractMatches(command, targetInfo, contr
       "DESIGN_CONTRACT_PLAN_FINGERPRINT_MISMATCH",
     );
   }
-  const mismatches = [];
+  const artifactSources = [];
   for (const artifactName of ["plan.md", "slide-blueprint.md"]) {
     const artifactPath = path.join(targetInfo.deckPath, artifactName);
     const source = await readFile(artifactPath, "utf8").catch((error) => {
@@ -97,19 +97,45 @@ async function assertComposePlanDesignContractMatches(command, targetInfo, contr
       }
       throw error;
     });
+    artifactSources.push({ artifactName, source });
+  }
+
+  const contractMismatches = [];
+  for (const { artifactName, source } of artifactSources) {
     const actual = source ? extractContractSha256(source) : null;
     if (actual !== expected) {
-      mismatches.push(`${artifactName}: ${actual ?? "(missing)"} != ${expected}`);
+      contractMismatches.push(`${artifactName}: ${actual ?? "(missing)"} != ${expected}`);
     }
   }
-  if (mismatches.length > 0) {
+  if (contractMismatches.length > 0) {
     throw new SlideWorkflowError(
       [
         `Approved plan artifacts were created with a different Design Contract for ${targetInfo.target}.`,
-        ...mismatches.map((item) => `- ${item}`),
+        ...contractMismatches.map((item) => `- ${item}`),
         "Run plan again after updating Claude Design Source before running compose.",
       ].join("\n"),
       "DESIGN_CONTRACT_PLAN_FINGERPRINT_MISMATCH",
+    );
+  }
+
+  const currentDesignBriefSha256 = contract?.authoring?.design_brief?.available === true
+    ? contract.authoring.design_brief.sha256
+    : null;
+  const designBriefMismatches = [];
+  for (const { artifactName, source } of artifactSources) {
+    const actual = source ? extractDesignBriefSha256(source) : null;
+    if ((currentDesignBriefSha256 || actual) && actual !== currentDesignBriefSha256) {
+      designBriefMismatches.push(`${artifactName}: ${actual ?? "(missing)"} != ${currentDesignBriefSha256 ?? "(missing)"}`);
+    }
+  }
+  if (designBriefMismatches.length > 0) {
+    throw new SlideWorkflowError(
+      [
+        `Approved plan artifacts were created with a different Design Brief for ${targetInfo.target}.`,
+        ...designBriefMismatches.map((item) => `- ${item}`),
+        "Run plan again after updating design/design-brief.md or Claude Design Source before running compose.",
+      ].join("\n"),
+      "DESIGN_BRIEF_DRIFT",
     );
   }
 }
@@ -118,6 +144,20 @@ function extractContractSha256(source) {
   for (const pattern of [
     /\bcontract_sha256\s*[:=]\s*`?([a-f0-9]{64})`?/i,
     /\bContract fingerprint:\s*`?([a-f0-9]{64})`?/i,
+  ]) {
+    const match = source.match(pattern);
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+function extractDesignBriefSha256(source) {
+  for (const pattern of [
+    /\bdesign_brief_sha256\s*[:=]\s*`?([a-f0-9]{64})`?/i,
+    /\bDesign Brief fingerprint:\s*`?([a-f0-9]{64})`?/i,
+    /\bDesign Brief SHA-?256:\s*`?([a-f0-9]{64})`?/i,
   ]) {
     const match = source.match(pattern);
     if (match) {

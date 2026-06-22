@@ -4,11 +4,11 @@
 
 `slide-workflow-design-contract` は、Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力として取り込み、Design Contract（デザイン契約）を workflow 内部の normalized artifact として扱うための spec です。
 
-利用者は Claude Design で作った Design System を `.zip` として export し、deck の design 入力として配置します。`plan` と `compose` は同じ Resolved Design Contract（解決済みデザイン契約）を読み、`plan` は CSS を生成せずに layout / visual / density の制約を計画へ反映し、`compose` はその契約から CSS、`_class`、section HTML/CSS、visual source を生成します。
+利用者は `slides/<deck>/design/design-brief.md` を Claude Design に渡す authoring input として作成し、Claude Design で作った Design System を `.zip` として export し、deck の design 入力として配置します。`plan` と `compose` は同じ Resolved Design Contract（解決済みデザイン契約）を読み、`plan` は CSS を生成せずに layout / visual / density の制約を計画へ反映し、`compose` はその契約から CSS、`_class`、section HTML/CSS、visual source を生成します。
 
 ## 境界コンテキスト
 
-- **対象範囲**: Claude Design zip の解決、manifest / token CSS / adherence metadata の import、Resolved Design Contract の生成と handoff、`plan` / `compose` の fingerprint 照合、`design-system.md` の canonical artifact からの除外、review / smoke / package / no-copy validation の更新。
+- **対象範囲**: Design Brief（デザインブリーフ）による Claude Design authoring input の固定、Claude Design zip の解決、manifest / token CSS / adherence metadata の import、Resolved Design Contract の生成と handoff、`plan` / `compose` の fingerprint 照合、`design-system.md` の canonical artifact からの除外、review / smoke / package / no-copy validation の更新。
 - **対象外**: 手書き `design-contract.md`、package 側の default design input、deck-local Markdown override、PDF / PPTX / standalone HTML export の primary import、Claude Design `/design-sync` の repo 更新形式、新しい top-level `design` command、`plan` による CSS 生成、consumer workspace への `.takt/workflows` / `.takt/facets` 自動コピー。
 - **隣接システム／スペックへの期待**: `slide-workflow-orchestration` は `plan / compose` の command/state/report foundation を提供する。`slide-workflow-quality-uplift` は layout vocabulary、visual component、review severity の品質基準を提供する。`takt-marp-global-installer` は package-bundled template と no-copy 実行経路を提供する。`slide-workflow-smoke-validation` は Claude Design Source import と compose 適用を end-to-end に検証する。
 
@@ -96,7 +96,7 @@
 
 4.2. `plan` が `Layout` を生成するとき、slide workflow は Claude Design Source から直接 layout vocabulary が得られない場合でも、既存 slide workflow の許可済み layout vocabulary と token constraints の範囲で `Layout` を記録しなければならない。
 
-4.3. `plan` が `Visual` または `Visual Strategy` を生成するとき、slide workflow は `components` が空でも失敗せず、token constraints と既存 visual vocabulary で実現できる visual 種別を記録しなければならない。`source_catalog` に components、cards、sample slides、templates、component prompts が存在する場合は、brief に合うものだけを選定し、選定理由と不採用理由を記録しなければならない。
+4.3. `plan` が `Visual` または `Visual Strategy` を生成するとき、slide workflow は `components` が空でも失敗せず、token constraints と既存 visual vocabulary で実現できる visual 種別を記録しなければならない。`source_catalog` に components、starting points、cards、sample slides、templates、themes、fonts、component prompts が存在する場合は、brief に合うものだけを選定し、選定理由と不採用理由を記録しなければならない。
 
 4.4. `plan` が成功したとき、slide workflow は CSS、front matter style、または `_class` の style 定義を `plan` 成果物として生成してはならない。
 
@@ -201,3 +201,23 @@
 9.4. 既存 deck が Claude Design Source へ移行する場合、slide workflow は配置先が `slides/<deck>/design/` であることを利用者が確認できる案内または finding を残さなければならない。
 
 9.5. 既存 deck が Claude Design Source 導入前に compose 済みで Resolved Design Contract を持たない場合でも、`polish` は render evidence と既存 source artifact で検査・修正できる visual/layout/render finding を扱えるようにしなければならない。Design Contract 不在そのものを blocked finding または blocked fix 理由にしてはならない。
+
+### 要件 10: Design Brief で Claude Design Source の作成意図を固定する
+
+**目的:** deck 作成者として、Claude Design に何を渡して Design System を作ったかを deck 内に残したい。そうすることで、Claude Design Source、Resolved Design Contract、`plan` の間の drift を検出しやすくできる
+
+#### 受け入れ基準
+
+10.1. 利用者が Claude Design Source を作成するとき、slide workflow は `slides/<deck>/design/design-brief.md` を Claude Design に渡す authoring input の正として扱わなければならない。
+
+10.2. Design Brief は `brief.md` / `brief.normalized.md` の資料要求、brand constraints、audience constraints、style constraints を primary input として作成されなければならない。通常の新規作成 flow では、生成済み `plan.md` または `slide-blueprint.md` を Claude Design Source 作成の primary input として扱ってはならない。
+
+10.3. Design Brief は Claude Design Source の生成意図と provenance を固定する authoring artifact であり、Claude Design Source、Design Contract、Resolved Design Contract、または `design-system.md` の代替入力として扱ってはならない。
+
+10.4. `slides/<deck>/design/design-brief.md` が存在する場合、slide workflow はその path と SHA-256 を Resolved Design Contract、Workflow Handoff Marker、`plan.md`、`slide-blueprint.md` の確認可能な metadata として記録しなければならない。
+
+10.5. `slides/<deck>/design/design-brief.md` が存在しない場合でも、新規 / 既存 deck を問わず、slide workflow は Claude Design Source import だけを理由に失敗させてはならない。ただし drift protection が無効であることと、推奨配置先を利用者が確認できる warning または finding を残さなければならない。
+
+10.6. `compose` または review が、`plan.md` / `slide-blueprint.md` に記録された Design Brief fingerprint と現在の Design Brief fingerprint の不一致を検出した場合、slide workflow は source artifact 生成を成功扱いせず、re-plan または Claude Design Source 更新が必要であることを blocker として報告しなければならない。
+
+10.7. 既存 `plan.md` を参考に Design Brief または Claude Design Source を作り直した場合、slide workflow はその `plan.md` を design authoring の primary input として扱わず、更新後の Claude Design Source から `plan` を再実行する必要があることを利用者が確認できる finding として残さなければならない。

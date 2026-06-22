@@ -72,6 +72,10 @@ _Avoid_: review validator, human approval, report formatter
 `plan` が `brief.md` を primary input として維持しながら、存在する research artifacts だけを補助文脈として読む扱い。
 _Avoid_: research prerequisite, mandatory research, plan input replacement
 
+**Design Brief（デザインブリーフ）**:
+Claude Design に Design System 作成を依頼するための deck-local authoring input。`brief.md` の資料要求と brand / audience / style constraints を Claude Design 向けに整え、Claude Design Source の生成意図を固定する。
+_Avoid_: plan.md as design input, ad hoc design prompt, generated design-system.md
+
 **Claude Design Source（Claude Designソース）**:
 Claude Design から export または handoff された、slide workflow が受け付ける唯一の user-facing design system 入力。deck ごとに異なる Design System が来る前提で扱い、固定ドメインや固定 component 語彙を仮定しない。
 _Avoid_: manual design-contract.md, bundled design profile, generated design-system.md
@@ -89,7 +93,7 @@ Claude Design Source に含まれる `SKILL.md`、`readme.md`、component prompt
 _Avoid_: global instructions, fixed component rules, generated design-system.md
 
 **Source Catalog（ソースカタログ）**:
-Claude Design Source に含まれる components、cards、templates、sample slides、guidelines、assets を、特定ドメイン名に固定せず列挙する Design Contract 内の再利用候補一覧。
+Claude Design Source に含まれる components、starting points、cards、templates、sample slides、guidelines、themes、fonts、assets を、特定ドメイン名に固定せず列挙する Design Contract 内の再利用候補一覧。
 _Avoid_: built-in component list, required component set, domain-specific catalog
 
 **Legacy Polish Path（レガシーpolish経路）**:
