@@ -56,16 +56,21 @@ takt-marp plan "slides/<deck>"
 
 ```text
 slides/<deck>/
+  design/design-brief.md
+  design/<claude-design-export>.zip
   brief.normalized.md
   plan.md
-  design-system.md
+  slide-blueprint.md
+  sections/*.md
   SLIDES.md
   images/*.svg
   research/*.md
   review/*.md
 ```
 
-`design-system.md` はデッキ単位のtypography、spacing、layout、visual、color、QA tokenを定義します。`SLIDES.md` はスライドごとの個別style調整ではなく、Marp class経由でそれらのtokenを使う前提です。
+`design/design-brief.md` は Claude Design に渡す Design System 作成依頼です。`brief.md` / `brief.normalized.md` の資料要求、brand constraints、audience constraints、style constraints を primary input とし、通常 flow では生成済み `plan.md` / `slide-blueprint.md` を Claude Design 作成の primary input にしません。
+
+`plan` と `compose` は `slides/<deck>/design/` 配下に Claude Design export zip が1つあることを前提にします。runner はこれを `.takt/design-contracts/<deck>/resolved-design-contract.json` へ正規化し、`plan` は metadata、fingerprint、`SKILL.md` / `readme.md` などの guidance、component/starting point/card/template/theme/font/sample catalog を記録します。template は manifest 記載分だけでなく、zip 内の `templates/**/*.dc.html` からも catalog 化します。`compose` は同じ token と catalog を `SLIDES.md`、section HTML/CSS、生成 visual source に適用します。Design System は deck ごとに異なるため、特定ドメインや特定 component 名を固定前提にしません。`design/design-brief.md` がある場合は、その fingerprint も記録して drift 検出に使います。ない場合でも進行できますが、Design Brief drift protection は unavailable として記録します。
 
 ### 4. polishとdeliverの範囲
 
@@ -76,7 +81,7 @@ slides/<deck>/
 - layout選択と段組比率
 - typography consistency: 文字間、行間、サイズ階層
 - spatial balance: 上寄り、左寄り、大きな意図しない余白、視覚重心
-- design-system usage: token化されたCSS、スライドごとのstyle drift防止
+- Design Contract usage: token化されたCSS、スライドごとのstyle drift防止
 
 `deliver` は要求された成果物を生成し、delivery verification と supervision まで行います。
 単純なローカル生成や確認だけなら、workflow state を変更しない utility command を使います。
@@ -96,6 +101,8 @@ takt-marp smoke --keep
 ```
 
 smoke validation は fixture から一時的な `_workflow-smoke` deck を作成し、invalid target、approval failure path、`plan` -> `compose` -> `polish` -> `deliver` の一連の実行、render evidence metadata、delivery artifact、rerun/force behavior を検証します。`--keep` を付けると、生成された deck と report を `slides/_workflow-smoke/` に残して確認できます。
+
+real provider smoke は既定の workflow ごとの timeout を超えることがあります。ローカル検証では `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS=7200000 npm run slide:smoke -- --provider claude --keep` のように `TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS` で延長できます。
 
 ### Smoke fixture
 

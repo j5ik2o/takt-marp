@@ -130,7 +130,7 @@ function bundledDeepResearchWorkflowPath() {
   );
 }
 
-function rewriteBundledWorkflowForTakt(workflowContent) {
+function rewriteWorkflowForTakt(workflowContent) {
   return workflowContent
     .replaceAll("../facets/personas/", "../personas/")
     .replace(/^(\s*)call:\s+deep-research\s*$/m, "$1call: ./takt-marp-bundled-deep-research.yaml");
@@ -161,24 +161,37 @@ async function writeCallableBundledDeepResearchWorkflow(workflowsDir) {
 
 export async function prepareBundledWorkflowRuntime(workflowFile, options = {}) {
   const templateRoot = path.resolve(options.templateRoot ?? templateRootPath());
-  const workflowsRoot = path.join(templateRoot, "workflows");
+  const bundledWorkflowsRoot = path.join(templateRoot, "workflows");
   const resolvedWorkflowFile = path.resolve(options.root ?? process.cwd(), workflowFile);
-  if (!isPathInside(workflowsRoot, resolvedWorkflowFile)) {
+  const projectRoot = path.resolve(options.projectRoot ?? options.root ?? process.cwd());
+  const ejectedRoot = path.join(projectRoot, ".takt");
+  const ejectedWorkflowsRoot = path.join(ejectedRoot, "workflows");
+  const stageBundledDeepResearch = options.stageBundledDeepResearch ?? true;
+  const shouldStageEjectedResearch =
+    stageBundledDeepResearch &&
+    path.basename(resolvedWorkflowFile) === "takt-marp-slide-research.yaml" &&
+    isPathInside(ejectedWorkflowsRoot, resolvedWorkflowFile);
+  const sourceRoot = isPathInside(bundledWorkflowsRoot, resolvedWorkflowFile)
+    ? templateRoot
+    : shouldStageEjectedResearch
+      ? ejectedRoot
+      : null;
+  if (!sourceRoot) {
     return Object.freeze({
       workflowFilePath: resolvedWorkflowFile,
       cleanup: async () => {},
     });
   }
 
-  const projectRoot = path.resolve(options.projectRoot ?? options.root ?? process.cwd());
+  const workflowsRoot = path.join(sourceRoot, "workflows");
   const runtimeParent = path.join(projectRoot, "workflows");
   const runtimeParentExisted = directoryExists(runtimeParent);
   await mkdir(runtimeParent, { recursive: true });
   const runtimeRoot = await mkdtemp(path.join(runtimeParent, ".takt-marp-bundled-runtime-"));
   const runtimeWorkflowsDir = path.join(runtimeRoot, "workflows");
   await mkdir(runtimeWorkflowsDir, { recursive: true });
-  await cp(path.join(templateRoot, "facets"), path.join(runtimeRoot, "facets"), { recursive: true });
-  await cp(path.join(templateRoot, "facets", "personas"), path.join(runtimeRoot, "personas"), { recursive: true });
+  await cp(path.join(sourceRoot, "facets"), path.join(runtimeRoot, "facets"), { recursive: true });
+  await cp(path.join(sourceRoot, "facets", "personas"), path.join(runtimeRoot, "personas"), { recursive: true });
 
   const workflowEntries = await readdir(workflowsRoot, { withFileTypes: true });
   for (const entry of workflowEntries) {
@@ -188,9 +201,8 @@ export async function prepareBundledWorkflowRuntime(workflowFile, options = {}) 
     const sourcePath = path.join(workflowsRoot, entry.name);
     const destinationPath = path.join(runtimeWorkflowsDir, entry.name);
     const source = await readFile(sourcePath, "utf8");
-    await writeFile(destinationPath, rewriteBundledWorkflowForTakt(source), "utf8");
+    await writeFile(destinationPath, rewriteWorkflowForTakt(source), "utf8");
   }
-  const stageBundledDeepResearch = options.stageBundledDeepResearch ?? true;
   if (stageBundledDeepResearch && path.basename(resolvedWorkflowFile) === "takt-marp-slide-research.yaml") {
     await writeCallableBundledDeepResearchWorkflow(runtimeWorkflowsDir);
   }

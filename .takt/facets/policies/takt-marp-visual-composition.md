@@ -12,7 +12,7 @@ Marpスライド内の図解は、まず section source と assembled `SLIDES.md
 | SVG-limited | 座標指定、複雑な矢印、関係マップ、トポロジ、再利用図版、単体差分レビューが必要なものだけSVGにする |
 | render owner明示 | planの `Visual:` には visual種別を、各slideの `Visual Strategy` には `render_owner` と理由を明示し、compose/generate の責務を分ける |
 | 1 visual 1 message | 1つの図解に複数の主張を詰め込まない |
-| token駆動 | 個別styleではなく `design-system.md` のclassとCSS変数で制御する |
+| token駆動 | 個別styleではなく Resolved Design Contract のclassとCSS変数で制御する |
 | 可読性優先 | 印刷配布と投影の両方で読める文字量・余白・コントラストにする |
 | 差分レビュー可能 | HTML構造、class名、SVG要素名を意味単位で整理し、過度なminifyを避ける |
 
@@ -30,7 +30,7 @@ Marpスライド内の図解は、まず section source と assembled `SLIDES.md
 
 - `html:` visual は compose_sections が section source に直接HTML構造を書く。placeholderにせず、本文と同じ差分でレビューできる状態にする。
 - `html:` visual を使う場合は、front matter に `html: true` を設定する。
-- HTML図解は `design-system.md` に定義したclassだけを使い、スライドごとの `style=""` や個別CSS追加を避ける。
+- HTML図解は Resolved Design Contract の token constraints に従うclassだけを使い、スライドごとの `style=""` や個別CSS追加を避ける。
 - カードやボックス内の文字がはみ出す場合は、文字を削る、カード数を減らす、スライドを分ける、grid列数を変える順で調整する。
 - 矢印はCSS border、疑似要素、短い記号で表現できる範囲に留める。複雑な交差・曲線・多段接続が必要ならSVGへ切り替える。
 - HTML表・比較表は、罫線より余白・見出し帯・背景色で構造を見せる。白基調を保ちつつ、白黒だけにしない。

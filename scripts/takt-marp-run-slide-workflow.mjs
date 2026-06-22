@@ -29,6 +29,11 @@ import {
   writeResearchReuseSidecar,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { prepareBundledWorkflowRuntime, researchReuseWorkflowFilePath } from "./lib/takt-marp-project-templates.mjs";
+import {
+  designContractMarkerForRun,
+  pendingDesignContractBeforeInvalidation,
+  resolvedDesignContractForRun,
+} from "./lib/takt-marp-design-contract-run-context.mjs";
 
 function usage() {
   return [
@@ -66,6 +71,10 @@ async function main() {
     fullResearchPreflightChecked = true;
   }
 
+  let resolvedDesignContract = null;
+  let pendingDesignContract = null;
+  pendingDesignContract = await pendingDesignContractBeforeInvalidation(command, targetInfo, { force: flags.force });
+
   let researchReuseCandidate = null;
   if (flags.force) {
     if (command === "research") {
@@ -75,13 +84,18 @@ async function main() {
     if (shouldCleanGeneratedOutputsOnForce(command)) {
       await cleanGeneratedOutputs(targetInfo);
     }
+    resolvedDesignContract = await resolvedDesignContractForRun(command, targetInfo, { pendingDesignContract });
   } else if (isSuccessfulCommandState(targetInfo, command)) {
     throw new SlideWorkflowError(
       `Command '${command}' already reached successful state. Use --force to invalidate and rerun.`,
       "RERUN_BLOCKED",
     );
-  } else if ((await commandSupervisionResult(targetInfo, command)) === "rejected") {
-    await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
+  } else {
+    const supervisionResult = await commandSupervisionResult(targetInfo, command);
+    if (supervisionResult === "rejected") {
+      pendingDesignContract = await pendingDesignContractBeforeInvalidation(command, targetInfo, { rejectedRerun: true });
+      await archiveCommandArtifacts(targetInfo, [command], "rejected-rerun");
+    }
   }
 
   if (command === "research" && !flags.force) {
@@ -107,7 +121,14 @@ async function main() {
     preparedResearchReuseCandidate = researchReuseCandidate
       ? await prepareResearchReuseSourceReport(targetInfo, researchReuseCandidate)
       : null;
-    await writeCurrentWorkflowTarget(command, targetInfo, { researchReuseCandidate: preparedResearchReuseCandidate });
+    resolvedDesignContract = await resolvedDesignContractForRun(command, targetInfo, {
+      pendingDesignContract,
+      resolvedDesignContract,
+    });
+    await writeCurrentWorkflowTarget(command, targetInfo, {
+      researchReuseCandidate: preparedResearchReuseCandidate,
+      designContract: await designContractMarkerForRun(command, targetInfo, resolvedDesignContract),
+    });
     runSnapshotBefore = await snapshotTaktRuns(command);
     runDirectorySnapshotBefore = command === "research" ? await snapshotTaktRunDirectories() : null;
     const taktTarget = command === "research" ? researchTaktTarget(targetInfo) : targetInfo.target;
@@ -228,6 +249,9 @@ async function writeCurrentWorkflowTarget(command, targetInfo, options = {}) {
     marker.research_source_report_path = projectRelativeMarkerPath(options.researchReuseCandidate.source_report_path);
     marker.research_source_report_origin = "builtin_deep_research";
     marker.research_source_run = options.researchReuseCandidate.source_run;
+  }
+  if (options.designContract) {
+    marker.design_contract = options.designContract;
   }
   await writeFile(
     markerPath,

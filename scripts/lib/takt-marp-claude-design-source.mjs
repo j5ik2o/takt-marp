@@ -1,0 +1,847 @@
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { SlideWorkflowError } from "./takt-marp-errors.mjs";
+import { ZipArchiveReader } from "./takt-marp-zip-archive.mjs";
+
+export const CLAUDE_DESIGN_REQUIRED_FILES = Object.freeze([
+  "_ds_manifest.json",
+  "styles.css",
+  "tokens/colors.css",
+  "tokens/typography.css",
+  "tokens/spacing.css",
+]);
+
+export const CLAUDE_DESIGN_OPTIONAL_FILES = Object.freeze([
+  ".thumbnail",
+  "_ds_bundle.js",
+  "_adherence.oxlintrc.json",
+  "tokens/fonts.css",
+]);
+
+const REQUIRED_MANIFEST_FIELDS = Object.freeze(["namespace", "globalCssPaths", "tokens"]);
+const PRIMARY_GUIDANCE_PATHS = Object.freeze(["SKILL.md", "readme.md", "README.md"]);
+const GUIDANCE_TEXT_LIMIT = 24_000;
+const COMPONENT_PROMPT_TEXT_LIMIT = 8_000;
+const GENERIC_FONT_FAMILIES = Object.freeze(new Set([
+  "serif",
+  "sans-serif",
+  "monospace",
+  "cursive",
+  "fantasy",
+  "system-ui",
+  "ui-serif",
+  "ui-sans-serif",
+  "ui-monospace",
+  "ui-rounded",
+  "emoji",
+  "math",
+  "fangsong",
+]));
+const NON_FONT_FAMILY_VALUES = Object.freeze(new Set([
+  "normal",
+  "bold",
+  "bolder",
+  "lighter",
+  "inherit",
+  "initial",
+  "unset",
+  "italic",
+  "oblique",
+  "auto",
+  "swap",
+  "block",
+  "fallback",
+  "optional",
+  "none",
+]));
+
+export async function resolveAndSaveClaudeDesignContract(targetInfo, options = {}) {
+  const resolved = await resolveClaudeDesignContract(targetInfo, options);
+  return saveResolvedDesignContract(resolved.contract, targetInfo, options);
+}
+
+export async function resolveClaudeDesignContract(targetInfo, options = {}) {
+  const source = await resolveClaudeDesignSource(targetInfo, options);
+  const contract = await importClaudeDesignSourceArchive(source.archive, {
+    root: options.root ?? process.cwd(),
+    sourcePath: source.sourcePath,
+    deckName: targetInfo.deckName,
+    designBrief: source.designBrief,
+  });
+  return Object.freeze({
+    contract,
+    sourcePath: source.sourcePath,
+  });
+}
+
+export async function resolveClaudeDesignSource(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const designDir = path.join(targetInfo.deckPath, "design");
+  if (!existsSync(designDir)) {
+    throw new SlideWorkflowError(missingSourceMessage(targetInfo), "CLAUDE_DESIGN_SOURCE_MISSING");
+  }
+
+  const names = (await readdir(designDir)).filter((name) => name.toLowerCase().endsWith(".zip")).sort();
+  if (names.length === 0) {
+    throw new SlideWorkflowError(missingSourceMessage(targetInfo), "CLAUDE_DESIGN_SOURCE_MISSING");
+  }
+
+  const valid = [];
+  const invalid = [];
+  for (const name of names) {
+    const sourcePath = path.join(designDir, name);
+    try {
+      const archive = await ZipArchiveReader.fromFile(sourcePath);
+      if (archive.hasEntry("_ds_manifest.json")) {
+        valid.push(Object.freeze({ sourcePath, archive }));
+      } else {
+        invalid.push(`${projectRelativePath(sourcePath, root)}: missing _ds_manifest.json`);
+      }
+    } catch (error) {
+      invalid.push(`${projectRelativePath(sourcePath, root)}: ${error.code ?? "ZIP_ARCHIVE_INVALID"}`);
+    }
+  }
+
+  if (invalid.length > 0) {
+    throw new SlideWorkflowError(
+      [
+        `Claude Design Source zip candidates include invalid archives for ${targetInfo.target}.`,
+        ...invalid.map((item) => `- ${item}`),
+        ...(valid.length > 0
+          ? [
+              "Valid candidates were also found, but invalid sibling zip files make the design input ambiguous:",
+              ...valid.map((item) => `- ${projectRelativePath(item.sourcePath, root)}`),
+            ]
+          : []),
+        "Keep exactly one valid Claude Design export zip containing _ds_manifest.json under slides/<deck>/design/.",
+      ].join("\n"),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+  }
+  if (valid.length > 1) {
+    throw new SlideWorkflowError(
+      [
+        `Multiple Claude Design Source zip files were found for ${targetInfo.target}.`,
+        ...valid.map((item) => `- ${projectRelativePath(item.sourcePath, root)}`),
+      ].join("\n"),
+      "CLAUDE_DESIGN_SOURCE_AMBIGUOUS",
+    );
+  }
+  if (valid.length === 0) {
+    throw new SlideWorkflowError(
+      [
+        `Claude Design Source zip could not be imported from ${projectRelativePath(designDir, root)}.`,
+        ...invalid,
+        "Place exactly one Claude Design export zip containing _ds_manifest.json under slides/<deck>/design/.",
+        "Legacy design-system.md and hand-written design-contract.md are not fallback inputs.",
+      ].join("\n"),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+  }
+  const designBrief = await resolveDesignBriefMetadata(designDir, root);
+  return Object.freeze({ ...valid[0], designBrief });
+}
+
+export async function importClaudeDesignSourceBuffer(buffer, options = {}) {
+  return importClaudeDesignSourceArchive(ZipArchiveReader.fromBuffer(buffer, { sourcePath: options.sourcePath }), options);
+}
+
+export async function importClaudeDesignSourceArchive(archive, options = {}) {
+  const sourcePath = options.sourcePath ?? archive.sourcePath ?? "Claude Design Source.zip";
+  const root = options.root ?? process.cwd();
+  const sourceSha256 = requireArchiveSourceSha256(archive, sourcePath);
+  assertRequiredFiles(archive, sourcePath);
+  const manifest = parseManifest(await archive.readText("_ds_manifest.json"), sourcePath);
+  const tokenCss = await readTokenCss(archive);
+  const cssTokens = extractCssTokens(tokenCss);
+  const manifestTokens = normalizeManifestTokens(manifest.tokens);
+  assertTokenConsistency(manifestTokens, cssTokens, sourcePath);
+  const adherence = await readAdherenceMetadata(archive);
+  const guidance = await readDesignGuidance(archive);
+  const tokens = manifestTokens.map((token) => ({
+    ...token,
+    category: classifyToken(token),
+  })).sort((left, right) => left.name.localeCompare(right.name));
+  const sourceCatalog = buildSourceCatalog(manifest, archive, guidance);
+  const authoring = designContractAuthoring(options.designBrief);
+  const contractWithoutContractHash = {
+    schema_version: 1,
+    source: {
+      kind: "claude-design-zip",
+      path: projectRelativePath(sourcePath, root),
+      sha256: sourceSha256,
+      namespace: manifest.namespace,
+      export_source: manifest.source ?? null,
+    },
+    authoring,
+    fingerprint: {
+      source_sha256: sourceSha256,
+    },
+    global_css_paths: [...manifest.globalCssPaths],
+    required_files: [...CLAUDE_DESIGN_REQUIRED_FILES],
+    optional_files_present: CLAUDE_DESIGN_OPTIONAL_FILES.filter((fileName) => archive.hasEntry(fileName)),
+    token_counts: tokenCounts(tokens),
+    brand_fonts: brandFonts(manifest, tokens),
+    components: {
+      count: Array.isArray(manifest.components) ? manifest.components.length : 0,
+      empty: !Array.isArray(manifest.components) || manifest.components.length === 0,
+      names: normalizeCatalogItems(manifest.components).map((item) => item.name).filter(Boolean).sort(),
+    },
+    adherence,
+    guidance,
+    source_catalog: sourceCatalog,
+    tokens,
+  };
+  const contractSha256 = sha256Stable(contractHashInput(contractWithoutContractHash));
+  return deepFreeze({
+    ...contractWithoutContractHash,
+    fingerprint: {
+      ...contractWithoutContractHash.fingerprint,
+      contract_sha256: contractSha256,
+    },
+  });
+}
+
+async function resolveDesignBriefMetadata(designDir, root) {
+  const designBriefPath = path.join(designDir, "design-brief.md");
+  if (!existsSync(designBriefPath)) {
+    return Object.freeze({
+      available: false,
+      path: null,
+      sha256: null,
+    });
+  }
+  let bytes;
+  try {
+    bytes = await readFile(designBriefPath);
+  } catch (error) {
+    throw new SlideWorkflowError(
+      `Design Brief could not be read: ${projectRelativePath(designBriefPath, root)} (${error.code ?? error.message})`,
+      "DESIGN_BRIEF_INVALID",
+    );
+  }
+  return Object.freeze({
+    available: true,
+    path: projectRelativePath(designBriefPath, root),
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+  });
+}
+
+function requireArchiveSourceSha256(archive, sourcePath) {
+  if (typeof archive.sourceSha256 === "string" && archive.sourceSha256) {
+    return archive.sourceSha256;
+  }
+  throw new SlideWorkflowError(
+    `Claude Design Source archive is missing full zip SHA-256 metadata: ${sourcePath}. Import from a zip file or buffer.`,
+    "CLAUDE_DESIGN_SOURCE_INVALID",
+  );
+}
+
+export async function saveResolvedDesignContract(contract, targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const contractDir = path.join(root, ".takt", "design-contracts", targetInfo.deckName);
+  const contractPath = path.join(contractDir, "resolved-design-contract.json");
+  await mkdir(contractDir, { recursive: true });
+  const tempPath = `${contractPath}.${process.pid}-${Date.now()}.tmp`;
+  await writeFile(tempPath, `${JSON.stringify(contract, null, 2)}\n`, "utf8");
+  await rename(tempPath, contractPath);
+  return Object.freeze({
+    contract,
+    contractPath,
+    markerPayload: designContractMarkerPayload(contract, contractPath, root),
+  });
+}
+
+export async function loadResolvedDesignContractMarker(targetInfo, options = {}) {
+  const root = options.root ?? process.cwd();
+  const contractPath = path.join(root, ".takt", "design-contracts", targetInfo.deckName, "resolved-design-contract.json");
+  return loadDesignContractMarkerPayloadFromPath(contractPath, { root });
+}
+
+export async function loadDesignContractMarkerPayloadFromPath(contractPath, options = {}) {
+  const root = options.root ?? process.cwd();
+  if (!existsSync(contractPath)) {
+    return null;
+  }
+  let contract;
+  try {
+    contract = JSON.parse(await readFile(contractPath, "utf8"));
+  } catch (error) {
+    if (error instanceof SyntaxError || error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+  if (!isResolvedDesignContractShape(contract)) {
+    return null;
+  }
+  if (!hasMatchingStoredContractHash(contract)) {
+    return null;
+  }
+  return designContractMarkerPayload(contract, contractPath, root);
+}
+
+function isResolvedDesignContractShape(contract) {
+  return isPlainObject(contract) &&
+    isPlainObject(contract.source) &&
+    typeof contract.source.path === "string" &&
+    typeof contract.source.sha256 === "string" &&
+    typeof contract.source.namespace === "string" &&
+    isPlainObject(contract.fingerprint) &&
+    typeof contract.fingerprint.source_sha256 === "string" &&
+    typeof contract.fingerprint.contract_sha256 === "string" &&
+    isPlainObject(contract.token_counts) &&
+    Array.isArray(contract.brand_fonts) &&
+    isPlainObject(contract.components) &&
+    isPlainObject(contract.adherence) &&
+    isValidAuthoringShape(contract.authoring);
+}
+
+function hasMatchingStoredContractHash(contract) {
+  return sha256Stable(contractHashInput(contract)) === contract.fingerprint.contract_sha256;
+}
+
+function contractHashInput(contract) {
+  const fingerprint = { ...contract.fingerprint };
+  delete fingerprint.source_sha256;
+  delete fingerprint.contract_sha256;
+  const source = { ...contract.source };
+  delete source.path;
+  delete source.sha256;
+  const hashInput = {
+    ...contract,
+    source,
+    fingerprint,
+  };
+  delete hashInput.authoring;
+  return hashInput;
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function designContractMarkerPayload(contract, contractPath, root = process.cwd()) {
+  return Object.freeze({
+    source: contract.source,
+    authoring: designContractMarkerAuthoring(contract.authoring),
+    path: projectRelativePath(contractPath, root),
+    fingerprint: contract.fingerprint,
+    namespace: contract.source.namespace,
+    token_counts: contract.token_counts,
+    brand_fonts: contract.brand_fonts,
+    component_count: contract.components.count,
+    adherence_available: contract.adherence.available,
+  });
+}
+
+function designContractAuthoring(designBrief) {
+  const normalized = normalizeDesignBriefMetadata(designBrief);
+  return Object.freeze({
+    design_brief: normalized,
+    provenance_verified: false,
+  });
+}
+
+function normalizeDesignBriefMetadata(designBrief) {
+  if (designBrief?.available === true) {
+    return Object.freeze({
+      available: true,
+      path: designBrief.path,
+      sha256: designBrief.sha256,
+    });
+  }
+  return Object.freeze({
+    available: false,
+    path: null,
+    sha256: null,
+  });
+}
+
+function designContractMarkerAuthoring(authoring) {
+  const normalized = designContractAuthoring(authoring?.design_brief);
+  return Object.freeze({
+    design_brief_available: normalized.design_brief.available,
+    design_brief_path: normalized.design_brief.path,
+    design_brief_sha256: normalized.design_brief.sha256,
+    provenance_verified: normalized.provenance_verified,
+  });
+}
+
+function isValidAuthoringShape(authoring) {
+  if (authoring === undefined) {
+    return true;
+  }
+  if (!isPlainObject(authoring) || !isPlainObject(authoring.design_brief)) {
+    return false;
+  }
+  const designBrief = authoring.design_brief;
+  if (designBrief.available === true) {
+    return typeof designBrief.path === "string" &&
+      designBrief.path.length > 0 &&
+      typeof designBrief.sha256 === "string" &&
+      /^[a-f0-9]{64}$/.test(designBrief.sha256) &&
+      typeof authoring.provenance_verified === "boolean";
+  }
+  return designBrief.available === false &&
+    designBrief.path === null &&
+    designBrief.sha256 === null &&
+    typeof authoring.provenance_verified === "boolean";
+}
+
+function missingSourceMessage(targetInfo) {
+  return [
+    `Claude Design Source is required before running plan or compose for ${targetInfo.target}.`,
+    `Place exactly one Claude Design export zip under slides/${targetInfo.deckName}/design/.`,
+    "Legacy design-system.md and hand-written design-contract.md are not fallback inputs.",
+  ].join(" ");
+}
+
+function assertRequiredFiles(archive, sourcePath) {
+  const missing = CLAUDE_DESIGN_REQUIRED_FILES.filter((fileName) => !archive.hasEntry(fileName));
+  if (missing.length > 0) {
+    throw new SlideWorkflowError(
+      `Claude Design Source is missing required files in ${sourcePath}: ${missing.join(", ")}`,
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+  }
+}
+
+function parseManifest(source, sourcePath) {
+  let manifest;
+  try {
+    manifest = JSON.parse(source);
+  } catch (error) {
+    throw new SlideWorkflowError(`Claude Design manifest is malformed JSON in ${sourcePath}: ${error.message}`, "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) {
+    throw new SlideWorkflowError(
+      `Claude Design manifest must be a JSON object in ${sourcePath}.`,
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+  }
+  const missing = REQUIRED_MANIFEST_FIELDS.filter((field) => manifest[field] === undefined);
+  if (missing.length > 0) {
+    throw new SlideWorkflowError(`Claude Design manifest is missing required fields: ${missing.join(", ")}`, "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+  if (typeof manifest.namespace !== "string" || !manifest.namespace.trim()) {
+    throw new SlideWorkflowError("Claude Design manifest field 'namespace' must be a non-empty string", "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+  if (!Array.isArray(manifest.globalCssPaths)) {
+    throw new SlideWorkflowError("Claude Design manifest field 'globalCssPaths' must be an array", "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+  if (!Array.isArray(manifest.tokens) || manifest.tokens.length === 0) {
+    throw new SlideWorkflowError("Claude Design manifest token list is empty", "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+  return manifest;
+}
+
+async function readTokenCss(archive) {
+  const css = {};
+  for (const fileName of ["tokens/colors.css", "tokens/typography.css", "tokens/spacing.css", "tokens/fonts.css"]) {
+    if (archive.hasEntry(fileName)) {
+      css[fileName] = await archive.readText(fileName);
+    }
+  }
+  return css;
+}
+
+function extractCssTokens(cssByPath) {
+  const tokens = new Map();
+  for (const [fileName, source] of Object.entries(cssByPath)) {
+    const regex = /(--[A-Za-z0-9_-]+)\s*:\s*([^;]+);/g;
+    for (const match of source.matchAll(regex)) {
+      tokens.set(match[1], { value: match[2].trim(), definedIn: fileName });
+    }
+  }
+  return tokens;
+}
+
+function normalizeManifestTokens(tokens) {
+  return tokens.map((token) => {
+    if (typeof token?.name !== "string" || !token.name.startsWith("--")) {
+      throw new SlideWorkflowError(`Claude Design manifest token has invalid name: ${JSON.stringify(token)}`, "CLAUDE_DESIGN_SOURCE_INVALID");
+    }
+    return {
+      name: token.name,
+      value: String(token.value ?? ""),
+      kind: String(token.kind ?? "unknown"),
+      defined_in: String(token.definedIn ?? token.defined_in ?? ""),
+    };
+  });
+}
+
+function assertTokenConsistency(manifestTokens, cssTokens, sourcePath) {
+  const manifestNames = new Set(manifestTokens.map((token) => token.name));
+  const cssNames = new Set(cssTokens.keys());
+  const missingInCss = [...manifestNames].filter((name) => !cssNames.has(name)).sort();
+  const missingInManifest = [...cssNames].filter((name) => !manifestNames.has(name)).sort();
+  const valueMismatches = manifestTokens
+    .filter((token) => cssTokens.has(token.name))
+    .filter((token) => normalizeTokenValue(token.value) !== normalizeTokenValue(cssTokens.get(token.name).value))
+    .map((token) => `${token.name}: manifest=${token.value || "(empty)"} css=${cssTokens.get(token.name).value || "(empty)"}`)
+    .sort();
+  if (missingInCss.length > 0 || missingInManifest.length > 0 || valueMismatches.length > 0) {
+    throw new SlideWorkflowError(
+      [
+        `Claude Design token mismatch in ${sourcePath}.`,
+        `Missing in CSS: ${missingInCss.join(", ") || "(none)"}`,
+        `Missing in manifest: ${missingInManifest.join(", ") || "(none)"}`,
+        `Value mismatch: ${valueMismatches.join(", ") || "(none)"}`,
+      ].join("\n"),
+      "CLAUDE_DESIGN_SOURCE_INVALID",
+    );
+  }
+}
+
+function normalizeTokenValue(value) {
+  return String(value ?? "").trim().replace(/\s+/g, " ");
+}
+
+async function readAdherenceMetadata(archive) {
+  if (!archive.hasEntry("_adherence.oxlintrc.json")) {
+    return Object.freeze({ available: false, rule_messages: [], x_omelette_token_count: 0 });
+  }
+  try {
+    const parsed = JSON.parse(await archive.readText("_adherence.oxlintrc.json"));
+    const restrictedSyntax = Array.isArray(parsed.rules?.["no-restricted-syntax"]) ? parsed.rules["no-restricted-syntax"] : [];
+    const messages = restrictedSyntax
+      .filter((entry) => entry && typeof entry === "object" && typeof entry.message === "string")
+      .map((entry) => entry.message)
+      .sort();
+    return Object.freeze({
+      available: true,
+      rule_messages: Object.freeze(messages),
+      x_omelette_token_count: Array.isArray(parsed["x-omelette"]?.tokens) ? parsed["x-omelette"].tokens.length : 0,
+    });
+  } catch (error) {
+    throw new SlideWorkflowError(`Claude Design adherence metadata is malformed: ${error.message}`, "CLAUDE_DESIGN_SOURCE_INVALID");
+  }
+}
+
+async function readDesignGuidance(archive) {
+  const documents = [];
+  for (const filePath of PRIMARY_GUIDANCE_PATHS) {
+    if (archive.hasEntry(filePath)) {
+      const kind = filePath.toLowerCase() === "skill.md" ? "skill" : "readme";
+      documents.push(await readGuidanceText(archive, filePath, kind, GUIDANCE_TEXT_LIMIT));
+    }
+  }
+
+  const componentPrompts = [];
+  for (const filePath of archive.entryNames().filter((name) => name.startsWith("components/") && name.endsWith(".prompt.md")).sort()) {
+    componentPrompts.push(await readGuidanceText(archive, filePath, "component_prompt", COMPONENT_PROMPT_TEXT_LIMIT));
+  }
+
+  return deepFreeze({
+    available: documents.length > 0 || componentPrompts.length > 0,
+    documents,
+    component_prompts: componentPrompts,
+  });
+}
+
+async function readGuidanceText(archive, filePath, kind, maxChars) {
+  const bytes = await archive.readEntry(filePath);
+  const text = bytes.toString("utf8");
+  return Object.freeze({
+    path: filePath,
+    kind,
+    sha256: createHash("sha256").update(bytes).digest("hex"),
+    size_bytes: bytes.byteLength,
+    text: text.length > maxChars ? text.slice(0, maxChars) : text,
+    truncated: text.length > maxChars,
+  });
+}
+
+function buildSourceCatalog(manifest, archive, guidance) {
+  const entryNames = archive.entryNames();
+  const components = normalizeCatalogItems(manifest.components).map((item) => enrichComponentCatalogItem(item, entryNames));
+  const startingPoints = normalizeCatalogItems(manifest.startingPoints);
+  const cards = normalizeCatalogItems(manifest.cards);
+  const templates = buildTemplateCatalog(manifest.templates, entryNames);
+  const themes = normalizeCatalogItems(manifest.themes);
+  const fonts = normalizeCatalogItems(manifest.fonts);
+  const sampleSlides = collectFileCatalogEntries(entryNames, "slides/", (name) => name.endsWith(".html"))
+    .map((entry) => enrichCatalogEntryFromCards(entry, cards));
+  const guidelines = collectFileCatalogEntries(entryNames, "guidelines/", (name) => name.endsWith(".card.html"))
+    .map((entry) => enrichCatalogEntryFromCards(entry, cards));
+  const assets = collectFileCatalogEntries(entryNames, "assets/");
+
+  return deepFreeze({
+    counts: {
+      components: components.length,
+      starting_points: startingPoints.length,
+      cards: cards.length,
+      templates: templates.length,
+      themes: themes.length,
+      fonts: fonts.length,
+      sample_slides: sampleSlides.length,
+      guidelines: guidelines.length,
+      assets: assets.length,
+      guidance_documents: guidance.documents.length,
+      component_prompts: guidance.component_prompts.length,
+    },
+    components,
+    starting_points: startingPoints,
+    cards,
+    templates,
+    themes,
+    fonts,
+    sample_slides: sampleSlides,
+    guidelines,
+    assets,
+  });
+}
+
+function normalizeCatalogItems(items) {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+  return items
+    .map((item, index) => normalizeCatalogItem(item, index))
+    .filter((item) => Object.keys(item).length > 0);
+}
+
+function normalizeCatalogItem(item, index) {
+  if (typeof item === "string") {
+    return Object.freeze({ name: item, index });
+  }
+  if (!item || typeof item !== "object") {
+    return Object.freeze({});
+  }
+  const normalized = { index };
+  for (const key of ["id", "name", "label", "title", "description", "path", "sourcePath", "entryPath", "folder", "group", "viewport", "subtitle", "kind", "category", "family", "status"]) {
+    if (typeof item[key] === "string" && item[key].trim()) {
+      normalized[key] = item[key].trim();
+    }
+  }
+  return Object.freeze(normalized);
+}
+
+function enrichComponentCatalogItem(item, entryNames) {
+  const componentName = item.name ?? path.basename(item.sourcePath ?? "", path.extname(item.sourcePath ?? ""));
+  const relatedFiles = componentName
+    ? entryNames.filter((entryName) => entryName.startsWith("components/") && path.basename(entryName).toLowerCase().startsWith(componentName.toLowerCase())).sort()
+    : [];
+  return Object.freeze({
+    ...item,
+    related_files: relatedFiles,
+    prompt_path: relatedFiles.find((filePath) => filePath.endsWith(".prompt.md")) ?? null,
+  });
+}
+
+function buildTemplateCatalog(manifestTemplates, entryNames) {
+  const templates = normalizeCatalogItems(manifestTemplates);
+  const knownPaths = new Set(templates.flatMap(templateCatalogPaths).map(normalizeCatalogPath));
+  const archiveTemplates = collectFileCatalogEntries(entryNames, "templates/", (name) => name.endsWith(".dc.html"))
+    .filter((entry) => !knownPaths.has(normalizeCatalogPath(entry.path)))
+    .map((entry) => Object.freeze({
+      ...entry,
+      entryPath: entry.path,
+    }));
+  return Object.freeze([...templates, ...archiveTemplates]);
+}
+
+function templateCatalogPaths(item) {
+  return [item.path, item.entryPath, item.sourcePath].filter((value) => typeof value === "string" && value.trim());
+}
+
+function normalizeCatalogPath(value) {
+  return value.replace(/\\/g, "/").toLowerCase();
+}
+
+function collectFileCatalogEntries(entryNames, prefix, predicate = () => true) {
+  return entryNames
+    .filter((name) => name.startsWith(prefix) && predicate(name))
+    .map((name) => Object.freeze({
+      path: name,
+      extension: path.extname(name),
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function enrichCatalogEntryFromCards(entry, cards) {
+  const card = cards.find((item) => item.path === entry.path);
+  return Object.freeze(card ? { ...entry, card } : entry);
+}
+
+function classifyToken(token) {
+  const name = token.name.toLowerCase();
+  const definedIn = token.defined_in.toLowerCase();
+  const kind = token.kind.toLowerCase();
+  if (definedIn.includes("colors")) {
+    return "color";
+  }
+  if (name.includes("radius")) return "radius";
+  if (name.includes("shadow")) return "shadow";
+  if (definedIn.includes("typography") || name.startsWith("--font") || name.startsWith("--fs") || name.startsWith("--fw") || name.startsWith("--lh") || name.startsWith("--ls")) {
+    return "typography";
+  }
+  if (definedIn.includes("spacing") || name.startsWith("--space") || name.startsWith("--bw") || name.startsWith("--slide") || name.startsWith("--dur") || name.startsWith("--ease")) {
+    return "spacing";
+  }
+  if (kind === "color" || /^#[0-9a-f]{3,8}$/i.test(token.value) || isSemanticColorTokenName(name)) return "color";
+  if (kind === "spacing") return "spacing";
+  if (kind === "font") return "font";
+  return "other";
+}
+
+function isSemanticColorTokenName(name) {
+  return name === "--accent" ||
+    name.startsWith("--accent-") ||
+    name.startsWith("--color") ||
+    name.startsWith("--bg-") ||
+    name.startsWith("--text-");
+}
+
+function tokenCounts(tokens) {
+  const counts = { color: 0, typography: 0, spacing: 0, radius: 0, shadow: 0, font: 0, other: 0, total: tokens.length };
+  for (const token of tokens) {
+    counts[token.category] = (counts[token.category] ?? 0) + 1;
+  }
+  return Object.freeze(counts);
+}
+
+function brandFonts(manifest, tokens) {
+  const fonts = new Set(manifestBrandFontFamilies(manifest.brandFonts));
+  for (const token of tokens) {
+    if (isFontFamilyToken(token)) {
+      for (const family of cssFontFamilies(token.value)) {
+        fonts.add(family);
+      }
+    }
+  }
+  return Object.freeze([...fonts].sort());
+}
+
+function cssFontFamilies(value) {
+  return splitCssCommaList(value)
+    .map((family) => family.trim().replace(/^['"]|['"]$/g, "").trim())
+    .filter(isLikelyNonGenericFontFamily);
+}
+
+function isFontFamilyToken(token) {
+  const name = token.name.toLowerCase();
+  const kind = token.kind.toLowerCase();
+  const definedIn = token.defined_in.toLowerCase();
+  if (cssFontFamilies(token.value).length === 0 || isNonFamilyFontTokenName(name)) {
+    return false;
+  }
+  return name.startsWith("--font") ||
+    name.includes("family") ||
+    kind === "font" ||
+    definedIn.includes("typography") ||
+    definedIn.includes("fonts");
+}
+
+function isNonFamilyFontTokenName(name) {
+  return /(?:^|[-_])(display|feature|kerning|line-height|optical|size|smoothing|stretch|style|variation|weight)(?:$|[-_])/.test(name.replace(/^--/, ""));
+}
+
+function splitCssCommaList(value) {
+  const items = [];
+  let current = "";
+  let quote = "";
+  let parenthesisDepth = 0;
+  for (const char of String(value ?? "")) {
+    if ((char === "\"" || char === "'") && !quote) {
+      quote = char;
+      current += char;
+    } else if (char === quote) {
+      quote = "";
+      current += char;
+    } else if (char === "(" && !quote) {
+      parenthesisDepth += 1;
+      current += char;
+    } else if (char === ")" && !quote) {
+      parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      current += char;
+    } else if (char === "," && !quote && parenthesisDepth === 0) {
+      items.push(current);
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  items.push(current);
+  return items;
+}
+
+function isGenericFontFamily(family) {
+  return GENERIC_FONT_FAMILIES.has(family.toLowerCase());
+}
+
+function isLikelyNonGenericFontFamily(family) {
+  if (!family || isGenericFontFamily(family)) {
+    return false;
+  }
+  const normalized = family.toLowerCase();
+  if (NON_FONT_FAMILY_VALUES.has(normalized) || /^\d{3}$/.test(normalized)) {
+    return false;
+  }
+  if (normalized.startsWith("var(")) {
+    return false;
+  }
+  if (/^[a-z-]+\(/i.test(normalized)) {
+    return false;
+  }
+  if (/^-?\d+(\.\d+)?(px|r?em|%|vh|vw|vmin|vmax|ch|ex|pt|pc|in|cm|mm)?$/.test(normalized)) {
+    return false;
+  }
+  if (/^(normal|bold|bolder|lighter|inherit|initial|unset)$/.test(normalized)) {
+    return false;
+  }
+  return /[A-Za-z\u0080-\uFFFF]/.test(family);
+}
+
+function manifestBrandFontFamilies(brandFonts) {
+  if (!Array.isArray(brandFonts)) {
+    return [];
+  }
+  return brandFonts
+    .map((item) => {
+      if (typeof item === "string") {
+        return item.trim();
+      }
+      if (item && typeof item === "object" && typeof item.family === "string") {
+        return item.family.trim();
+      }
+      return "";
+    })
+    .filter(Boolean);
+}
+
+function sha256Stable(value) {
+  return createHash("sha256").update(stableStringify(value)).digest("hex");
+}
+
+function stableStringify(value) {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function projectRelativePath(filePath, root) {
+  const absolutePath = path.resolve(root, filePath);
+  const relativePath = path.relative(root, absolutePath);
+  if (relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))) {
+    return relativePath.split(path.sep).join("/");
+  }
+  return absolutePath;
+}
+
+function deepFreeze(value) {
+  if (value && typeof value === "object") {
+    Object.freeze(value);
+    for (const child of Object.values(value)) {
+      deepFreeze(child);
+    }
+  }
+  return value;
+}

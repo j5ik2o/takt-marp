@@ -78,3 +78,10 @@ takt-sdd deck の実運用で判明したギャップへの対応。workflow 産
 
 - [x] slide-workflow-quality-uplift -- facets/policy/output contract の品質定義を実証済み水準へ引き上げる: layout 語彙の開放(infographic/code-2col/profile 等の正式採用と compose の拡張権限)、inline SVG のガードレール付き許可への policy 反転、speaker notes の尺配分契約、brief 正規化の必須項目追加(イベント・登壇者・事実インベントリ)、review の先鋭度/密度基準。Dependencies: slide-workflow-orchestration, slide-workflow-ai-quality-gate
 - [ ] slide-workflow-visual-review -- polish の render evidence cycle に multimodal visual review step を追加し、render 済み PNG を reviewer persona が知覚して findings → fix → 再 render の閉ループで視覚品質を判定する。Dependencies: slide-workflow-quality-uplift
+
+## Design Contract Specs (dependency order)
+
+`compose` が毎回 `design-system.md` を生成する現行形では、デザインシステムが資料ごとの一時成果物になり、再利用される Design Contract（デザイン契約）として扱いにくい。Claude Design Source（Claude Designソース）を唯一の user-facing design system 入力とし、workflow は内部の Resolved Design Contract（解決済みデザイン契約）へ正規化する。`plan` は CSS を生成せず source metadata と制約だけを記録し、`compose` が同じ Resolved Design Contract から CSS / `_class` / section HTML/CSS を生成する。
+Design Brief（デザインブリーフ）は Claude Design Source を作るための authoring input として `slides/<deck>/design/design-brief.md` に残すが、Design Contract の代替入力にはしない。
+
+- [x] slide-workflow-design-contract -- Claude Design zip を Design Contract へ正規化し、Resolved Design Contract を `plan` / `compose` / review / smoke validation に接続する。手書き `design-contract.md`、package default design input、deck-local Markdown override は初期 scope に含めない。Dependencies: slide-workflow-orchestration, slide-workflow-quality-uplift, takt-marp-global-installer

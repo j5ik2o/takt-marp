@@ -24,6 +24,7 @@ import {
 import {
   archiveCommandArtifacts,
   APPROVAL_COMMANDS,
+  approvalPath,
   assertCommandPrerequisites,
   assertTaktExecutableAvailable,
   assertWorkflowAvailable,
@@ -51,6 +52,16 @@ import {
   writeApproval,
 } from "./lib/takt-marp-slide-workflow.mjs";
 import { runCli } from "./lib/takt-marp-cli.mjs";
+import {
+  fakeCommandTaktScript,
+  fakeTaktScript,
+  makeDeck,
+  makeFakePackageRoot,
+  makeSelectedWorkflowFile,
+  makeTaktExecutable,
+  writeSupervision,
+} from "./lib/takt-marp-validation-harness.mjs";
+import { runDesignContractFoundationChecks } from "./takt-marp-validate-design-contract-foundation.mjs";
 import {
   FORBIDDEN_PACK_FILES,
   REQUIRED_PACK_FILES,
@@ -723,6 +734,75 @@ async function main() {
     assert(!existsSync(path.join(projectRoot, "workflows")), "bundled runtime cleanup left project workflows/ staging directory");
   });
 
+  await check("ejected research runtime stages callable deep research without mutating templates", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "ejected-runtime-selected-research-"));
+    const projectRoot = path.join(root, "project");
+    const templateRoot = path.join(root, "templates", "project");
+    const ejectedRoot = path.join(projectRoot, ".takt");
+    const selectedResearchWorkflow = path.join(ejectedRoot, "workflows", "takt-marp-slide-research.yaml");
+    const selectedReuseWorkflow = researchReuseWorkflowFilePath(selectedResearchWorkflow);
+    await writeTemplateTree(ejectedRoot, new Map([
+      [
+        "workflows/takt-marp-slide-research.yaml",
+        [
+          "name: ejected-wrapper-runtime-source",
+          "steps:",
+          "  - name: deep_research",
+          "    call: deep-research",
+          "",
+        ].join("\n"),
+      ],
+      [
+        "workflows/takt-marp-slide-research-reuse.yaml",
+        [
+          "name: ejected-reuse-runtime-source",
+          "steps:",
+          "  - name: adapt_research",
+          "",
+        ].join("\n"),
+      ],
+      ["facets/personas/takt-marp-slide-planner.md", "# Planner\n"],
+    ]));
+    assert(existsSync(selectedReuseWorkflow), `selected ejected research reuse workflow fixture was not created: ${selectedReuseWorkflow}`);
+
+    const prepared = await prepareBundledWorkflowRuntime(selectedResearchWorkflow, { projectRoot, templateRoot });
+    try {
+      const runtimeReuseWorkflow = researchReuseWorkflowFilePath(prepared.workflowFilePath);
+      const [runtimeWrapperSource, runtimeReuseSource, ejectedWrapperSource] = await Promise.all([
+        readFile(prepared.workflowFilePath, "utf8"),
+        readFile(runtimeReuseWorkflow, "utf8"),
+        readFile(selectedResearchWorkflow, "utf8"),
+      ]);
+      assert(
+        prepared.workflowFilePath !== selectedResearchWorkflow,
+        "ejected research runtime must stage a runtime copy instead of passing the project template directly",
+      );
+      assert(
+        runtimeWrapperSource.includes("ejected-wrapper-runtime-source"),
+        `staged ejected research wrapper did not come from selected template source: ${runtimeWrapperSource}`,
+      );
+      assert(
+        runtimeReuseSource.includes("ejected-reuse-runtime-source"),
+        `staged ejected research reuse workflow did not come from selected template source: ${runtimeReuseSource}`,
+      );
+      assert(
+        runtimeWrapperSource.includes("call: ./takt-marp-bundled-deep-research.yaml"),
+        `staged ejected research wrapper did not rewrite the built-in deep-research call: ${runtimeWrapperSource}`,
+      );
+      assert(
+        existsSync(path.join(path.dirname(prepared.workflowFilePath), "takt-marp-bundled-deep-research.yaml")),
+        "ejected research runtime did not stage the callable built-in deep-research workflow next to the wrapper",
+      );
+      assert(
+        ejectedWrapperSource.includes("call: deep-research"),
+        `ejected project template was mutated instead of staging a runtime copy: ${ejectedWrapperSource}`,
+      );
+    } finally {
+      await prepared.cleanup();
+    }
+    assert(!existsSync(path.join(projectRoot, "workflows")), "ejected research runtime cleanup left project workflows/ staging directory");
+  });
+
   await check("template sync validator detects byte drift between package template and dev .takt trees", async () => {
     const identicalRoot = await mkdtemp(path.join(os.tmpdir(), "template-sync-identical-"));
     const identicalTemplateRoot = path.join(identicalRoot, "templates", "project");
@@ -852,6 +932,18 @@ async function main() {
     assert(
       REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-errors.mjs"),
       `required package files must include shared error runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-claude-design-source.mjs"),
+      `required package files must include Claude Design importer runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-zip-archive.mjs"),
+      `required package files must include zip archive runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
+    );
+    assert(
+      REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-validation-harness.mjs"),
+      `required package files must include validation harness runtime: ${REQUIRED_PACK_FILES.join(", ")}`,
     );
     assert(
       !REQUIRED_PACK_FILES.includes("scripts/lib/takt-marp-project-init.mjs"),
@@ -1753,36 +1845,7 @@ async function main() {
     assert(!result.stderr.includes("TAKT_EXECUTABLE_MISSING"), `TAKT check ran before invalid target: ${result.stderr}`);
   });
 
-  await check("runner uses selected workflow file path and preserves provider argument", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-runner-"));
-    await makeDeck(root, "demo");
-    const selectedWorkflowPath = await makeSelectedWorkflowFile("plan");
-    const fakePackage = await makeFakePackageRoot();
-    await makeTaktExecutable(fakePackage.packageRoot, fakeTaktScript(["run-current"], "passed"));
-    const argsPath = path.join(root, "takt-args.txt");
-
-    const result = spawnSync(
-      process.execPath,
-      [fakePackage.runnerScript, "plan", "slides/demo", "--workflow-file", selectedWorkflowPath, "--provider", "mock"],
-      { cwd: root, encoding: "utf8", env: { ...process.env, TAKT_ARGS_CAPTURE: argsPath } },
-    );
-    assert(result.status === 0, `runner failed with selected workflow file path: ${result.stderr}`);
-    const args = (await readFile(argsPath, "utf8")).trim().split("\n");
-    const workflowArgIndex = args.indexOf("-w");
-    assert(workflowArgIndex >= 0, `TAKT args did not include -w: ${args.join(" ")}`);
-    assert(args[workflowArgIndex + 1] === selectedWorkflowPath, `TAKT did not receive selected workflow file path: ${args.join(" ")}`);
-    const targetArgIndex = args.indexOf("-t");
-    assert(targetArgIndex >= 0, `TAKT args did not include -t: ${args.join(" ")}`);
-    assert(args[targetArgIndex + 1] === "slides/demo", `plan TAKT target changed unexpectedly: ${args.join(" ")}`);
-    const providerArgIndex = args.indexOf("--provider");
-    assert(providerArgIndex >= 0, `TAKT args did not include --provider: ${args.join(" ")}`);
-    assert(args[providerArgIndex + 1] === "mock", `TAKT provider argument was not preserved: ${args.join(" ")}`);
-    const marker = JSON.parse(await readFile(path.join(root, ".takt", "workflow-current-target.json"), "utf8"));
-    assert(marker.target === "slides/demo", `plan marker target changed unexpectedly: ${JSON.stringify(marker)}`);
-    assert(!Object.hasOwn(marker, "research_brief_path"), `plan marker included research brief path: ${JSON.stringify(marker)}`);
-    assert(!Object.hasOwn(marker, "research_output_dir"), `plan marker included research output dir: ${JSON.stringify(marker)}`);
-    assert(!existsSync(path.join(root, ".takt", "workflows")), "selected workflow runner created project-local workflow templates");
-  });
+  await runDesignContractFoundationChecks(check);
 
   await check("research runner requires research brief before TAKT", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-research-missing-brief-"));
@@ -2971,6 +3034,31 @@ async function main() {
     assert(source.includes("real_provider:"), "real smoke summary must record the provider name as real provider evidence");
     assert(source.includes("smoke:selected-template-source"), "smoke validator must record the selected template source");
     assert(source.includes("smoke:template-assets-no-copy"), "smoke validator must assert workflow/facet templates were not generated");
+    assert(source.includes("TAKT_MARP_SMOKE_WORKFLOW_TIMEOUT_MS"), "real smoke workflow timeout must be overridable for local provider verification");
+  });
+
+  await check("smoke validator uses provider-aware research report source assertions", async () => {
+    const source = await readFile(path.join(SCRIPT_DIR, "takt-marp-validate-slide-workflow-smoke.mjs"), "utf8");
+    assert(source.includes("assertResearchArtifacts(targetInfo, options)"), "research sequence must pass provider options into artifact assertions");
+    assert(source.includes("isMockProvider(options)"), "research artifact assertion must branch on mock vs real provider");
+    assert(source.includes("readCurrentBuiltInResearchReport"), "real provider smoke must read the current run's built-in research source report");
+    assert(source.includes("workflow_run_id"), "real provider source lookup must use research-supervision workflow_run_id");
+    assert(source.includes('relative.startsWith("subworkflows/")'), "real provider source lookup must stay under TAKT subworkflow reports");
+    assert(source.includes('relative.includes("workflow-deep-research/")'), "real provider source lookup must select the deep-research source report");
+    const artifactAssertionIndex = source.indexOf("async function assertResearchArtifacts");
+    const providerBranchIndex = source.indexOf("if (isMockProvider(options))", artifactAssertionIndex);
+    const realProviderBranchIndex = source.indexOf("} else {", providerBranchIndex);
+    const adapterShadowGuardIndex = source.indexOf('assert(!report.includes("Adapter Shadow Report")', providerBranchIndex);
+    assert(artifactAssertionIndex >= 0, "research artifact assertion function must exist");
+    assert(providerBranchIndex >= 0 && realProviderBranchIndex > providerBranchIndex, "research artifact assertion must have mock and real provider branches");
+    assert(
+      adapterShadowGuardIndex > providerBranchIndex && adapterShadowGuardIndex < realProviderBranchIndex,
+      "adapter shadow substring guard must remain mock-only; real provider byte-copy uses the current built-in source report",
+    );
+    assert(
+      source.includes("current built-in deep-research source report"),
+      "real provider byte-copy failure must distinguish current source report from mock fixture mismatch",
+    );
   });
 
   await check("smoke validator selected source helpers cover bundled and ejected no-copy states", async () => {
@@ -3769,44 +3857,6 @@ async function captureOutput(fn) {
   }
 }
 
-async function makeDeck(root, deckName) {
-  const deckPath = path.join(root, "slides", deckName);
-  await mkdir(path.join(deckPath, "review"), { recursive: true });
-  await writeFile(path.join(deckPath, "brief.md"), "# Brief\n");
-  return resolveDeckTarget(`slides/${deckName}`, { root });
-}
-
-async function makeSelectedWorkflowFile(command, options = {}) {
-  const selectedSourceRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-selected-source-"));
-  const selectedWorkflowPath = path.join(selectedSourceRoot, "workflows", `takt-marp-slide-${command}.yaml`);
-  await mkdir(path.dirname(selectedWorkflowPath), { recursive: true });
-  await writeFile(selectedWorkflowPath, `name: selected-${command}\n`, "utf8");
-  if (command === "research" && options.includeResearchReuse) {
-    await writeFile(researchReuseWorkflowFilePath(selectedWorkflowPath), "name: selected-research-reuse\n", "utf8");
-  }
-  return selectedWorkflowPath;
-}
-
-async function makeFakePackageRoot() {
-  const packageRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-package-"));
-  // Copy (not symlink) so ESM realpath resolution derives packageRoot from the fake package, not the repo.
-  for (const relative of [
-    "takt-marp-run-slide-workflow.mjs",
-    path.join("lib", "takt-marp-errors.mjs"),
-    path.join("lib", "takt-marp-project-templates.mjs"),
-    path.join("lib", "takt-marp-slide-workflow.mjs"),
-    path.join("lib", "takt-marp-runtime-context.mjs"),
-  ]) {
-    const destination = path.join(packageRoot, "scripts", relative);
-    await mkdir(path.dirname(destination), { recursive: true });
-    await cp(path.join(SCRIPT_DIR, relative), destination);
-  }
-  return {
-    packageRoot,
-    runnerScript: path.join(packageRoot, "scripts", "takt-marp-run-slide-workflow.mjs"),
-  };
-}
-
 async function makeFakeCliPackageRoot() {
   const packageRoot = await mkdtemp(path.join(os.tmpdir(), "slide-workflow-cli-package-"));
   await mkdir(path.join(packageRoot, "bin"), { recursive: true });
@@ -3821,6 +3871,7 @@ async function makeFakeCliPackageRoot() {
   }
   await cp(path.join(SCRIPT_DIR, "lib"), path.join(packageRoot, "scripts", "lib"), { recursive: true });
   await cp(path.join(ROOT_DIR, "templates", "project"), path.join(packageRoot, "templates", "project"), { recursive: true });
+  await cp(path.join(ROOT_DIR, "node_modules", "fflate"), path.join(packageRoot, "node_modules", "fflate"), { recursive: true });
   const realPackageRoot = await realpath(packageRoot);
   return {
     binScript: path.join(realPackageRoot, "bin", "takt-marp.mjs"),
@@ -3847,12 +3898,6 @@ async function makeFakeSmokeScript(packageRoot) {
     ].join("\n"),
     { encoding: "utf8", mode: 0o755 },
   );
-}
-
-async function makeTaktExecutable(root, script = "#!/bin/sh\nexit 0\n") {
-  const executablePath = path.join(root, "node_modules", ".bin", process.platform === "win32" ? "takt.cmd" : "takt");
-  await mkdir(path.dirname(executablePath), { recursive: true });
-  await writeFile(executablePath, script, { encoding: "utf8", mode: 0o755 });
 }
 
 async function makeBuiltinDeepResearchWorkflow(packageRoot) {
@@ -3896,70 +3941,6 @@ async function makeMarpExecutable(root) {
 
 function runtimeExecutableName(tool) {
   return process.platform === "win32" ? `${tool}.cmd` : tool;
-}
-
-function fakeTaktScript(runNames, result) {
-  const lines = [
-    "#!/bin/sh",
-    "if [ -n \"$TAKT_ARGS_CAPTURE\" ]; then",
-    "  printf '%s\\n' \"$@\" > \"$TAKT_ARGS_CAPTURE\"",
-    "fi",
-    "target=\"\"",
-    "while [ \"$#\" -gt 0 ]; do",
-    "  if [ \"$1\" = \"-t\" ]; then",
-    "    shift",
-    "    target=\"$1\"",
-    "  fi",
-    "  shift",
-    "done",
-  ];
-  for (const runName of runNames) {
-    lines.push(
-      `mkdir -p ".takt/runs/${runName}/reports"`,
-      `cat > ".takt/runs/${runName}/reports/brief.normalized.md" <<EOF`,
-      "# Normalized Brief",
-      "",
-      `Mock normalized brief for ${runName}.`,
-      "EOF",
-      `cat > ".takt/runs/${runName}/reports/reference-analysis.md" <<EOF`,
-      "# Reference Deck Analysis",
-      "",
-      `Mock reference analysis for ${runName}.`,
-      "EOF",
-      `cat > ".takt/runs/${runName}/reports/plan.md" <<EOF`,
-      "# Slide Plan",
-      "",
-      "deliverables: [html, pdf]",
-      "",
-      `Mock plan for ${runName}.`,
-      "EOF",
-      `cat > ".takt/runs/${runName}/reports/slide-blueprint.md" <<EOF`,
-      "# Slide Blueprint",
-      "",
-      `Mock slide blueprint for ${runName}.`,
-      "EOF",
-      `cat > ".takt/runs/${runName}/reports/plan-supervision.md" <<EOF`,
-      "---",
-      "command: plan",
-      "target: $target",
-      "generated_at: 2026-06-05T17:10:00+09:00",
-      `workflow_run_id: ${runName}`,
-      "step: supervision",
-      "cycle: 1",
-      "state: planned",
-      `result: ${result}`,
-      "blocking_findings: 0",
-      "major_findings: 0",
-      "minor_findings: 0",
-      "info_findings: 0",
-      "---",
-      "",
-      "# Supervision",
-      "EOF",
-    );
-  }
-  lines.push("exit 0", "");
-  return lines.join("\n");
 }
 
 function fakePlanTaktScriptWithOptionalResearchContext(runName, result) {
@@ -4410,33 +4391,6 @@ function assertResearchAdapterTargetRule(source, label) {
     `${label} must document the research brief target prohibition`,
   );
   assert(source.includes("must not"), `${label} must explicitly prohibit using the research brief path as front matter target`);
-}
-
-async function writeSupervision(targetInfo, command, state, result, workflowRunId) {
-  await mkdir(targetInfo.reviewPath, { recursive: true });
-  await writeFile(
-    supervisionPath(targetInfo, command),
-    [
-      "---",
-      `command: ${command}`,
-      `target: ${targetInfo.target}`,
-      "generated_at: 2026-06-05T17:10:00+09:00",
-      `workflow_run_id: ${workflowRunId}`,
-      "step: supervision",
-      "cycle: 1",
-      `state: ${state}`,
-      `result: ${result}`,
-      "blocking_findings: 0",
-      "major_findings: 0",
-      "minor_findings: 0",
-      "info_findings: 0",
-      "---",
-      "",
-      "# Supervision",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
 }
 
 async function expectFailure(fn, code) {

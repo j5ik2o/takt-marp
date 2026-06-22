@@ -128,10 +128,12 @@
 - [x] 4.2 smoke validation に research と既存 4 command の回帰を追加する
   - mock provider で research が `research-supervision.md` と research artifacts を `slides/<deck>/research/` に同期することを確認する
   - built-in `research-report.md` が byte-for-byte で同期され、adapter output で置換されないことを確認する
+  - real provider smoke では mock fixture ではなく、当該 `workflow_run_id` の built-in deep-research source report と deck-local `research-report.md` が byte-for-byte で一致することを確認する
+  - real provider smoke では mock 用 adapter shadow sentinel の文字列出現だけで失敗させず、置換検出は当該 source report との byte 比較に限定する
   - report の欠落情報が `not_present_in_builtin_report` として残り、補完や追加調査が行われないことを確認する
   - research あり/なしの `plan` と既存 `plan / compose / polish / deliver` の成功経路を確認する
   - 完了条件: smoke validation が research 追加後も既存 4 command path を green のまま維持する
-  - _Requirements:_ 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 5.1, 5.2, 5.3, 5.4, 5.5, 7.5
+  - _Requirements:_ 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 5.1, 5.2, 5.3, 5.4, 5.5, 6.5, 7.5
   - _Boundary:_ Validation Surface
   - _Depends:_ 3.3, 4.1
 
@@ -249,7 +251,7 @@
 - [x] 8.3 template/package boundary validation に Research Reuse Workflow を含める
   - repo-local Research Reuse Workflow と package template counterpart の drift を検出する
   - `takt-marp eject` で Research Reuse Workflow が project-local にコピーされ、built-in research facets がコピーされないことを確認する
-  - bundled runtime staging が Research Workflow Wrapper と Research Reuse Workflow の両方を同じ template source から使うことを確認する
+  - bundled/ejected runtime staging が Research Workflow Wrapper と Research Reuse Workflow の両方を同じ template source から使い、full research では callable built-in deep research wrapper を実行時だけ stage することを確認する
   - 完了条件: template drift、eject 欠落、built-in facet 複製がいずれも validation failure になる
   - _Requirements:_ 7.3, 7.6, 8.1
   - _Boundary:_ Template Distribution, Validation Surface
