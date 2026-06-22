@@ -233,14 +233,32 @@ export async function runDesignContractFoundationChecks(check) {
       }
       assert(violations.length === 0, `Design Contract facet migration violations:\n${violations.join("\n")}`);
 
-      const planInstruction = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan.md"), "utf8");
-      assert(planInstruction.includes("design_contract.path"), `${rootRelativePath} plan instruction must open marker design_contract.path`);
-      assert(planInstruction.includes("Resolved Design Contract JSON"), `${rootRelativePath} plan instruction must read the Resolved Design Contract JSON`);
-      assert(planInstruction.includes("token constraints"), `${rootRelativePath} plan instruction must ground planning in token constraints`);
-      assert(planInstruction.includes("guidance"), `${rootRelativePath} plan instruction must use Design System guidance`);
-      assert(planInstruction.includes("source_catalog"), `${rootRelativePath} plan instruction must use Design System source_catalog`);
+	      const planInstruction = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan.md"), "utf8");
+	      assert(planInstruction.includes("design_contract.path"), `${rootRelativePath} plan instruction must open marker design_contract.path`);
+	      assert(planInstruction.includes("Resolved Design Contract JSON"), `${rootRelativePath} plan instruction must read the Resolved Design Contract JSON`);
+	      assert(planInstruction.includes("token constraints"), `${rootRelativePath} plan instruction must ground planning in token constraints`);
+	      assert(planInstruction.includes("guidance"), `${rootRelativePath} plan instruction must use Design System guidance`);
+	      assert(planInstruction.includes("source_catalog"), `${rootRelativePath} plan instruction must use Design System source_catalog`);
+	      const planWorkSummary = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan-work-summary.md"), "utf8");
+	      assert(planWorkSummary.includes("Design Contract section"), `${rootRelativePath} plan work summary must check Design Contract section`);
+	      assert(planWorkSummary.includes("contract_sha256"), `${rootRelativePath} plan work summary must check contract_sha256`);
+	      assert(planWorkSummary.includes("Design Brief fingerprint"), `${rootRelativePath} plan work summary must check Design Brief fingerprint`);
+	      assert(planWorkSummary.includes("guidance"), `${rootRelativePath} plan work summary must check guidance metadata`);
+	      assert(planWorkSummary.includes("source_catalog"), `${rootRelativePath} plan work summary must check source_catalog metadata`);
 
-      const planContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-plan.md"), "utf8");
+	      const planReview = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan-review.md"), "utf8");
+	      assert(planReview.includes("Design Contract section"), `${rootRelativePath} plan review must check Design Contract section`);
+	      assert(planReview.includes("design_contract.fingerprint.contract_sha256"), `${rootRelativePath} plan review must compare marker contract fingerprint`);
+	      assert(planReview.includes("contract_sha256"), `${rootRelativePath} plan review must check plan contract_sha256`);
+	      assert(planReview.includes("Design Brief fingerprint"), `${rootRelativePath} plan review must check Design Brief fingerprint`);
+	      assert(planReview.includes("needs_fix"), `${rootRelativePath} plan review must route metadata gaps to needs_fix`);
+
+	      const planFix = await readFile(path.join(facetRoot, "instructions", "takt-marp-plan-fix.md"), "utf8");
+	      assert(planFix.includes("Design Contract section"), `${rootRelativePath} plan fix must handle missing Design Contract section`);
+	      assert(planFix.includes("contract_sha256"), `${rootRelativePath} plan fix must restore contract_sha256`);
+	      assert(planFix.includes("design_contract.path"), `${rootRelativePath} plan fix must read marker design_contract.path`);
+
+	      const planContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-plan.md"), "utf8");
       const blueprintContract = await readFile(path.join(facetRoot, "output-contracts", "takt-marp-slide-blueprint.md"), "utf8");
       for (const [label, contractSource] of [["plan", planContract], ["blueprint", blueprintContract]]) {
         assert(contractSource.includes("Design Contract"), `${rootRelativePath} ${label} output contract must include a Design Contract section`);

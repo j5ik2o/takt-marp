@@ -651,6 +651,8 @@ interface ResolvedDesignContract {
 - Claude Design zip の `components` / `startingPoints` / `cards` / `templates` / `themes` / `fonts` が空でも plan を失敗させない。
 - CSS、front matter style、`_class` style 定義は plan artifact に出力しない。
 - `plan.md` と `slide-blueprint.md` に contract metadata を記録する。
+- `plan-work-summary` と `plan-review` は `plan.md` / `slide-blueprint.md` の Design Contract section、`contract_sha256`、Design Brief fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` を確認し、marker / Resolved Design Contract との不一致または欠落を `needs_fix` finding として扱う。
+- `plan-fix` は Design Contract metadata finding を `.takt/workflow-current-target.json` と `design_contract.path` の Resolved Design Contract から `plan.md` / `slide-blueprint.md` に反映する。
 
 ### ComposeFacetContract
 
@@ -707,7 +709,7 @@ interface ResolvedDesignContract {
 - Design Brief 欠落時は import failure ではなく warning / finding になり、Design Brief fingerprint 不一致時は compose / review blocker になることを検証する。
 - compose workflow から `design_system` step が消えていることを検証する。
 - facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
+- invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、plan review の Design Contract metadata gate、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、corrupt existing marker payload、incomplete fingerprint marker payload、stale contract hash の破棄を検証する。
 - `polish-inspect` / `polish-fix` が通常 path で `design_contract.path`、`fingerprint.contract_sha256`、token drift、`guidance`、`source_catalog` を確認し、Design Contract なしの legacy path だけ fingerprint / token drift 判定をスキップすることを facet 文言として検証する。
 
 ### package / global install / no-copy validation

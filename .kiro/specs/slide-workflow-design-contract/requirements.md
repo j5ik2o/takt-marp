@@ -104,6 +104,8 @@
 
 4.6. Resolved Design Contract と brief の要求が両立しない場合、slide workflow は推測で layout や visual を補完せず、利用者が修正対象を確認できる finding または失敗情報を残さなければならない。
 
+4.7. `plan-work-summary` と `plan-review` が実行されたとき、slide workflow は `plan.md` と `slide-blueprint.md` の Design Contract section、`contract_sha256`、Design Brief fingerprint、token summary、brand fonts、adherence availability、`guidance`、`source_catalog` を検査し、欠落または marker / Resolved Design Contract との不一致を `needs_fix` finding として扱わなければならない。
+
 ### 要件 5: compose は同じ Design Contract から slide source を生成する
 
 **目的:** deck 作成者として、承認済み plan と同じ Design Contract から `SLIDES.md` と section source を生成してほしい。そうすることで、plan の構成意図と実際の CSS / `_class` のズレを防げる
@@ -184,7 +186,7 @@
 
 8.6. Claude Design Source の検証が失敗した場合、slide workflow は失敗した source file、対象 command、確認すべき artifact を利用者またはメンテナが特定できる結果を表示しなければならない。
 
-8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、stale contract hash の破棄を検証しなければならない。
+8.7. メンテナが foundation validation を実行したとき、slide workflow は invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、plan review の Design Contract metadata gate、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt Design Contract marker、stale contract hash の破棄を検証しなければならない。
 
 ### 要件 9: 既存 deck と既存成果物への影響を限定する
 

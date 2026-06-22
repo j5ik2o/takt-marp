@@ -64,8 +64,9 @@
   - plan facets が marker と Resolved Design Contract を読み、token constraints、density hints、adherence rules、guidance、source catalog、既存 layout vocabulary を計画へ反映する。
   - Claude Design zip から components / starting points / cards / templates / themes / fonts / sample slides / component prompts が得られない場合でも、既存 vocabulary と token constraints の範囲で `Layout` / `Visual Strategy` を記録する。得られる場合は brief に合う reusable element だけを選定する。
   - `plan.md` と `slide-blueprint.md` に contract metadata を残し、CSS、front matter style、`_class` style 定義は生成しない。
+  - plan work summary / review / fix が Design Contract section、`contract_sha256`、Design Brief fingerprint、`guidance`、`source_catalog` の欠落や不一致を承認前の `needs_fix` finding として扱う。
   - 完了条件: mock plan artifact に contract metadata があり、CSS/style 定義が plan artifact に混入していないことを検証できる。
-  - _Requirements:_ 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 7.3, 9.1
+  - _Requirements:_ 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 7.3, 9.1
   - _Boundary:_ PlanFacetContract
   - _Depends:_ 3.1
 
@@ -103,9 +104,9 @@
 - [x] 5.1 foundation validation を Design Contract 契約へ拡張する
   - marker shape、plan metadata、compose fingerprint check、legacy `design-system.md` 非依存を static assertion として検証する。
   - compose workflow から `design_system` step が消えていることと、facet 文言が `design-system.md` を canonical source artifact として要求していないことを検証する。
-  - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt marker、stale contract hash の破棄、legacy polish path を検証する。
+  - invalid sibling zip、JSON object ではない manifest、object 形式の `brandFonts`、引用符なし font token、`kind: font` family token、archive-only template catalog、optional catalog、plan review の Design Contract metadata gate、`generate_visuals` の Design Contract 照合、`--force` archive 失敗時の Resolved Design Contract 非保存、compose force の plan fingerprint mismatch before archive、rejected rerun の validation-before-archive、malformed marker からの復旧、stale / corrupt marker、stale contract hash の破棄、legacy polish path を検証する。
   - 完了条件: foundation validation が marker / plan / compose / facet 文言 / hardening regression を path 付きで検出できる。
-  - _Requirements:_ 2.8, 3.8, 5.6, 5.7, 8.3, 8.7, 9.2, 9.5
+  - _Requirements:_ 2.8, 3.8, 4.7, 5.6, 5.7, 8.3, 8.7, 9.2, 9.5
   - _Boundary:_ ValidationSurface
   - _Depends:_ 4.3
 
